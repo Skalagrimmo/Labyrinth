@@ -33,6 +33,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val runnerClass: NetrunnerClass = NetrunnerClass.CODE_SLASHER,
         val maxIntegrity: Int = 100,
         val integrity: Int = 100,
+        val playerMaxShield: Int = 50,
+        val playerShield: Int = 10,
         val maxRam: Int = 12,
         val ram: Int = 12,
         val ramRecoveryRate: Int = 2,
@@ -110,6 +112,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 runnerClass = selectedClass,
                 maxIntegrity = selectedClass.baseIntegrity,
                 integrity = selectedClass.baseIntegrity,
+                playerMaxShield = if (selectedClass == NetrunnerClass.CYBER_SHIELD) 75 else 50,
+                playerShield = if (selectedClass == NetrunnerClass.CYBER_SHIELD) 25 else 10,
                 maxRam = selectedClass.baseRam,
                 ram = selectedClass.baseRam,
                 credits = initialCredits,
@@ -490,9 +494,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val enemy = GameEngine.spawnEnemy(level)
 
         _uiState.update { state ->
+            val baseCombatShield = if (state.runnerClass == NetrunnerClass.CYBER_SHIELD) {
+                minOf(state.playerMaxShield, 25 + 30)
+            } else {
+                25 // Base starting combat shield barrier
+            }
             state.copy(
                 screen = ActiveScreen.COMBAT,
                 activeEnemy = enemy,
+                playerShield = baseCombatShield,
                 targetNodeX = targetX,
                 targetNodeY = targetY,
                 enemyCombatAction = ""
@@ -506,7 +516,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         // Class-specific combat passive activations
         if (_uiState.value.runnerClass == NetrunnerClass.CYBER_SHIELD) {
-            // Create a custom starting shield / armor reduction for combat
             addLog("SENTINEL PROTOCOL: Hardening system barriers. +30 Shield initialized.", LogType.SUCCESS)
         }
     }
@@ -525,29 +534,35 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Subtract RAM cost
         _uiState.update { it.copy(ram = it.ram - program.ramCost) }
 
-        // Process Player Action
-        var playerDamage = program.damage + state.damageBonus
+        // Process Player Action: Damage Calculation based on stats
+        val baseDmg = program.damage
+        val statPower = (state.level * 2) + state.damageBonus
+        var rawPlayerDamage = baseDmg + statPower
         var isCrit = false
 
-        // Class passives
-        if (state.runnerClass == NetrunnerClass.CODE_SLASHER && enemy.integrity < enemy.maxIntegrity) {
-            // Crit 1.5x damage on damaged enemies
-            if (Random.nextInt(100) < 50) {
-                playerDamage = (playerDamage * 1.5).toInt()
-                isCrit = true
-            }
+        // Crit rate calculation
+        val critRate = 10 + (state.ram * 2)
+        val finalCritRate = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) critRate + 25 else critRate
+
+        if (Random.nextInt(100) < finalCritRate) {
+            isCrit = true
+            val critMultiplier = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) 2.0f else 1.5f
+            rawPlayerDamage = (rawPlayerDamage * critMultiplier).toInt()
         }
 
+        // Buffer Overflow passive: damage amplified by remaining RAM
         if (state.runnerClass == NetrunnerClass.BUFFER_OVERFLOW) {
-            // Double RAM to double damage/actions? Simple implementation: extra damage scaling
-            playerDamage = (playerDamage * 1.3).toInt()
+            val mult = 1.0f + (state.ram * 0.03f)
+            rawPlayerDamage = (rawPlayerDamage * mult).toInt()
         }
 
-        // Apply Damage to Enemy
+        // Apply Damage to Enemy considering enemy Armor defense
+        val enemyArmor = enemy.armor
+        val effectiveArmor = if (isCrit) (enemyArmor * 0.5f).toInt() else enemyArmor
         val finalDmg = if (program.piercesDefense) {
-            playerDamage
+            rawPlayerDamage
         } else {
-            maxOf(2, playerDamage - enemy.armor)
+            maxOf(2, rawPlayerDamage - effectiveArmor)
         }
 
         val enemyRemShield = maxOf(0, enemy.shield - finalDmg)
@@ -558,16 +573,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         enemy.shield = enemyRemShield
         enemy.integrity = enemyRemIntegrity
 
+        // Detail the calculation step-by-step in the log
+        addLog("[CALC]: Base:${baseDmg} + Stats:${statPower} = Raw:${baseDmg + statPower}", LogType.INFO)
         if (isCrit) {
-            addLog("OVERCLOCK CRITICAL! Payload amplified on hostile system.", LogType.SUCCESS)
+            addLog("CRITICAL HIT! [x${if (state.runnerClass == NetrunnerClass.CODE_SLASHER) "2.0" else "1.5"}] Armor bypassed: ${effectiveArmor}/${enemyArmor}", LogType.SUCCESS)
         }
-
-        if (shieldDmg > 0) {
-            addLog("Hostile Shield absorbed $shieldDmg damage.", LogType.ALERT)
-        }
-        if (bodyDmg > 0) {
-            addLog("Direct core hit: Dealt $bodyDmg payload damage to ${enemy.name}.", LogType.SUCCESS)
-        }
+        addLog("Dealt ${finalDmg} damage to ${enemy.name} (Shield: -${shieldDmg}, Core: -${bodyDmg}) [Hostile Armor: ${enemyArmor}]", LogType.SUCCESS)
 
         // Process Heal / Shield Restore
         if (program.heal > 0) {
@@ -577,11 +588,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         if (program.shield > 0) {
-            // Apply shields (will be used to block enemy attacks, let's keep track of shield temporarily or add simple logic)
-            // For simplicity, we directly absorb damage or heal. Let's make shields directly scale state integrity temporarily
-            val healed = minOf(state.maxIntegrity - state.integrity, program.shield)
-            _uiState.update { it.copy(integrity = it.integrity + healed) }
-            addLog("Temporary firewalls reinforced: +$healed% security barriers.", LogType.SUCCESS)
+            val shieldHealed = minOf(state.playerMaxShield - state.playerShield, program.shield)
+            _uiState.update { it.copy(playerShield = it.playerShield + shieldHealed) }
+            addLog("Temporary firewalls reinforced: +$shieldHealed Shield Barrier.", LogType.SUCCESS)
         }
 
         // Check if enemy dead
@@ -607,23 +616,34 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         var baseEnemyDmg = enemy.damage + Random.nextInt(-2, 3)
         if (baseEnemyDmg < 2) baseEnemyDmg = 2
 
-        // Apply Player Defensive modifiers
-        val defenseReduction = state.defenseBonus // percentage reduction (0 to 5)
-        val finalEnemyDmg = maxOf(1, baseEnemyDmg - defenseReduction)
+        // Player Defense reduction
+        val defenseModifier = state.defenseBonus
+        val finalEnemyDmg = maxOf(1, baseEnemyDmg - defenseModifier)
 
-        val newPlayerIntegrity = maxOf(0, state.integrity - finalEnemyDmg)
+        // Player Shield absorbs first
+        val currentShield = state.playerShield
+        val shieldDamage = minOf(currentShield, finalEnemyDmg)
+        val remainingShield = currentShield - shieldDamage
+        val integrityDamage = finalEnemyDmg - shieldDamage
+        val newPlayerIntegrity = maxOf(0, state.integrity - integrityDamage)
 
         _uiState.update { stateNow ->
             stateNow.copy(
                 integrity = newPlayerIntegrity,
-                enemyCombatAction = "${enemy.name} ran $selectedAction: Dealt $finalEnemyDmg damage."
+                playerShield = remainingShield,
+                enemyCombatAction = "${enemy.name} ran $selectedAction: Dealt $finalEnemyDmg damage. (Shield absorbed: $shieldDamage, Core hit: $integrityDamage)"
             )
         }
 
         addLog("${enemy.name} executes $selectedAction...", LogType.ERROR)
-        addLog("Your System Integrity degraded by $finalEnemyDmg%.", LogType.ERROR)
+        if (shieldDamage > 0) {
+            addLog("Player Shield absorbed $shieldDamage damage.", LogType.ALERT)
+        }
+        if (integrityDamage > 0) {
+            addLog("System Integrity degraded by $integrityDamage%.", LogType.ERROR)
+        }
 
-        // Recover 1 RAM for the player at end of combat turn
+        // Recover RAM at end of combat turn
         _uiState.update { stateNow ->
             stateNow.copy(ram = minOf(stateNow.maxRam, stateNow.ram + stateNow.ramRecoveryRate))
         }

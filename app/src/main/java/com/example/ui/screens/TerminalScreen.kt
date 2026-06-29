@@ -1062,22 +1062,35 @@ fun CombatView(
                         fontSize = 13.sp
                     )
 
-                    // Enemy ASCII icon
+                    // First-Person 3D Tactical Viewport (Integrating 1st person perspective directly into combat)
                     Box(
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
+                            .weight(1.3f)
+                            .fillMaxWidth()
+                            .background(Color.Black)
+                            .border(1.dp, CyberPink.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                            .padding(4.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = enemy.iconAscii,
-                            color = CyberPink,
+                            text = uiState.perspectiveText,
+                            color = CyberPink, // Red/Pink tactical wireframe during active hostile combat!
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
-                            lineHeight = 14.sp,
+                            fontSize = 9.sp,
+                            lineHeight = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.testTag("enemy_ascii")
+                            modifier = Modifier.testTag("first_person_viewport")
+                        )
+                        
+                        Text(
+                            text = "TARGET LCK",
+                            color = CyberPink.copy(alpha = 0.6f),
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(4.dp)
                         )
                     }
 
@@ -1087,7 +1100,7 @@ fun CombatView(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "INTEGRITY: ${enemy.integrity}/${enemy.maxIntegrity}",
+                            text = "HOSTILE CORE: ${enemy.integrity}/${enemy.maxIntegrity}",
                             color = CyberPink,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp
@@ -1099,7 +1112,7 @@ fun CombatView(
                         )
 
                         Text(
-                            text = "SHIELD BARRIER: ${enemy.shield}/${enemy.maxShield}",
+                            text = "HOSTILE SHIELD: ${enemy.shield}/${enemy.maxShield}",
                             color = CyberCyan,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp
@@ -1155,22 +1168,60 @@ fun CombatView(
                         fontSize = 11.sp
                     )
 
-                    // Display runner stats
-                    Row(
+                    // Display runner stats with retro style progress bars
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Text(
-                            text = "INTEG: ${uiState.integrity}%",
-                            color = CyberCyan,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "SYSTEM CORE: ${uiState.integrity}/${uiState.maxIntegrity}",
+                                color = CyberCyan,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp
+                            )
+                        }
+                        ProgressBarRetro(
+                            current = uiState.integrity,
+                            max = uiState.maxIntegrity,
+                            color = CyberCyan
                         )
-                        Text(
-                            text = "RAM: ${uiState.ram}MB",
-                            color = CyberPink,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "FIREWALL: ${uiState.playerShield}/${uiState.playerMaxShield}",
+                                color = CyberBrightGreen,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp
+                            )
+                        }
+                        ProgressBarRetro(
+                            current = uiState.playerShield,
+                            max = uiState.playerMaxShield,
+                            color = CyberBrightGreen
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "ALLOCATED RAM: ${uiState.ram}/${uiState.maxRam}MB",
+                                color = CyberPink,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp
+                            )
+                        }
+                        ProgressBarRetro(
+                            current = uiState.ram,
+                            max = uiState.maxRam,
+                            color = CyberPink
                         )
                     }
 
