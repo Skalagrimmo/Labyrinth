@@ -1,0 +1,6 @@
+{
+  "name": "Netcrawler",
+  "description": "First-person perspective turn-based cyberpunk roguelike with matrix hacking terminal and character customization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
