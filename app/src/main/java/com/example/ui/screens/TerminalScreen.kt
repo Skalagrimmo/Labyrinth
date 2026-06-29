@@ -21,6 +21,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import android.view.HapticFeedbackConstants
@@ -628,16 +633,11 @@ fun ExplorationView(
                             targetState = uiState.perspectiveText,
                             animationSpec = tween(120),
                             label = "perspective_crossfade"
-                        ) { text ->
-                            Text(
-                                text = text,
-                                color = CyberCyan,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp,
-                                lineHeight = 9.sp,
-                                letterSpacing = (-0.5).sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.testTag("first_person_viewport")
+                        ) { _ ->
+                            FirstPersonPerspectiveCanvas(
+                                uiState = uiState,
+                                modifier = Modifier.fillMaxSize().testTag("first_person_viewport"),
+                                isCombat = false
                             )
                         }
                     }
@@ -982,6 +982,367 @@ fun ExplorationView(
     }
 }
 
+// Draw first-person 3D vector wireframe of the cyberspace maze
+@Composable
+fun FirstPersonPerspectiveCanvas(
+    uiState: GameViewModel.GameUiState,
+    modifier: Modifier = Modifier,
+    isCombat: Boolean = false
+) {
+    val maze = uiState.maze
+    if (maze.isEmpty()) {
+        Box(modifier = modifier.background(Color.Black))
+        return
+    }
+
+    val px = uiState.gridX
+    val py = uiState.gridY
+    val dir = uiState.direction
+
+    val width = maze[0].size
+    val height = maze.size
+
+    val cellTypes = remember(maze, px, py, dir) {
+        val types = Array(4) { CellType.WALL }
+        for (d in 0..3) {
+            val cx = px + d * dir.dx
+            val cy = py + d * dir.dy
+            if (cx in 0 until width && cy in 0 until height) {
+                types[d] = maze[cy][cx]
+            } else {
+                types[d] = CellType.WALL
+            }
+        }
+        types
+    }
+
+    val cellCoords = remember(px, py, dir) {
+        val coords = Array(4) { Pair(-1, -1) }
+        for (d in 0..3) {
+            coords[d] = Pair(px + d * dir.dx, py + d * dir.dy)
+        }
+        coords
+    }
+
+    val leftWallAt = remember(maze, cellCoords) {
+        val leftWall = BooleanArray(3) { true }
+        val leftDir = dir.turnLeft()
+        for (d in 0..2) {
+            val cc = cellCoords[d]
+            if (cc.first != -1) {
+                val lx = cc.first + leftDir.dx
+                val ly = cc.second + leftDir.dy
+                if (lx in 0 until width && ly in 0 until height) {
+                    leftWall[d] = maze[ly][lx] == CellType.WALL
+                }
+            }
+        }
+        leftWall
+    }
+
+    val rightWallAt = remember(maze, cellCoords) {
+        val rightWall = BooleanArray(3) { true }
+        val rightDir = dir.turnRight()
+        for (d in 0..2) {
+            val cc = cellCoords[d]
+            if (cc.first != -1) {
+                val rx = cc.first + rightDir.dx
+                val ry = cc.second + rightDir.dy
+                if (rx in 0 until width && ry in 0 until height) {
+                    rightWall[d] = maze[ry][rx] == CellType.WALL
+                }
+            }
+        }
+        rightWall
+    }
+
+    val maxVisibleDepth = remember(cellTypes) {
+        var maxD = 3
+        for (d in 1..3) {
+            if (cellTypes[d] == CellType.WALL) {
+                maxD = d
+                break
+            }
+        }
+        maxD
+    }
+
+    val primaryColor = if (isCombat) Color(0xFFFB7185) else Color(0xFF00E5FF)
+
+    Canvas(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        val w = size.width
+        val h = size.height
+
+        // Depth points mapping from standard CharCanvas grid (30 columns by 10 rows)
+        val tl_c = floatArrayOf(0f, 6f, 11f, 13f)
+        val tl_r = floatArrayOf(0f, 2f, 3f, 4f)
+        val bl_c = floatArrayOf(0f, 6f, 11f, 13f)
+        val bl_r = floatArrayOf(10f, 8f, 7f, 6f)
+
+        val tr_c = floatArrayOf(30f, 24f, 19f, 17f)
+        val tr_r = floatArrayOf(0f, 2f, 3f, 4f)
+        val br_c = floatArrayOf(30f, 24f, 19f, 17f)
+        val br_r = floatArrayOf(10f, 8f, 7f, 6f)
+
+        fun getPixel(col: Float, row: Float): Offset {
+            return Offset((col / 30f) * w, (row / 10f) * h)
+        }
+
+        // --- 1. Draw Grid Ceilings & Floors (Cyber-Wire Perspective lines) ---
+        for (d in 0..3) {
+            drawLine(
+                color = primaryColor.copy(alpha = 0.15f),
+                start = getPixel(tl_c[d], tl_r[d]),
+                end = getPixel(tr_c[d], tr_r[d]),
+                strokeWidth = 2f
+            )
+            drawLine(
+                color = primaryColor.copy(alpha = 0.15f),
+                start = getPixel(bl_c[d], bl_r[d]),
+                end = getPixel(br_c[d], br_r[d]),
+                strokeWidth = 2f
+            )
+        }
+
+        for (d in 0..2) {
+            drawLine(
+                color = primaryColor.copy(alpha = 0.15f),
+                start = getPixel(tl_c[d], tl_r[d]),
+                end = getPixel(tl_c[d+1], tl_r[d+1]),
+                strokeWidth = 2f
+            )
+            drawLine(
+                color = primaryColor.copy(alpha = 0.15f),
+                start = getPixel(tr_c[d], tr_r[d]),
+                end = getPixel(tr_c[d+1], tr_r[d+1]),
+                strokeWidth = 2f
+            )
+            drawLine(
+                color = primaryColor.copy(alpha = 0.15f),
+                start = getPixel(bl_c[d], bl_r[d]),
+                end = getPixel(bl_c[d+1], bl_r[d+1]),
+                strokeWidth = 2f
+            )
+            drawLine(
+                color = primaryColor.copy(alpha = 0.15f),
+                start = getPixel(br_c[d], br_r[d]),
+                end = getPixel(br_c[d+1], br_r[d+1]),
+                strokeWidth = 2f
+            )
+        }
+
+        // --- 2. Side Walls (Far to Near) ---
+        for (d in (maxVisibleDepth - 1) downTo 0) {
+            val alpha = when (d) {
+                0 -> 0.4f
+                1 -> 0.25f
+                2 -> 0.15f
+                else -> 0.1f
+            }
+
+            // --- Left wall side segment ---
+            if (leftWallAt[d]) {
+                val path = Path().apply {
+                    val p1 = getPixel(tl_c[d], tl_r[d])
+                    val p2 = getPixel(tl_c[d+1], tl_r[d+1])
+                    val p3 = getPixel(bl_c[d+1], bl_r[d+1])
+                    val p4 = getPixel(bl_c[d], bl_r[d])
+                    moveTo(p1.x, p1.y)
+                    lineTo(p2.x, p2.y)
+                    lineTo(p3.x, p3.y)
+                    lineTo(p4.x, p4.y)
+                    close()
+                }
+                drawPath(path = path, color = primaryColor.copy(alpha = alpha))
+
+                // Frame outlines
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d], tl_r[d]), end = getPixel(tl_c[d+1], tl_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(bl_c[d], bl_r[d]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d+1], tl_r[d+1]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 3f)
+            } else {
+                // Open corridor left side boundary
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tl_c[d], tl_r[d+1]), end = getPixel(tl_c[d+1], tl_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(bl_c[d], bl_r[d+1]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.3f), start = getPixel(tl_c[d+1], tl_r[d+1]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 3f)
+            }
+
+            // --- Right wall side segment ---
+            if (rightWallAt[d]) {
+                val path = Path().apply {
+                    val p1 = getPixel(tr_c[d], tr_r[d])
+                    val p2 = getPixel(tr_c[d+1], tr_r[d+1])
+                    val p3 = getPixel(br_c[d+1], br_r[d+1])
+                    val p4 = getPixel(br_c[d], br_r[d])
+                    moveTo(p1.x, p1.y)
+                    lineTo(p2.x, p2.y)
+                    lineTo(p3.x, p3.y)
+                    lineTo(p4.x, p4.y)
+                    close()
+                }
+                drawPath(path = path, color = primaryColor.copy(alpha = alpha))
+
+                // Frame outlines
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d], tr_r[d]), end = getPixel(tr_c[d+1], tr_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(br_c[d], br_r[d]), end = getPixel(br_c[d+1], br_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d+1], tr_r[d+1]), end = getPixel(br_c[d+1], br_r[d+1]), strokeWidth = 3f)
+            } else {
+                // Open corridor right side boundary
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tr_c[d+1], tr_r[d+1]), end = getPixel(tr_c[d], tr_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(br_c[d+1], br_r[d+1]), end = getPixel(br_c[d], br_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.3f), start = getPixel(tr_c[d+1], tr_r[d+1]), end = getPixel(br_c[d+1], br_r[d+1]), strokeWidth = 3f)
+            }
+        }
+
+        // --- 3. Front Wall Bulkhead (if blocked) ---
+        if (maxVisibleDepth <= 3) {
+            val d = maxVisibleDepth
+            val pTL = getPixel(tl_c[d], tl_r[d])
+            val pBR = getPixel(tr_c[d], br_r[d])
+            val wallAlpha = when (d) {
+                1 -> 0.75f
+                2 -> 0.5f
+                3 -> 0.3f
+                else -> 0.2f
+            }
+
+            drawRect(
+                color = primaryColor.copy(alpha = wallAlpha),
+                topLeft = pTL,
+                size = Size(pBR.x - pTL.x, pBR.y - pTL.y)
+            )
+            drawRect(
+                color = primaryColor,
+                topLeft = pTL,
+                size = Size(pBR.x - pTL.x, pBR.y - pTL.y),
+                style = Stroke(width = 4f)
+            )
+        } else {
+            // Far vanishing point boundary
+            val pTL = getPixel(tl_c[3], tl_r[3])
+            val pBR = getPixel(tr_c[3], br_r[3])
+            drawRect(
+                color = primaryColor.copy(alpha = 0.25f),
+                topLeft = pTL,
+                size = Size(pBR.x - pTL.x, pBR.y - pTL.y),
+                style = Stroke(width = 2f)
+            )
+        }
+
+        // --- 4. Central Vector Cyber Objects ---
+        val primaryNode = if (isCombat) CellType.VIRUS_NODE else cellTypes[1]
+        if (primaryNode == CellType.VIRUS_NODE) {
+            val center = getPixel(15f, 5f)
+            val sizeRadius = w * 0.11f
+
+            // Pulse threat aura
+            drawCircle(
+                color = Color(0xFFF43F5E).copy(alpha = 0.25f),
+                radius = sizeRadius * 1.5f,
+                center = center
+            )
+
+            // Outer danger shield
+            val path = Path().apply {
+                moveTo(center.x, center.y - sizeRadius)
+                lineTo(center.x + sizeRadius, center.y)
+                lineTo(center.x, center.y + sizeRadius)
+                lineTo(center.x - sizeRadius, center.y)
+                close()
+            }
+            drawPath(path = path, color = Color(0xFFF43F5E), style = Stroke(width = 5f))
+
+            // Core center
+            drawCircle(color = Color(0xFFF43F5E), radius = sizeRadius * 0.4f, center = center)
+
+            // Threat spikes
+            drawLine(Color(0xFFF43F5E), center, getPixel(11f, 3.5f), strokeWidth = 3f)
+            drawLine(Color(0xFFF43F5E), center, getPixel(19f, 3.5f), strokeWidth = 3f)
+            drawLine(Color(0xFFF43F5E), center, getPixel(11f, 6.5f), strokeWidth = 3f)
+            drawLine(Color(0xFFF43F5E), center, getPixel(19f, 6.5f), strokeWidth = 3f)
+
+        } else if (primaryNode == CellType.DATA_STORE) {
+            val center = getPixel(15f, 5f)
+            val sizeRadius = w * 0.1f
+
+            // Data storage core glow
+            drawCircle(
+                color = Color(0xFFFBBF24).copy(alpha = 0.22f),
+                radius = sizeRadius * 1.5f,
+                center = center
+            )
+
+            val boxW = sizeRadius * 1.6f
+            val boxH = sizeRadius * 0.35f
+
+            // Upper server bay
+            drawRoundRect(
+                color = Color(0xFFFBBF24),
+                topLeft = Offset(center.x - boxW / 2, center.y - sizeRadius * 0.75f),
+                size = Size(boxW, boxH),
+                cornerRadius = CornerRadius(6f, 6f)
+            )
+            // Middle server bay
+            drawRoundRect(
+                color = Color(0xFFFBBF24),
+                topLeft = Offset(center.x - boxW / 2, center.y - boxH / 2),
+                size = Size(boxW, boxH),
+                cornerRadius = CornerRadius(6f, 6f)
+            )
+            // Lower server bay
+            drawRoundRect(
+                color = Color(0xFFFBBF24),
+                topLeft = Offset(center.x - boxW / 2, center.y + sizeRadius * 0.4f),
+                size = Size(boxW, boxH),
+                cornerRadius = CornerRadius(6f, 6f)
+            )
+
+            // Active disk indicator dots
+            drawCircle(Color.Black, radius = 5f, center = Offset(center.x - boxW * 0.35f, center.y - sizeRadius * 0.55f))
+            drawCircle(Color.Black, radius = 5f, center = Offset(center.x - boxW * 0.35f, center.y))
+            drawCircle(Color.Black, radius = 5f, center = Offset(center.x - boxW * 0.35f, center.y + sizeRadius * 0.55f))
+
+        } else if (primaryNode == CellType.ENCRYPTED_PORTAL) {
+            val center = getPixel(15f, 5f)
+            val sizeRadius = w * 0.12f
+
+            // Portal swirling glow
+            drawCircle(
+                color = Color(0xFFC084FC).copy(alpha = 0.25f),
+                radius = sizeRadius * 1.6f,
+                center = center
+            )
+
+            // Nested quantum circles
+            drawCircle(color = Color(0xFFC084FC), radius = sizeRadius, center = center, style = Stroke(width = 6f))
+            drawCircle(color = Color(0xFFC084FC).copy(alpha = 0.6f), radius = sizeRadius * 0.65f, center = center, style = Stroke(width = 4f))
+            drawCircle(color = Color(0xFFC084FC), radius = sizeRadius * 0.3f, center = center)
+        }
+
+        // HUD tactical brackets
+        drawLine(
+            color = primaryColor.copy(alpha = 0.35f),
+            start = Offset(w * 0.15f, h * 0.5f),
+            end = Offset(w * 0.22f, h * 0.5f),
+            strokeWidth = 3f
+        )
+        drawLine(
+            color = primaryColor.copy(alpha = 0.35f),
+            start = Offset(w * 0.78f, h * 0.5f),
+            end = Offset(w * 0.85f, h * 0.5f),
+            strokeWidth = 3f
+        )
+        drawCircle(
+            color = primaryColor.copy(alpha = 0.45f),
+            radius = 3f,
+            center = Offset(w * 0.5f, h * 0.5f)
+        )
+    }
+}
+
 // Renders the top-down 2D mini-map (highly optimized for low-end devices with 100x fewer Compose nodes)
 @Composable
 fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
@@ -992,65 +1353,203 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
     val py = uiState.gridY
     val dir = uiState.direction
 
-    val annotatedMap = remember(maze, px, py, dir) {
-        androidx.compose.ui.text.buildAnnotatedString {
-            for (y in maze.indices) {
-                for (x in maze[y].indices) {
+    val rowCount = maze.size
+    val colCount = maze[0].size
+
+    Box(
+        modifier = Modifier
+            .aspectRatio(1f)
+            .fillMaxSize()
+            .padding(4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            // Calculate grid bounds to center it perfectly
+            val cellSize = minOf(w / colCount, h / rowCount)
+            val gridW = cellSize * colCount
+            val gridH = cellSize * rowCount
+            val startX = (w - gridW) / 2f
+            val startY = (h - gridH) / 2f
+
+            // Draw grid background subtle lines
+            for (col in 0..colCount) {
+                val x = startX + col * cellSize
+                drawLine(
+                    color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                    start = Offset(x, startY),
+                    end = Offset(x, startY + gridH),
+                    strokeWidth = 1f
+                )
+            }
+            for (row in 0..rowCount) {
+                val y = startY + row * cellSize
+                drawLine(
+                    color = Color(0xFF1E293B).copy(alpha = 0.5f),
+                    start = Offset(startX, y),
+                    end = Offset(startX + gridW, y),
+                    strokeWidth = 1f
+                )
+            }
+
+            // Draw cells
+            for (y in 0 until rowCount) {
+                for (x in 0 until colCount) {
                     val cell = maze[y][x]
+                    val cellLeft = startX + x * cellSize
+                    val cellTop = startY + y * cellSize
                     val isPlayer = (x == px && y == py)
 
-                    val char = when {
-                        isPlayer -> {
-                            when (dir) {
-                                Direction.NORTH -> "▲"
-                                Direction.EAST -> "▶"
-                                Direction.SOUTH -> "▼"
-                                Direction.WEST -> "◀"
+                    if (isPlayer) {
+                        // Draw glowing radar circle under player
+                        drawCircle(
+                            color = Color(0xFF00E5FF).copy(alpha = 0.25f),
+                            radius = cellSize * 0.7f,
+                            center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                        )
+                        
+                        // Draw player pointer
+                        val playerCenter = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                        val playerSize = cellSize * 0.7f
+                        val dirAngle = when (dir) {
+                            Direction.NORTH -> 0f
+                            Direction.EAST -> 90f
+                            Direction.SOUTH -> 180f
+                            Direction.WEST -> 270f
+                        }
+
+                        rotate(degrees = dirAngle, pivot = playerCenter) {
+                            val playerPath = Path().apply {
+                                moveTo(playerCenter.x, playerCenter.y - playerSize * 0.5f)
+                                lineTo(playerCenter.x + playerSize * 0.35f, playerCenter.y + playerSize * 0.45f)
+                                lineTo(playerCenter.x - playerSize * 0.35f, playerCenter.y + playerSize * 0.45f)
+                                close()
+                            }
+                            drawPath(
+                                path = playerPath,
+                                color = Color(0xFF00E5FF)
+                            )
+                        }
+                    } else {
+                        when (cell) {
+                            CellType.WALL -> {
+                                drawRoundRect(
+                                    color = Color(0xFF334155),
+                                    topLeft = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.1f),
+                                    size = Size(cellSize * 0.8f, cellSize * 0.8f),
+                                    cornerRadius = CornerRadius(4f, 4f)
+                                )
+                                drawRoundRect(
+                                    color = Color(0xFF475569),
+                                    topLeft = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.1f),
+                                    size = Size(cellSize * 0.8f, cellSize * 0.8f),
+                                    cornerRadius = CornerRadius(4f, 4f),
+                                    style = Stroke(width = 2f)
+                                )
+                            }
+                            CellType.DATA_STORE -> {
+                                // Golden amber glowing terminal data cell
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawCircle(
+                                    color = Color(0xFFFBBF24).copy(alpha = 0.25f),
+                                    radius = cellSize * 0.45f,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFFFBBF24),
+                                    radius = cellSize * 0.22f,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFFFBBF24),
+                                    radius = cellSize * 0.38f,
+                                    center = center,
+                                    style = Stroke(width = 2f)
+                                )
+                            }
+                            CellType.ENCRYPTED_PORTAL -> {
+                                // Purple vortex portal
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawCircle(
+                                    color = Color(0xFFC084FC).copy(alpha = 0.25f),
+                                    radius = cellSize * 0.45f,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFFC084FC),
+                                    radius = cellSize * 0.35f,
+                                    center = center,
+                                    style = Stroke(width = 3f)
+                                )
+                                drawCircle(
+                                    color = Color(0xFFC084FC),
+                                    radius = cellSize * 0.15f,
+                                    center = center
+                                )
+                            }
+                            CellType.VIRUS_NODE -> {
+                                // Hostile Crimson Rose hazard diamond
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                val rad = cellSize * 0.35f
+                                
+                                drawCircle(
+                                    color = Color(0xFFF43F5E).copy(alpha = 0.25f),
+                                    radius = cellSize * 0.45f,
+                                    center = center
+                                )
+
+                                val path = Path().apply {
+                                    moveTo(center.x, center.y - rad)
+                                    lineTo(center.x + rad, center.y)
+                                    lineTo(center.x, center.y + rad)
+                                    lineTo(center.x - rad, center.y)
+                                    close()
+                                }
+                                drawPath(path = path, color = Color(0xFFF43F5E))
+                            }
+                            CellType.SAFE_ZONE -> {
+                                // Secure Emerald Green ring
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawCircle(
+                                    color = Color(0xFF10B981).copy(alpha = 0.25f),
+                                    radius = cellSize * 0.45f,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFF10B981),
+                                    radius = cellSize * 0.3f,
+                                    center = center,
+                                    style = Stroke(width = 3f)
+                                )
+                                // Cross shape inside
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(center.x - cellSize * 0.15f, center.y),
+                                    end = Offset(center.x + cellSize * 0.15f, center.y),
+                                    strokeWidth = 3f
+                                )
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(center.x, center.y - cellSize * 0.15f),
+                                    end = Offset(center.x, center.y + cellSize * 0.15f),
+                                    strokeWidth = 3f
+                                )
+                            }
+                            else -> {
+                                // Subtle empty space guide dot
+                                drawCircle(
+                                    color = Color(0xFF1E293B),
+                                    radius = 2f,
+                                    center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                )
                             }
                         }
-                        cell == CellType.WALL -> "█"
-                        cell == CellType.DATA_STORE -> "D"
-                        cell == CellType.ENCRYPTED_PORTAL -> "P"
-                        cell == CellType.VIRUS_NODE -> "V"
-                        cell == CellType.SAFE_ZONE -> "S"
-                        else -> "·"
                     }
-
-                    val color = when {
-                        isPlayer -> CyberCyan
-                        cell == CellType.WALL -> CyberBorderLight
-                        cell == CellType.DATA_STORE -> CyberAmber
-                        cell == CellType.ENCRYPTED_PORTAL -> CyberPink
-                        cell == CellType.VIRUS_NODE -> CyberPink
-                        cell == CellType.SAFE_ZONE -> CyberGreen
-                        else -> Color.DarkGray
-                    }
-
-                    withStyle(style = androidx.compose.ui.text.SpanStyle(color = color, fontWeight = if (isPlayer) FontWeight.Bold else FontWeight.Normal)) {
-                        append(char)
-                    }
-                    if (x < maze[y].size - 1) {
-                        append(" ")
-                    }
-                }
-                if (y < maze.size - 1) {
-                    append("\n")
                 }
             }
         }
-    }
-
-    Box(
-        modifier = Modifier.fillMaxWidth(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = annotatedMap,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 9.sp,
-            lineHeight = 10.sp,
-            textAlign = TextAlign.Center
-        )
     }
 }
 
@@ -1115,19 +1614,14 @@ fun CombatView(
                             .weight(1.2f)
                             .fillMaxWidth()
                             .background(Color.Black)
-                            .border(1.dp, CyberPink.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .border(1.dp, Color(0xFFFB7185).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
                             .padding(2.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = uiState.perspectiveText,
-                            color = CyberPink, // Red/Pink tactical wireframe during active hostile combat!
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
-                            lineHeight = 9.sp,
-                            letterSpacing = (-0.5).sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.testTag("first_person_viewport")
+                        FirstPersonPerspectiveCanvas(
+                            uiState = uiState,
+                            modifier = Modifier.fillMaxSize().testTag("first_person_viewport"),
+                            isCombat = true
                         )
                         
                         Text(
