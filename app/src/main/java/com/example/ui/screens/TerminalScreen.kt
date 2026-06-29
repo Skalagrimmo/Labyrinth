@@ -106,7 +106,7 @@ fun TerminalScreen(
                     yScan += scanlineHeightPx
                 }
             }
-            .padding(12.dp)
+            .padding(6.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -114,7 +114,7 @@ fun TerminalScreen(
             // Retro Cyber Terminal Header
             TerminalHeader(uiState, onLeaderboardClick = { viewModel.viewLeaderboard() })
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Body depending on active screen
             Box(
@@ -181,12 +181,12 @@ fun TerminalScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             // Always Visible Terminal Log Output (Footer console log)
             if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
                 TerminalLogConsole(uiState.logFeed, glowIntensity)
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 HighDensityBottomNavigation(
                     currentScreen = uiState.screen,
                     viewModel = viewModel
@@ -246,146 +246,87 @@ fun TerminalHeader(uiState: GameViewModel.GameUiState, onLeaderboardClick: () ->
     Card(
         colors = CardDefaults.cardColors(containerColor = CyberCardBg),
         border = BorderStroke(1.dp, CyberBorder),
-        shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+        shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Top Row: Sector identification + Status lights/actions
+            // Left: Level & stats summary in a single clean horizontal line
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
-                    text = "SECTOR: 0x4A-CRONOS // LAYER ${uiState.level}",
-                    color = CyberCyan,
+                    text = "LYR ${uiState.level}",
+                    color = CyberAmber,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 11.sp,
-                    letterSpacing = 0.5.sp
+                    fontSize = 10.sp
                 )
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Syncing",
-                        tint = CyberCyan,
-                        modifier = Modifier.size(14.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Icon(
-                        imageVector = Icons.Default.Lock,
-                        contentDescription = "Encryption Mode",
-                        tint = CyberAmber,
-                        modifier = Modifier.size(14.dp)
-                    )
-
-                    Spacer(modifier = Modifier.width(8.dp))
-
-                    IconButton(
-                        onClick = onLeaderboardClick,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .testTag("leaderboard_tab_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.List,
-                            contentDescription = "Mainframe Logs",
-                            tint = CyberCyan,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(4.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(CyberCyan)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = "ONLINE",
-                            color = CyberDark,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                }
+                Text(
+                    text = "|",
+                    color = CyberBorder,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = "CORE: ${uiState.integrity}%",
+                    color = CyberCyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "|",
+                    color = CyberBorder,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp
+                )
+                Text(
+                    text = "RAM: ${uiState.ram}MB",
+                    color = CyberPink,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
+                )
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Dual Grid Columns of high-density statistics
+            // Right: ONLINE status indicator & logs action button
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Integrity Health column
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "INTEGRITY",
-                            color = CyberMutedText,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        val percent = if (uiState.maxIntegrity > 0) (uiState.integrity * 100 / uiState.maxIntegrity).coerceIn(0, 100) else 0
-                        Text(
-                            text = "$percent%",
-                            color = CyberCyan,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(3.dp))
-                    HighDensityProgressBar(
-                        current = uiState.integrity,
-                        max = uiState.maxIntegrity,
-                        isGradient = true,
-                        color = CyberCyan
+                IconButton(
+                    onClick = onLeaderboardClick,
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag("leaderboard_tab_button")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.List,
+                        contentDescription = "Mainframe Logs",
+                        tint = CyberCyan,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 
-                // RAM Buffer column
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "RAM BUFFER",
-                            color = CyberMutedText,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = "${uiState.ram}/${uiState.maxRam}",
-                            color = CyberPink,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(3.dp))
-                    HighDensityProgressBar(
-                        current = uiState.ram,
-                        max = uiState.maxRam,
-                        isGradient = false,
-                        color = CyberPink
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(CyberCyan)
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = "ONLN",
+                        color = CyberDark,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }
@@ -575,8 +516,8 @@ fun ExplorationView(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.2f),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .weight(1.4f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // Left Viewport (ASCII wireframe)
             Column(
@@ -587,42 +528,43 @@ fun ExplorationView(
                 Card(
                     colors = CardDefaults.cardColors(containerColor = Color.Black),
                     border = BorderStroke(1.dp, CyberBorder),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.2f)
                         .fillMaxWidth()
                 ) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(4.dp),
+                            .padding(2.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Renders 3D ascii output
+                        // Renders 3D ascii output (optimized compact retro size)
                         Text(
                             text = uiState.perspectiveText,
                             color = CyberCyan,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            lineHeight = 11.sp,
+                            fontSize = 8.sp,
+                            lineHeight = 9.sp,
+                            letterSpacing = (-0.5).sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.testTag("first_person_viewport")
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Tactical Navigation buttons under 3D wireframe
                 Card(
                     colors = CardDefaults.cardColors(containerColor = CyberCardBg),
                     border = BorderStroke(1.dp, CyberBorder),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
-                            .padding(8.dp)
+                            .padding(4.dp)
                             .fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center
@@ -632,58 +574,58 @@ fun ExplorationView(
                             onClick = { viewModel.moveForward() },
                             colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                             border = BorderStroke(1.dp, CyberBorderLight),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier
-                                .size(44.dp)
+                                .size(36.dp)
                                 .testTag("btn_move_forward")
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, "Forward", tint = CyberCyan)
+                            Icon(Icons.Default.KeyboardArrowUp, "Forward", tint = CyberCyan, modifier = Modifier.size(20.dp))
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
+                        Spacer(modifier = Modifier.height(2.dp))
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
                                 onClick = { viewModel.turnLeft() },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                                 border = BorderStroke(1.dp, CyberBorderLight),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(36.dp)
                                     .testTag("btn_turn_left")
                             ) {
-                                Icon(Icons.Default.KeyboardArrowLeft, "Turn Left", tint = CyberCyan)
+                                Icon(Icons.Default.KeyboardArrowLeft, "Turn Left", tint = CyberCyan, modifier = Modifier.size(20.dp))
                             }
 
                             Button(
                                 onClick = { viewModel.moveBackward() },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                                 border = BorderStroke(1.dp, CyberBorderLight),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(36.dp)
                                     .testTag("btn_move_back")
                             ) {
-                                Icon(Icons.Default.KeyboardArrowDown, "Backward", tint = CyberCyan)
+                                Icon(Icons.Default.KeyboardArrowDown, "Backward", tint = CyberCyan, modifier = Modifier.size(20.dp))
                             }
 
                             Button(
                                 onClick = { viewModel.turnRight() },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                                 border = BorderStroke(1.dp, CyberBorderLight),
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
-                                    .size(44.dp)
+                                    .size(36.dp)
                                     .testTag("btn_turn_right")
                             ) {
-                                Icon(Icons.Default.KeyboardArrowRight, "Turn Right", tint = CyberCyan)
+                                Icon(Icons.Default.KeyboardArrowRight, "Turn Right", tint = CyberCyan, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
@@ -700,7 +642,7 @@ fun ExplorationView(
                 Card(
                     colors = CardDefaults.cardColors(containerColor = CyberCardBg),
                     border = BorderStroke(1.dp, CyberBorder),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
@@ -708,16 +650,16 @@ fun ExplorationView(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(6.dp),
+                            .padding(4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
                             text = "SECTOR LOGIC RADAR",
                             color = CyberCyan,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 4.dp)
+                            modifier = Modifier.padding(bottom = 2.dp)
                         )
 
                         // Render top down map
@@ -730,13 +672,13 @@ fun ExplorationView(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(4.dp))
 
                 // Primary Stats Overview
                 Card(
                     colors = CardDefaults.cardColors(containerColor = CyberCardBg),
                     border = BorderStroke(1.dp, CyberBorder),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .weight(1.1f)
                         .fillMaxWidth()
@@ -744,16 +686,16 @@ fun ExplorationView(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(8.dp)
+                            .padding(6.dp)
                             .verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             text = "STATUS // ${uiState.runnerName.uppercase()}",
                             color = CyberCyan,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 11.sp
+                            fontSize = 10.sp
                         )
 
                         // HP Bar
@@ -761,7 +703,7 @@ fun ExplorationView(
                             text = "INTEGRITY: ${uiState.integrity}/${uiState.maxIntegrity}",
                             color = CyberCyan,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp
+                            fontSize = 9.sp
                         )
                         ProgressBarRetro(
                             current = uiState.integrity,
@@ -774,7 +716,7 @@ fun ExplorationView(
                             text = "RAM: ${uiState.ram}/${uiState.maxRam} MB",
                             color = CyberPink,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp
+                            fontSize = 9.sp
                         )
                         ProgressBarRetro(
                             current = uiState.ram,
@@ -791,13 +733,13 @@ fun ExplorationView(
                                 text = "CREDITS: ${uiState.credits} MB",
                                 color = CyberAmber,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp
+                                fontSize = 9.sp
                             )
                             Text(
                                 text = "DMG: +${uiState.damageBonus}",
                                 color = CyberPink,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 10.sp
+                                fontSize = 9.sp
                             )
                         }
 
@@ -807,18 +749,18 @@ fun ExplorationView(
                         Button(
                             onClick = { viewModel.interact() },
                             colors = ButtonDefaults.buttonColors(containerColor = CyberPink),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(38.dp)
+                                .height(32.dp)
                                 .testTag("btn_interact_hack")
                         ) {
                             Text(
                                 text = "EXECUTE NODE INTERACTION",
                                 color = Color.White,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -827,25 +769,25 @@ fun ExplorationView(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Inventory & Consumable selection pane
         Card(
             colors = CardDefaults.cardColors(containerColor = CyberCardBg),
             border = BorderStroke(1.dp, CyberBorder),
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(0.5f)
+                .weight(0.4f)
         ) {
-            Column(modifier = Modifier.padding(6.dp)) {
+            Column(modifier = Modifier.padding(4.dp)) {
                 Text(
                     text = "VIRTUAL STORAGE // CONSUMABLES (TAP TO LOAD):",
                     color = CyberCyan,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontSize = 8.sp,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 4.dp)
+                    modifier = Modifier.padding(bottom = 2.dp)
                 )
 
                 if (uiState.inventory.isEmpty()) {
@@ -857,7 +799,7 @@ fun ExplorationView(
                             text = "[ STORAGE COLD CORE EMPTY ]",
                             color = Color.Gray,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp
+                            fontSize = 8.sp
                         )
                     }
                 } else {
@@ -865,7 +807,7 @@ fun ExplorationView(
                         modifier = Modifier
                             .fillMaxSize()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         uiState.inventory.forEach { item ->
                             val itemColor = when (item) {
@@ -878,18 +820,18 @@ fun ExplorationView(
 
                             Box(
                                 modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .border(1.dp, itemColor, RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .border(1.dp, itemColor, RoundedCornerShape(6.dp))
                                     .background(CyberDark)
                                     .clickable { viewModel.useInventoryItem(item) }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                                     .testTag("item_$item")
                             ) {
                                 Text(
                                     text = item,
                                     color = itemColor,
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 10.sp,
+                                    fontSize = 9.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
@@ -899,7 +841,7 @@ fun ExplorationView(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Base navigation: Store, Leaders, Dissolve Connection
         Row(
@@ -910,26 +852,26 @@ fun ExplorationView(
                 onClick = onShopClick,
                 colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                 border = BorderStroke(1.dp, CyberBorderLight),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .height(40.dp)
+                    .height(34.dp)
                     .testTag("btn_shop_console")
             ) {
-                Text("SHOP SOURCE", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("SHOP SOURCE", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
 
             Button(
                 onClick = onSafeDisconnect,
                 colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
                 border = BorderStroke(1.dp, CyberPink),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier
                     .weight(1.2f)
-                    .height(40.dp)
+                    .height(34.dp)
                     .testTag("btn_safe_disconnect")
             ) {
-                Text("DISCONNECT RUN", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Text("DISCONNECT RUN", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1000,8 +942,8 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
         Text(
             text = annotatedMap,
             fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp,
-            lineHeight = 14.sp,
+            fontSize = 9.sp,
+            lineHeight = 10.sp,
             textAlign = TextAlign.Center
         )
     }
@@ -1026,23 +968,23 @@ fun CombatView(
             color = CyberPink,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
+            fontSize = 10.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
         )
 
         // Split: Enemy visual representation + Player Tactical Programs
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.2f),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                .weight(1.4f),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             // Left Panel: Enemy details & ASCII Art
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberDark),
                 border = BorderStroke(1.dp, CyberBorder),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .weight(0.9f)
                     .fillMaxHeight()
@@ -1050,7 +992,7 @@ fun CombatView(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp),
+                        .padding(4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.SpaceBetween
                 ) {
@@ -1059,25 +1001,26 @@ fun CombatView(
                         color = CyberPink,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
+                        fontSize = 11.sp
                     )
 
                     // First-Person 3D Tactical Viewport (Integrating 1st person perspective directly into combat)
                     Box(
                         modifier = Modifier
-                            .weight(1.3f)
+                            .weight(1.2f)
                             .fillMaxWidth()
                             .background(Color.Black)
-                            .border(1.dp, CyberPink.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
-                            .padding(4.dp),
+                            .border(1.dp, CyberPink.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(2.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = uiState.perspectiveText,
                             color = CyberPink, // Red/Pink tactical wireframe during active hostile combat!
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp,
-                            lineHeight = 10.sp,
+                            fontSize = 8.sp,
+                            lineHeight = 9.sp,
+                            letterSpacing = (-0.5).sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.testTag("first_person_viewport")
                         )
@@ -1086,24 +1029,24 @@ fun CombatView(
                             text = "TARGET LCK",
                             color = CyberPink.copy(alpha = 0.6f),
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
+                            fontSize = 7.sp,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier
                                 .align(Alignment.TopStart)
-                                .padding(4.dp)
+                                .padding(2.dp)
                         )
                     }
 
                     // Enemy stats
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Text(
                             text = "HOSTILE CORE: ${enemy.integrity}/${enemy.maxIntegrity}",
                             color = CyberPink,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp
+                            fontSize = 9.sp
                         )
                         ProgressBarRetro(
                             current = enemy.integrity,
@@ -1115,7 +1058,7 @@ fun CombatView(
                             text = "HOSTILE SHIELD: ${enemy.shield}/${enemy.maxShield}",
                             color = CyberCyan,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp
+                            fontSize = 9.sp
                         )
                         ProgressBarRetro(
                             current = enemy.shield,
@@ -1131,13 +1074,13 @@ fun CombatView(
                                 text = "ATTACK: ${enemy.damage}",
                                 color = CyberAmber,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp
+                                fontSize = 8.sp
                             )
                             Text(
                                 text = "SHIELDING: ${enemy.armor}",
                                 color = CyberBrightGreen,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp
+                                fontSize = 8.sp
                             )
                         }
                     }
@@ -1148,7 +1091,7 @@ fun CombatView(
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberCardBg),
                 border = BorderStroke(1.dp, CyberBorder),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .weight(1.1f)
                     .fillMaxHeight()
@@ -1156,22 +1099,22 @@ fun CombatView(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(8.dp)
+                        .padding(4.dp)
                         .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         text = "TACTICAL CODES:",
                         color = CyberCyan,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
+                        fontSize = 10.sp
                     )
 
                     // Display runner stats with retro style progress bars
                     Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1181,7 +1124,7 @@ fun CombatView(
                                 text = "SYSTEM CORE: ${uiState.integrity}/${uiState.maxIntegrity}",
                                 color = CyberCyan,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp
+                                fontSize = 8.sp
                             )
                         }
                         ProgressBarRetro(
@@ -1198,7 +1141,7 @@ fun CombatView(
                                 text = "FIREWALL: ${uiState.playerShield}/${uiState.playerMaxShield}",
                                 color = CyberBrightGreen,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp
+                                fontSize = 8.sp
                             )
                         }
                         ProgressBarRetro(
@@ -1215,7 +1158,7 @@ fun CombatView(
                                 text = "ALLOCATED RAM: ${uiState.ram}/${uiState.maxRam}MB",
                                 color = CyberPink,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 9.sp
+                                fontSize = 8.sp
                             )
                         }
                         ProgressBarRetro(
@@ -1235,12 +1178,12 @@ fun CombatView(
                                 containerColor = if (uiState.ram >= prog.ramCost) CyberMutedGreen else CyberDark
                             ),
                             border = BorderStroke(1.dp, if (uiState.ram >= prog.ramCost) CyberCyan else CyberBorder),
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(8.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("program_btn_${prog.id}")
                         ) {
-                            Column(modifier = Modifier.padding(6.dp)) {
+                            Column(modifier = Modifier.padding(4.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween
@@ -1250,13 +1193,13 @@ fun CombatView(
                                         color = if (uiState.ram >= prog.ramCost) CyberCyan else CyberBrightGreen.copy(alpha = 0.5f),
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp
+                                        fontSize = 10.sp
                                     )
                                     Text(
                                         text = "${prog.ramCost}MB",
                                         color = CyberPink,
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
+                                        fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -1264,8 +1207,8 @@ fun CombatView(
                                     text = prog.description,
                                     color = CyberBrightGreen,
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 9.sp,
-                                    lineHeight = 11.sp
+                                    fontSize = 8.sp,
+                                    lineHeight = 10.sp
                                 )
                             }
                         }
@@ -1278,17 +1221,17 @@ fun CombatView(
                         onClick = onFlee,
                         colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
                         border = BorderStroke(1.dp, CyberPink),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(38.dp)
+                            .height(32.dp)
                             .testTag("btn_flee_combat")
                     ) {
                         Text(
                             text = "EMERGENCY RETREAT ROUTE",
                             color = CyberPink,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -1298,19 +1241,19 @@ fun CombatView(
 
         // Output banner showing current actions
         if (uiState.enemyCombatAction.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(2.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberDark),
                 border = BorderStroke(1.dp, CyberBorder),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(8.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = uiState.enemyCombatAction,
                     color = CyberPink,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
-                    modifier = Modifier.padding(8.dp)
+                    fontSize = 9.sp,
+                    modifier = Modifier.padding(4.dp)
                 )
             }
         }
@@ -2059,9 +2002,9 @@ fun TerminalLogConsole(logs: List<LogMessage>, glow: Float) {
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .height(110.dp)
+            .height(70.dp)
     ) {
-        Column(modifier = Modifier.padding(6.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
             Text(
                 text = "SYSTEM LOG MONITOR // LIVE DIAGNOSTICS",
                 color = CyberCyan.copy(alpha = glow),
@@ -2116,13 +2059,13 @@ fun HighDensityBottomNavigation(
     Card(
         colors = CardDefaults.cardColors(containerColor = CyberCardBg),
         border = BorderStroke(1.dp, CyberBorder),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp),
         modifier = modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 12.dp)
+                .padding(vertical = 4.dp, horizontal = 8.dp)
         ) {
             Row(
                 modifier = Modifier
