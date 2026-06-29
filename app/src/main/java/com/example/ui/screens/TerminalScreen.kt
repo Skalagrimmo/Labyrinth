@@ -15,11 +15,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import android.view.HapticFeedbackConstants
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -28,6 +32,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.ui.input.key.*
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.*
 import com.example.ui.GameViewModel
@@ -44,22 +54,19 @@ fun TerminalScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val highScores by viewModel.runRecords.collectAsStateWithLifecycle()
+    val view = LocalView.current
 
     // Interactive name text state for creation screen
     var runnerNameInput by remember { mutableStateOf("") }
     var selectedClass by remember { mutableStateOf(NetrunnerClass.CODE_SLASHER) }
 
-    // CRT Phosphor glow animation pulse
-    val infiniteTransition = rememberInfiniteTransition(label = "crt_pulse")
-    val glowIntensity by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "glow_float"
-    )
+    // Focus management for hardware keys
+    val focusRequester = remember { FocusRequester() }
+    LaunchedEffect(uiState.screen) {
+        if (uiState.screen == GameViewModel.ActiveScreen.EXPLORATION) {
+            focusRequester.requestFocus()
+        }
+    }
 
     // Base background with modern high-density cyan grid layout and subtle scanlines (highly optimized)
     val gridSpacing = 32.dp
@@ -68,42 +75,80 @@ fun TerminalScreen(
         modifier = modifier
             .fillMaxSize()
             .background(CyberDark)
-            .drawBehind {
+            .focusRequester(focusRequester)
+            .focusable()
+            .onKeyEvent { keyEvent ->
+                if (keyEvent.type == KeyEventType.KeyDown && uiState.screen == GameViewModel.ActiveScreen.EXPLORATION) {
+                    when (keyEvent.key) {
+                        Key.W, Key.DirectionUp -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            viewModel.moveForward()
+                            true
+                        }
+                        Key.S, Key.DirectionDown -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            viewModel.moveBackward()
+                            true
+                        }
+                        Key.A, Key.DirectionLeft -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            viewModel.turnLeft()
+                            true
+                        }
+                        Key.D, Key.DirectionRight -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                            viewModel.turnRight()
+                            true
+                        }
+                        Key.E, Key.Spacebar, Key.Enter -> {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            viewModel.interact()
+                            true
+                        }
+                        else -> false
+                    }
+                } else {
+                    false
+                }
+            }
+            .drawWithCache {
                 val spacingPx = gridSpacing.toPx()
                 val strokePx = 1.dp.toPx()
-                // 1. Draw highly optimized vertical/horizontal grid lines (30x faster than thousands of drawCircle calls)
-                var x = 0f
-                while (x < size.width) {
-                    drawLine(
-                        color = Color(0x0800F3FF), // Neon Cyan grid line at 3% opacity
-                        start = Offset(x, 0f),
-                        end = Offset(x, size.height),
-                        strokeWidth = strokePx
-                    )
-                    x += spacingPx
-                }
-                var y = 0f
-                while (y < size.height) {
-                    drawLine(
-                        color = Color(0x0800F3FF), // Neon Cyan grid line at 3% opacity
-                        start = Offset(0f, y),
-                        end = Offset(size.width, y),
-                        strokeWidth = strokePx
-                    )
-                    y += spacingPx
-                }
-
-                // 2. Draw CRT subtle scanlines with lower density
                 val scanlineHeightPx = scanlineHeight.toPx()
-                var yScan = 0f
-                while (yScan < size.height) {
-                    drawLine(
-                        color = Color(0x0600F3FF), // Faint scanline
-                        start = Offset(0f, yScan),
-                        end = Offset(size.width, yScan),
-                        strokeWidth = strokePx
-                    )
-                    yScan += scanlineHeightPx
+                onDrawBehind {
+                    // 1. Draw highly optimized vertical/horizontal grid lines (30x faster than thousands of drawCircle calls)
+                    var x = 0f
+                    while (x < size.width) {
+                        drawLine(
+                            color = Color(0x0800F3FF), // Neon Cyan grid line at 3% opacity
+                            start = Offset(x, 0f),
+                            end = Offset(x, size.height),
+                            strokeWidth = strokePx
+                        )
+                        x += spacingPx
+                    }
+                    var y = 0f
+                    while (y < size.height) {
+                        drawLine(
+                            color = Color(0x0800F3FF), // Neon Cyan grid line at 3% opacity
+                            start = Offset(0f, y),
+                            end = Offset(size.width, y),
+                            strokeWidth = strokePx
+                        )
+                        y += spacingPx
+                    }
+
+                    // 2. Draw CRT subtle scanlines with lower density
+                    var yScan = 0f
+                    while (yScan < size.height) {
+                        drawLine(
+                            color = Color(0x0600F3FF), // Faint scanline
+                            start = Offset(0f, yScan),
+                            end = Offset(size.width, yScan),
+                            strokeWidth = strokePx
+                        )
+                        yScan += scanlineHeightPx
+                    }
                 }
             }
             .padding(6.dp)
@@ -185,7 +230,7 @@ fun TerminalScreen(
 
             // Always Visible Terminal Log Output (Footer console log)
             if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
-                TerminalLogConsole(uiState.logFeed, glowIntensity)
+                TerminalLogConsole(uiState.logFeed)
                 Spacer(modifier = Modifier.height(4.dp))
                 HighDensityBottomNavigation(
                     currentScreen = uiState.screen,
@@ -509,6 +554,7 @@ fun ExplorationView(
     onShopClick: () -> Unit,
     onSafeDisconnect: () -> Unit
 ) {
+    val view = LocalView.current
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -536,20 +582,64 @@ fun ExplorationView(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(2.dp),
+                            .padding(2.dp)
+                            .pointerInput(Unit) {
+                                var totalDragX = 0f
+                                var totalDragY = 0f
+                                detectDragGestures(
+                                    onDragStart = {
+                                        totalDragX = 0f
+                                        totalDragY = 0f
+                                    },
+                                    onDragEnd = {
+                                        val threshold = 40f
+                                        if (Math.abs(totalDragX) > Math.abs(totalDragY)) {
+                                            if (totalDragX > threshold) {
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                                viewModel.turnRight()
+                                            } else if (totalDragX < -threshold) {
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                                viewModel.turnLeft()
+                                            }
+                                        } else {
+                                            if (totalDragY > threshold) {
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                                viewModel.moveBackward()
+                                            } else if (totalDragY < -threshold) {
+                                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                                viewModel.moveForward()
+                                            }
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        totalDragX = 0f
+                                        totalDragY = 0f
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        totalDragX += dragAmount.x
+                                        totalDragY += dragAmount.y
+                                    }
+                                )
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        // Renders 3D ascii output (optimized compact retro size)
-                        Text(
-                            text = uiState.perspectiveText,
-                            color = CyberCyan,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
-                            lineHeight = 9.sp,
-                            letterSpacing = (-0.5).sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.testTag("first_person_viewport")
-                        )
+                        Crossfade(
+                            targetState = uiState.perspectiveText,
+                            animationSpec = tween(120),
+                            label = "perspective_crossfade"
+                        ) { text ->
+                            Text(
+                                text = text,
+                                color = CyberCyan,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                lineHeight = 9.sp,
+                                letterSpacing = (-0.5).sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("first_person_viewport")
+                            )
+                        }
                     }
                 }
 
@@ -571,61 +661,73 @@ fun ExplorationView(
                     ) {
                         // UP arrow
                         Button(
-                            onClick = { viewModel.moveForward() },
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                viewModel.moveForward()
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                             border = BorderStroke(1.dp, CyberBorderLight),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(0.dp),
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(48.dp)
                                 .testTag("btn_move_forward")
                         ) {
-                            Icon(Icons.Default.KeyboardArrowUp, "Forward", tint = CyberCyan, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.KeyboardArrowUp, "Forward", tint = CyberCyan, modifier = Modifier.size(24.dp))
                         }
 
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(4.dp))
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Button(
-                                onClick = { viewModel.turnLeft() },
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    viewModel.turnLeft()
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                                 border = BorderStroke(1.dp, CyberBorderLight),
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(48.dp)
                                     .testTag("btn_turn_left")
                             ) {
-                                Icon(Icons.Default.KeyboardArrowLeft, "Turn Left", tint = CyberCyan, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.KeyboardArrowLeft, "Turn Left", tint = CyberCyan, modifier = Modifier.size(24.dp))
                             }
 
                             Button(
-                                onClick = { viewModel.moveBackward() },
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    viewModel.moveBackward()
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                                 border = BorderStroke(1.dp, CyberBorderLight),
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(48.dp)
                                     .testTag("btn_move_back")
                             ) {
-                                Icon(Icons.Default.KeyboardArrowDown, "Backward", tint = CyberCyan, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.KeyboardArrowDown, "Backward", tint = CyberCyan, modifier = Modifier.size(24.dp))
                             }
 
                             Button(
-                                onClick = { viewModel.turnRight() },
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                    viewModel.turnRight()
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
                                 border = BorderStroke(1.dp, CyberBorderLight),
                                 shape = RoundedCornerShape(8.dp),
                                 contentPadding = PaddingValues(0.dp),
                                 modifier = Modifier
-                                    .size(36.dp)
+                                    .size(48.dp)
                                     .testTag("btn_turn_right")
                             ) {
-                                Icon(Icons.Default.KeyboardArrowRight, "Turn Right", tint = CyberCyan, modifier = Modifier.size(20.dp))
+                                Icon(Icons.Default.KeyboardArrowRight, "Turn Right", tint = CyberCyan, modifier = Modifier.size(24.dp))
                             }
                         }
                     }
@@ -747,7 +849,10 @@ fun ExplorationView(
 
                         // Click to interact/hack
                         Button(
-                            onClick = { viewModel.interact() },
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                viewModel.interact()
+                            },
                             colors = ButtonDefaults.buttonColors(containerColor = CyberPink),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
@@ -1270,6 +1375,7 @@ fun HackingMinigableView(
     onCancel: () -> Unit
 ) {
     val puzzle = uiState.activePuzzle ?: return
+    val view = LocalView.current
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -1340,7 +1446,10 @@ fun HackingMinigableView(
                                             color = if (isRowHighlighted || isColHighlighted) CyberAmber else Color.Transparent,
                                             shape = RoundedCornerShape(8.dp)
                                         )
-                                        .clickable(enabled = !isSelected) { onCellSelected(r, c) }
+                                        .clickable(enabled = !isSelected) {
+                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                            onCellSelected(r, c)
+                                        }
                                         .testTag("hex_cell_${r}_${c}"),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -1995,7 +2104,25 @@ fun ProgressBarRetro(
 // Sub-Composable: Terminal Scrolling Logs
 // ==========================================
 @Composable
-fun TerminalLogConsole(logs: List<LogMessage>, glow: Float) {
+fun TerminalLogConsole(logs: List<LogMessage>) {
+    val infiniteTransition = rememberInfiniteTransition(label = "crt_pulse")
+    val glowIntensity by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_float"
+    )
+
+    val listState = rememberLazyListState()
+    LaunchedEffect(logs.size) {
+        if (logs.isNotEmpty()) {
+            listState.scrollToItem(logs.size - 1)
+        }
+    }
+
     Card(
         colors = CardDefaults.cardColors(containerColor = CyberDark),
         border = BorderStroke(1.dp, CyberBorder),
@@ -2007,14 +2134,17 @@ fun TerminalLogConsole(logs: List<LogMessage>, glow: Float) {
         Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
             Text(
                 text = "SYSTEM LOG MONITOR // LIVE DIAGNOSTICS",
-                color = CyberCyan.copy(alpha = glow),
+                color = CyberCyan,
                 fontFamily = FontFamily.Monospace,
                 fontSize = 8.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 2.dp)
+                modifier = Modifier
+                    .padding(bottom = 2.dp)
+                    .graphicsLayer { alpha = glowIntensity }
             )
 
             LazyColumn(
+                state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .testTag("terminal_live_logs"),
@@ -2056,6 +2186,7 @@ fun HighDensityBottomNavigation(
     viewModel: GameViewModel,
     modifier: Modifier = Modifier
 ) {
+    val view = LocalView.current
     Card(
         colors = CardDefaults.cardColors(containerColor = CyberCardBg),
         border = BorderStroke(1.dp, CyberBorder),
@@ -2080,6 +2211,7 @@ fun HighDensityBottomNavigation(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             if (currentScreen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
                                 viewModel.exitShop()
                                 viewModel.exitLeaderboard()
@@ -2111,6 +2243,7 @@ fun HighDensityBottomNavigation(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             if (currentScreen == GameViewModel.ActiveScreen.EXPLORATION) {
                                 viewModel.interact()
                             }
@@ -2140,6 +2273,7 @@ fun HighDensityBottomNavigation(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             if (currentScreen != GameViewModel.ActiveScreen.CHARACTER_CREATION &&
                                 currentScreen != GameViewModel.ActiveScreen.GAME_OVER) {
                                 viewModel.enterShop()
@@ -2170,6 +2304,7 @@ fun HighDensityBottomNavigation(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
                         .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             if (currentScreen != GameViewModel.ActiveScreen.CHARACTER_CREATION &&
                                 currentScreen != GameViewModel.ActiveScreen.GAME_OVER) {
                                 viewModel.viewLeaderboard()
