@@ -122,18 +122,22 @@ object GameEngine {
     ): String {
         val canvas = CharCanvas(11, 31)
 
-        // Base frame / outline
-        canvas.drawLine(0, 0, 0, 30, '-')
-        canvas.drawLine(10, 0, 10, 30, '-')
-        canvas.drawLine(0, 0, 10, 0, '|')
-        canvas.drawLine(0, 30, 10, 30, '|')
+        // Define rendering coordinates for depths 0, 1, 2, 3
+        val tl_c = intArrayOf(0, 6, 11, 13)
+        val tl_r = intArrayOf(0, 2, 3, 4)
+        val bl_c = intArrayOf(0, 6, 11, 13)
+        val bl_r = intArrayOf(10, 8, 7, 6)
+
+        val tr_c = intArrayOf(30, 24, 19, 17)
+        val tr_r = intArrayOf(0, 2, 3, 4)
+        val br_c = intArrayOf(30, 24, 19, 17)
+        val br_r = intArrayOf(10, 8, 7, 6)
 
         // Check view distance up to 3 cells
         val width = grid[0].size
         val height = grid.size
 
         // Let's gather the layout of cells ahead of us
-        // cellAt[d] is the cell at depth d (d=0 is current, d=1 is 1 step ahead, etc.)
         val cellTypes = Array(4) { CellType.WALL }
         val cellCoords = Array(4) { Pair(-1, -1) }
 
@@ -175,17 +179,6 @@ object GameEngine {
             }
         }
 
-        // Define rendering coordinates for depths 0, 1, 2, 3
-        val tl_c = intArrayOf(0, 6, 11, 13)
-        val tl_r = intArrayOf(0, 2, 3, 4)
-        val bl_c = intArrayOf(0, 6, 11, 13)
-        val bl_r = intArrayOf(10, 8, 7, 6)
-
-        val tr_c = intArrayOf(30, 24, 19, 17)
-        val tr_r = intArrayOf(0, 2, 3, 4)
-        val br_c = intArrayOf(30, 24, 19, 17)
-        val br_r = intArrayOf(10, 8, 7, 6)
-
         // Find the first blocking wall straight ahead
         var maxVisibleDepth = 3
         for (d in 1..3) {
@@ -195,136 +188,272 @@ object GameEngine {
             }
         }
 
-        // Draw side walls from back to front
+        // --- Helper: High-Density Box Drawing ---
+        fun drawBox(rStart: Int, cStart: Int, rEnd: Int, cEnd: Int) {
+            for (col in (cStart + 1) until cEnd) {
+                canvas.set(rStart, col, '━')
+                canvas.set(rEnd, col, '━')
+            }
+            for (row in (rStart + 1) until rEnd) {
+                canvas.set(row, cStart, '┃')
+                canvas.set(row, cEnd, '┃')
+            }
+            canvas.set(rStart, cStart, '┏')
+            canvas.set(rStart, cEnd, '┓')
+            canvas.set(rEnd, cStart, '┗')
+            canvas.set(rEnd, cEnd, '┛')
+        }
+
+        // --- Helper: Procedural Wall Filling with Linear Interpolation ---
+        fun fillLeftWall(d: Int, char: Char) {
+            val startCol = tl_c[d]
+            val endCol = tl_c[d+1]
+            val rTopStart = tl_r[d]
+            val rTopEnd = tl_r[d+1]
+            val rBotStart = bl_r[d]
+            val rBotEnd = bl_r[d+1]
+
+            for (col in startCol..endCol) {
+                val colWidth = endCol - startCol
+                val ratio = if (colWidth > 0) (col - startCol).toFloat() / colWidth else 0f
+                val rTop = Math.round(rTopStart + ratio * (rTopEnd - rTopStart))
+                val rBot = Math.round(rBotStart + ratio * (rBotEnd - rBotStart))
+                for (row in rTop..rBot) {
+                    canvas.set(row, col, char)
+                }
+            }
+        }
+
+        fun fillRightWall(d: Int, char: Char) {
+            val startCol = tr_c[d+1]
+            val endCol = tr_c[d]
+            val rTopStart = tr_r[d+1]
+            val rTopEnd = tr_r[d]
+            val rBotStart = br_r[d+1]
+            val rBotEnd = br_r[d]
+
+            for (col in startCol..endCol) {
+                val colWidth = endCol - startCol
+                val ratio = if (colWidth > 0) (col - startCol).toFloat() / colWidth else 0f
+                val rTop = Math.round(rTopStart + ratio * (rTopEnd - rTopStart))
+                val rBot = Math.round(rBotStart + ratio * (rBotEnd - rBotStart))
+                for (row in rTop..rBot) {
+                    canvas.set(row, col, char)
+                }
+            }
+        }
+
+        // --- 1. Procedural Floor and Ceiling Dot Grid Generation ---
+        // Pre-calculate top and bottom row limits for each column to texture background empty space
+        val rTopLimits = IntArray(31) { 5 }
+        val rBotLimits = IntArray(31) { 5 }
+
+        for (col in 0..30) {
+            var found = false
+            for (d in 0..2) {
+                if (col >= tl_c[d] && col <= tl_c[d+1]) {
+                    val ratio = (col - tl_c[d]).toFloat() / (tl_c[d+1] - tl_c[d])
+                    rTopLimits[col] = Math.round(tl_r[d] + ratio * (tl_r[d+1] - tl_r[d]))
+                    rBotLimits[col] = Math.round(bl_r[d] + ratio * (bl_r[d+1] - bl_r[d]))
+                    found = true
+                    break
+                }
+            }
+            if (!found) {
+                for (d in 0..2) {
+                    if (col >= tr_c[d+1] && col <= tr_c[d]) {
+                        val ratio = (col - tr_c[d+1]).toFloat() / (tr_c[d] - tr_c[d+1])
+                        rTopLimits[col] = Math.round(tr_r[d+1] + ratio * (tr_r[d] - tr_r[d+1]))
+                        rBotLimits[col] = Math.round(br_r[d+1] + ratio * (br_r[d] - br_r[d+1]))
+                        found = true
+                        break
+                    }
+                }
+            }
+            if (!found) {
+                val d = maxVisibleDepth.coerceAtMost(3)
+                rTopLimits[col] = tl_r[d]
+                rBotLimits[col] = bl_r[d]
+            }
+        }
+
+        // Fill procedural dot grids
+        for (col in 1..29) {
+            val tLimit = rTopLimits[col]
+            val bLimit = rBotLimits[col]
+            
+            // Ceiling Dot Grid
+            for (row in 1 until tLimit) {
+                if ((col + row * 2) % 4 == 0) {
+                    canvas.set(row, col, '·')
+                }
+            }
+            
+            // Floor Dot Grid (converging perspective-like texture)
+            for (row in (bLimit + 1)..9) {
+                if ((col - row) % 4 == 0) {
+                    canvas.set(row, col, '·')
+                }
+            }
+        }
+
+        // --- 2. Draw Front-Facing Wall (at blocking depth) ---
+        if (maxVisibleDepth <= 3) {
+            val d = maxVisibleDepth
+            val rStart = tl_r[d]
+            val rEnd = bl_r[d]
+            val cStart = tl_c[d]
+            val cEnd = tr_c[d]
+            val frontShade = when (d) {
+                1 -> '█' // Closest: solid bulkhead
+                2 -> '▓' // Medium: dark block
+                3 -> '▒' // Far: medium block
+                else -> '░'
+            }
+            for (row in rStart..rEnd) {
+                for (col in cStart..cEnd) {
+                    canvas.set(row, col, frontShade)
+                }
+            }
+            // Draw neat high-density box boundary around it
+            drawBox(rStart, cStart, rEnd, cEnd)
+
+            // Centered Bulkhead details
+            if (d == 1) {
+                val label = "[ SYSTEM BLK ]"
+                val colStart = 15 - label.length / 2
+                for (i in label.indices) {
+                    canvas.set(5, colStart + i, label[i])
+                }
+            } else if (d == 2) {
+                val label = "LOCKED"
+                val colStart = 15 - label.length / 2
+                for (i in label.indices) {
+                    canvas.set(5, colStart + i, label[i])
+                }
+            }
+        } else {
+            // Draw very distant horizon at depth 3
+            drawBox(tl_r[3], tl_c[3], bl_r[3], br_c[3])
+            canvas.set(5, 15, '·') // Faint horizon vanishing point
+        }
+
+        // --- 3. Draw Side Walls from Back to Front ---
+        val leftRightShades = charArrayOf('▓', '▒', '░')
         for (d in (maxVisibleDepth - 1) downTo 0) {
             // Draw Left Wall at depth d
             if (leftWallAt[d]) {
-                // Draw side wall polygons
+                val shadeChar = leftRightShades[d.coerceIn(0, 2)]
+                fillLeftWall(d, shadeChar)
+
+                // Define perspective diagonals
                 canvas.drawLine(tl_r[d], tl_c[d], tl_r[d+1], tl_c[d+1], '\\')
                 canvas.drawLine(bl_r[d], bl_c[d], bl_r[d+1], bl_c[d+1], '/')
-                canvas.drawLine(tl_r[d+1], tl_c[d+1], bl_r[d+1], bl_c[d+1], '|')
             } else {
-                // Draw side opening ceiling and floor lines
-                canvas.drawLine(tl_r[d+1], tl_c[d], tl_r[d+1], tl_c[d+1], '_')
-                canvas.drawLine(bl_r[d+1], bl_c[d], bl_r[d+1], bl_c[d+1], '_')
-                // Draw corner pillar line
-                canvas.drawLine(tl_r[d+1], tl_c[d+1], bl_r[d+1], bl_c[d+1], '|')
+                // Open branch side opening ceiling & floor lines
+                for (col in tl_c[d]..tl_c[d+1]) {
+                    canvas.set(tl_r[d+1], col, '━')
+                    canvas.set(bl_r[d+1], col, '━')
+                }
+                // Vertical structural pillar
+                for (row in tl_r[d+1]..bl_r[d+1]) {
+                    canvas.set(row, tl_c[d+1], '┃')
+                }
             }
 
             // Draw Right Wall at depth d
             if (rightWallAt[d]) {
+                val shadeChar = leftRightShades[d.coerceIn(0, 2)]
+                fillRightWall(d, shadeChar)
+
                 canvas.drawLine(tr_r[d], tr_c[d], tr_r[d+1], tr_c[d+1], '/')
                 canvas.drawLine(br_r[d], br_c[d], br_r[d+1], br_c[d+1], '\\')
-                canvas.drawLine(tr_r[d+1], tr_c[d+1], br_r[d+1], br_c[d+1], '|')
             } else {
-                canvas.drawLine(tr_r[d+1], tr_c[d], tr_r[d+1], tr_c[d+1], '_')
-                canvas.drawLine(br_r[d+1], br_c[d], br_r[d+1], br_c[d+1], '_')
-                canvas.drawLine(tr_r[d+1], tr_c[d+1], br_r[d+1], br_c[d+1], '|')
+                // Open branch side opening ceiling & floor lines
+                for (col in tr_c[d+1]..tr_c[d]) {
+                    canvas.set(tr_r[d+1], col, '━')
+                    canvas.set(br_r[d+1], col, '━')
+                }
+                // Vertical structural pillar
+                for (row in tr_r[d+1]..br_r[d+1]) {
+                    canvas.set(row, tr_c[d+1], '┃')
+                }
             }
         }
 
-        // Draw front-facing wall at the blocking depth (if <= 3)
-        if (maxVisibleDepth <= 3) {
-            val d = maxVisibleDepth
-            // Draw solid flat wall in front
-            canvas.drawLine(tl_r[d], tl_c[d], tr_r[d], tr_c[d], '=')
-            canvas.drawLine(bl_r[d], bl_c[d], br_r[d], br_c[d], '=')
-            canvas.drawLine(tl_r[d], tl_c[d], bl_r[d], bl_c[d], '|')
-            canvas.drawLine(tr_r[d], tr_c[d], br_r[d], br_c[d], '|')
-
-            // Write "SECURE BLOCK" in the center if it is a solid wall straight ahead close-up
-            if (d == 1) {
-                canvas.set(5, 12, 'S')
-                canvas.set(5, 13, 'E')
-                canvas.set(5, 14, 'C')
-                canvas.set(5, 15, 'U')
-                canvas.set(5, 16, 'R')
-                canvas.set(5, 17, 'E')
-                canvas.set(5, 18, 'D')
-            }
-        } else {
-            // Draw very distant wall at depth 3
-            canvas.drawLine(tl_r[3], tl_c[3], tr_r[3], tr_c[3], '-')
-            canvas.drawLine(bl_r[3], bl_c[3], br_r[3], br_c[3], '-')
-            canvas.drawLine(tl_r[3], tl_c[3], bl_r[3], bl_c[3], '|')
-            canvas.drawLine(tr_r[3], tr_c[3], br_r[3], br_c[3], '|')
-        }
-
-        // Overlay central assets in front of us
-        // If there's a special node at Depth 1:
+        // --- 4. Overlay Central Special Assets ---
         val primaryNode = cellTypes[1]
         if (primaryNode == CellType.VIRUS_NODE) {
-            // Draw a neat ASCII Virus
-            // Line 4:    /vv\
-            // Line 5:   <O__O>
-            // Line 6:    \^^/
-            canvas.set(3, 13, '/')
-            canvas.set(3, 14, 'v')
-            canvas.set(3, 15, 'v')
-            canvas.set(3, 16, '\\')
-
-            canvas.set(4, 11, '<')
-            canvas.set(4, 12, 'O')
-            canvas.set(4, 13, '_')
-            canvas.set(4, 14, '_')
-            canvas.set(4, 15, 'O')
-            canvas.set(4, 16, '>')
-
-            canvas.set(5, 13, '\\')
-            canvas.set(5, 14, '^')
-            canvas.set(5, 15, '^')
-            canvas.set(5, 16, '/')
-
-            canvas.set(6, 12, '[')
-            canvas.set(6, 13, 'V')
-            canvas.set(6, 14, 'I')
-            canvas.set(6, 15, 'R')
-            canvas.set(6, 16, ']')
+            // High-density Virus icon using crisp Unicode elements
+            canvas.set(3, 13, '▲')
+            canvas.set(3, 17, '▲')
+            
+            canvas.set(4, 11, '◀')
+            canvas.set(4, 13, '█')
+            canvas.set(4, 14, '▄')
+            canvas.set(4, 15, '▄')
+            canvas.set(4, 16, '█')
+            canvas.set(4, 18, '▶')
+            
+            canvas.set(5, 12, '╱')
+            canvas.set(5, 13, '█')
+            canvas.set(5, 14, '▀')
+            canvas.set(5, 15, '█')
+            canvas.set(5, 16, '╲')
+            
+            val label = "[VIRUS]"
+            val startCol = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(6, startCol + i, label[i])
+            }
         } else if (primaryNode == CellType.DATA_STORE) {
-            // Draw a Terminal
-            // Line 4:   [===]
-            // Line 5:   |101|
-            // Line 6:    / \
-            canvas.set(3, 13, '[')
-            canvas.set(3, 14, '=')
-            canvas.set(3, 15, '=')
-            canvas.set(3, 16, ']')
-
-            canvas.set(4, 12, '[')
+            // High-density Data Store terminal icon
+            canvas.set(3, 11, '╔')
+            for (c in 12..18) canvas.set(3, c, '═')
+            canvas.set(3, 19, '╗')
+            
+            canvas.set(4, 11, '║')
             canvas.set(4, 13, 'D')
             canvas.set(4, 14, 'A')
             canvas.set(4, 15, 'T')
             canvas.set(4, 16, 'A')
-            canvas.set(4, 17, ']')
-
-            canvas.set(5, 13, '[')
-            canvas.set(5, 14, '#')
-            canvas.set(5, 15, '#')
-            canvas.set(5, 16, ']')
+            canvas.set(4, 19, '║')
+            
+            canvas.set(5, 11, '╚')
+            for (c in 12..18) canvas.set(5, c, '═')
+            canvas.set(5, 19, '╝')
+            
+            for (c in 10..20) canvas.set(6, c, '▒')
         } else if (primaryNode == CellType.ENCRYPTED_PORTAL) {
-            // Draw a swirling portal
-            // Line 4:   ((@))
-            // Line 5:  ((( )))
-            // Line 6:   ((@))
-            canvas.set(3, 13, '(')
-            canvas.set(3, 14, '(')
-            canvas.set(3, 15, '@')
-            canvas.set(3, 16, ')')
-            canvas.set(3, 17, ')')
-
-            canvas.set(4, 12, '(')
+            // High-density Encrypted Portal vortex icon
+            canvas.set(3, 12, '◢')
+            canvas.set(3, 13, '█')
+            canvas.set(3, 14, '█')
+            canvas.set(3, 15, '█')
+            canvas.set(3, 16, '█')
+            canvas.set(3, 17, '█')
+            canvas.set(3, 18, '◣')
+            
+            canvas.set(4, 11, '█')
             canvas.set(4, 13, 'P')
             canvas.set(4, 14, 'O')
             canvas.set(4, 15, 'R')
             canvas.set(4, 16, 'T')
-            canvas.set(4, 17, ')')
-
-            canvas.set(5, 13, '(')
-            canvas.set(5, 14, '(')
-            canvas.set(5, 15, '@')
-            canvas.set(5, 16, ')')
-            canvas.set(5, 17, ')')
+            canvas.set(4, 18, '█')
+            
+            canvas.set(5, 12, '◥')
+            canvas.set(5, 13, '█')
+            canvas.set(5, 14, '█')
+            canvas.set(5, 15, '█')
+            canvas.set(5, 16, '█')
+            canvas.set(5, 17, '█')
+            canvas.set(5, 18, '◤')
+            
+            for (c in 11..19) canvas.set(6, c, '▒')
         }
+
+        // --- 5. Draw Outer Border Frame ---
+        drawBox(0, 0, 10, 30)
 
         return canvas.render()
     }
