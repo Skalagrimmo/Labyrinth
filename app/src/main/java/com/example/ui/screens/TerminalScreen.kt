@@ -982,6 +982,24 @@ fun ExplorationView(
     }
 }
 
+private data class CyberParticle(
+    var xRatio: Float,
+    var yRatio: Float,
+    var zRatio: Float,
+    val speedX: Float,
+    val speedY: Float,
+    val speedZ: Float,
+    val size: Float,
+    val color: Color
+)
+
+private data class PerspectiveData(
+    val adjustedTl_r: FloatArray,
+    val adjustedTr_r: FloatArray,
+    val adjustedBl_r: FloatArray,
+    val adjustedBr_r: FloatArray
+)
+
 // Draw first-person 3D vector wireframe of the cyberspace maze
 @Composable
 fun FirstPersonPerspectiveCanvas(
@@ -1067,6 +1085,106 @@ fun FirstPersonPerspectiveCanvas(
         maxD
     }
 
+    val perspectiveData = remember(cellTypes) {
+        val tl_r = floatArrayOf(0f, 2f, 3f, 4f)
+        val bl_r = floatArrayOf(10f, 8f, 7f, 6f)
+        val tr_r = floatArrayOf(0f, 2f, 3f, 4f)
+        val br_r = floatArrayOf(10f, 8f, 7f, 6f)
+
+        val ceilingShifts = FloatArray(4) { 0f }
+        val floorShifts = FloatArray(4) { 0f }
+
+        for (d in 0..3) {
+            val type = cellTypes[d]
+            when (type) {
+                CellType.GRAND_HALL -> {
+                    ceilingShifts[d] = -1.6f
+                    floorShifts[d] = 0.4f
+                }
+                CellType.VENT_TUNNEL -> {
+                    ceilingShifts[d] = 1.3f
+                    floorShifts[d] = -0.3f
+                }
+                CellType.ELEVATED_BALCONY -> {
+                    ceilingShifts[d] = -0.6f
+                    floorShifts[d] = 1.6f
+                }
+                CellType.STAIRS_UP -> {
+                    ceilingShifts[d] = -0.6f * d
+                    floorShifts[d] = -0.8f * d
+                }
+                CellType.STAIRS_DOWN -> {
+                    ceilingShifts[d] = 0.4f * d
+                    floorShifts[d] = 1.0f * d
+                }
+                CellType.GRAVITY_SLOPE -> {
+                    ceilingShifts[d] = -0.5f * d
+                    floorShifts[d] = -0.5f * d
+                }
+                else -> {
+                    ceilingShifts[d] = 0f
+                    floorShifts[d] = 0f
+                }
+            }
+        }
+
+        PerspectiveData(
+            adjustedTl_r = FloatArray(4) { d -> (tl_r[d] + ceilingShifts[d]).coerceIn(-1.5f, 11.5f) },
+            adjustedTr_r = FloatArray(4) { d -> (tr_r[d] + ceilingShifts[d]).coerceIn(-1.5f, 11.5f) },
+            adjustedBl_r = FloatArray(4) { d -> (bl_r[d] + floorShifts[d]).coerceIn(-1.5f, 11.5f) },
+            adjustedBr_r = FloatArray(4) { d -> (br_r[d] + floorShifts[d]).coerceIn(-1.5f, 11.5f) }
+        )
+    }
+
+    // --- Infinite Transitions & Animation loops ---
+    val infiniteTransition = rememberInfiniteTransition(label = "CyberEngine")
+    val animProgress by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(3000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "ParticlesProgress"
+    )
+
+    val alertAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.45f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "AlertAlpha"
+    )
+
+    // --- Continuous frame clock for ultra-smooth monotonic particle drifting ---
+    val frameTime by produceState(initialValue = 0L) {
+        while (true) {
+            withFrameMillis {
+                value = it
+            }
+        }
+    }
+
+    // --- Remember Cyber particles for Duke 3D floating sparks/dust ---
+    val particles = remember {
+        val random = java.util.Random(1337)
+        List(20) {
+            val isBlue = random.nextBoolean()
+            CyberParticle(
+                xRatio = random.nextFloat(),
+                yRatio = random.nextFloat(),
+                zRatio = 0.1f + random.nextFloat() * 0.9f,
+                speedX = (random.nextFloat() - 0.5f) * 0.006f,
+                speedY = -0.003f - random.nextFloat() * 0.008f, // drifting upwards
+                speedZ = -0.004f - random.nextFloat() * 0.006f, // fly towards player
+                size = 1.5f + random.nextFloat() * 3.5f,
+                color = if (isBlue) Color(0xFF00E5FF) else Color(0xFFC084FC)
+            )
+        }
+    }
+
     val primaryColor = if (isCombat) Color(0xFFFB7185) else Color(0xFF00E5FF)
 
     Canvas(
@@ -1077,7 +1195,7 @@ fun FirstPersonPerspectiveCanvas(
         val w = size.width
         val h = size.height
 
-        // Depth points mapping from standard CharCanvas grid (30 columns by 10 rows)
+        // Define rendering coordinates for depths 0, 1, 2, 3
         val tl_c = floatArrayOf(0f, 6f, 11f, 13f)
         val tl_r = floatArrayOf(0f, 2f, 3f, 4f)
         val bl_c = floatArrayOf(0f, 6f, 11f, 13f)
@@ -1088,22 +1206,42 @@ fun FirstPersonPerspectiveCanvas(
         val br_c = floatArrayOf(30f, 24f, 19f, 17f)
         val br_r = floatArrayOf(10f, 8f, 7f, 6f)
 
+        // --- Use pre-calculated 2.5D verticality shifts (highly optimized to avoid allocations on draw) ---
+        val adjustedTl_r = perspectiveData.adjustedTl_r
+        val adjustedTr_r = perspectiveData.adjustedTr_r
+        val adjustedBl_r = perspectiveData.adjustedBl_r
+        val adjustedBr_r = perspectiveData.adjustedBr_r
+
         fun getPixel(col: Float, row: Float): Offset {
             return Offset((col / 30f) * w, (row / 10f) * h)
         }
+
+        // Screen Shake during combat or heavy low integrity alerts
+        val shakeOffset = if (isCombat || uiState.integrity < 30) {
+            val scaleVal = if (uiState.integrity < 30) 4f else 3f
+            val shakeX = ((animProgress * 73f) % scaleVal) - (scaleVal / 2f)
+            val shakeY = ((animProgress * 113f) % scaleVal) - (scaleVal / 2f)
+            Offset(shakeX, shakeY)
+        } else {
+            Offset.Zero
+        }
+
+        // Apply screen shake translation
+        drawContext.canvas.save()
+        drawContext.canvas.translate(shakeOffset.x, shakeOffset.y)
 
         // --- 1. Draw Grid Ceilings & Floors (Cyber-Wire Perspective lines) ---
         for (d in 0..3) {
             drawLine(
                 color = primaryColor.copy(alpha = 0.15f),
-                start = getPixel(tl_c[d], tl_r[d]),
-                end = getPixel(tr_c[d], tr_r[d]),
+                start = getPixel(tl_c[d], adjustedTl_r[d]),
+                end = getPixel(tr_c[d], adjustedTr_r[d]),
                 strokeWidth = 2f
             )
             drawLine(
                 color = primaryColor.copy(alpha = 0.15f),
-                start = getPixel(bl_c[d], bl_r[d]),
-                end = getPixel(br_c[d], br_r[d]),
+                start = getPixel(bl_c[d], adjustedBl_r[d]),
+                end = getPixel(br_c[d], adjustedBr_r[d]),
                 strokeWidth = 2f
             )
         }
@@ -1111,31 +1249,31 @@ fun FirstPersonPerspectiveCanvas(
         for (d in 0..2) {
             drawLine(
                 color = primaryColor.copy(alpha = 0.15f),
-                start = getPixel(tl_c[d], tl_r[d]),
-                end = getPixel(tl_c[d+1], tl_r[d+1]),
+                start = getPixel(tl_c[d], adjustedTl_r[d]),
+                end = getPixel(tl_c[d+1], adjustedTl_r[d+1]),
                 strokeWidth = 2f
             )
             drawLine(
                 color = primaryColor.copy(alpha = 0.15f),
-                start = getPixel(tr_c[d], tr_r[d]),
-                end = getPixel(tr_c[d+1], tr_r[d+1]),
+                start = getPixel(tr_c[d], adjustedTr_r[d]),
+                end = getPixel(tr_c[d+1], adjustedTr_r[d+1]),
                 strokeWidth = 2f
             )
             drawLine(
                 color = primaryColor.copy(alpha = 0.15f),
-                start = getPixel(bl_c[d], bl_r[d]),
-                end = getPixel(bl_c[d+1], bl_r[d+1]),
+                start = getPixel(bl_c[d], adjustedBl_r[d]),
+                end = getPixel(bl_c[d+1], adjustedBl_r[d+1]),
                 strokeWidth = 2f
             )
             drawLine(
                 color = primaryColor.copy(alpha = 0.15f),
-                start = getPixel(br_c[d], br_r[d]),
-                end = getPixel(br_c[d+1], br_r[d+1]),
+                start = getPixel(br_c[d], adjustedBr_r[d]),
+                end = getPixel(br_c[d+1], adjustedBr_r[d+1]),
                 strokeWidth = 2f
             )
         }
 
-        // --- 2. Side Walls (Far to Near) ---
+        // --- 2. Side Walls with Retro Midline Depth Stripes (Far to Near) ---
         for (d in (maxVisibleDepth - 1) downTo 0) {
             val alpha = when (d) {
                 0 -> 0.4f
@@ -1147,10 +1285,10 @@ fun FirstPersonPerspectiveCanvas(
             // --- Left wall side segment ---
             if (leftWallAt[d]) {
                 val path = Path().apply {
-                    val p1 = getPixel(tl_c[d], tl_r[d])
-                    val p2 = getPixel(tl_c[d+1], tl_r[d+1])
-                    val p3 = getPixel(bl_c[d+1], bl_r[d+1])
-                    val p4 = getPixel(bl_c[d], bl_r[d])
+                    val p1 = getPixel(tl_c[d], adjustedTl_r[d])
+                    val p2 = getPixel(tl_c[d+1], adjustedTl_r[d+1])
+                    val p3 = getPixel(bl_c[d+1], adjustedBl_r[d+1])
+                    val p4 = getPixel(bl_c[d], adjustedBl_r[d])
                     moveTo(p1.x, p1.y)
                     lineTo(p2.x, p2.y)
                     lineTo(p3.x, p3.y)
@@ -1160,23 +1298,34 @@ fun FirstPersonPerspectiveCanvas(
                 drawPath(path = path, color = primaryColor.copy(alpha = alpha))
 
                 // Frame outlines
-                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d], tl_r[d]), end = getPixel(tl_c[d+1], tl_r[d+1]), strokeWidth = 3f)
-                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(bl_c[d], bl_r[d]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 3f)
-                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d+1], tl_r[d+1]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d], adjustedTl_r[d]), end = getPixel(tl_c[d+1], adjustedTl_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(bl_c[d], adjustedBl_r[d]), end = getPixel(bl_c[d+1], adjustedBl_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d+1], adjustedTl_r[d+1]), end = getPixel(bl_c[d+1], adjustedBl_r[d+1]), strokeWidth = 3f)
+
+                // High-fidelity vertical and horizontal wiring textures on side walls (2.5D details)
+                val midLeft1 = Offset(
+                    (getPixel(tl_c[d], adjustedTl_r[d]).x + getPixel(bl_c[d], adjustedBl_r[d]).x) / 2f,
+                    (getPixel(tl_c[d], adjustedTl_r[d]).y + getPixel(bl_c[d], adjustedBl_r[d]).y) / 2f
+                )
+                val midLeft2 = Offset(
+                    (getPixel(tl_c[d+1], adjustedTl_r[d+1]).x + getPixel(bl_c[d+1], adjustedBl_r[d+1]).x) / 2f,
+                    (getPixel(tl_c[d+1], adjustedTl_r[d+1]).y + getPixel(bl_c[d+1], adjustedBl_r[d+1]).y) / 2f
+                )
+                drawLine(color = primaryColor.copy(alpha = alpha * 1.6f), start = midLeft1, end = midLeft2, strokeWidth = 1.5f)
             } else {
                 // Open corridor left side boundary
-                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tl_c[d], tl_r[d+1]), end = getPixel(tl_c[d+1], tl_r[d+1]), strokeWidth = 2f)
-                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(bl_c[d], bl_r[d+1]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 2f)
-                drawLine(color = primaryColor.copy(alpha = 0.3f), start = getPixel(tl_c[d+1], tl_r[d+1]), end = getPixel(bl_c[d+1], bl_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tl_c[d], adjustedTl_r[d+1]), end = getPixel(tl_c[d+1], adjustedTl_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(bl_c[d], adjustedBl_r[d+1]), end = getPixel(bl_c[d+1], adjustedBl_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.3f), start = getPixel(tl_c[d+1], adjustedTl_r[d+1]), end = getPixel(bl_c[d+1], adjustedBl_r[d+1]), strokeWidth = 3f)
             }
 
             // --- Right wall side segment ---
             if (rightWallAt[d]) {
                 val path = Path().apply {
-                    val p1 = getPixel(tr_c[d], tr_r[d])
-                    val p2 = getPixel(tr_c[d+1], tr_r[d+1])
-                    val p3 = getPixel(br_c[d+1], br_r[d+1])
-                    val p4 = getPixel(br_c[d], br_r[d])
+                    val p1 = getPixel(tr_c[d], adjustedTr_r[d])
+                    val p2 = getPixel(tr_c[d+1], adjustedTr_r[d+1])
+                    val p3 = getPixel(br_c[d+1], adjustedBr_r[d+1])
+                    val p4 = getPixel(br_c[d], adjustedBr_r[d])
                     moveTo(p1.x, p1.y)
                     lineTo(p2.x, p2.y)
                     lineTo(p3.x, p3.y)
@@ -1186,22 +1335,34 @@ fun FirstPersonPerspectiveCanvas(
                 drawPath(path = path, color = primaryColor.copy(alpha = alpha))
 
                 // Frame outlines
-                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d], tr_r[d]), end = getPixel(tr_c[d+1], tr_r[d+1]), strokeWidth = 3f)
-                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(br_c[d], br_r[d]), end = getPixel(br_c[d+1], br_r[d+1]), strokeWidth = 3f)
-                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d+1], tr_r[d+1]), end = getPixel(br_c[d+1], br_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d], adjustedTr_r[d]), end = getPixel(tr_c[d+1], adjustedTr_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(br_c[d], adjustedBr_r[d]), end = getPixel(br_c[d+1], adjustedBr_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d+1], adjustedTr_r[d+1]), end = getPixel(br_c[d+1], adjustedBr_r[d+1]), strokeWidth = 3f)
+
+                // High-fidelity midline depth stripe on right side
+                val midRight1 = Offset(
+                    (getPixel(tr_c[d], adjustedTr_r[d]).x + getPixel(br_c[d], adjustedBr_r[d]).x) / 2f,
+                    (getPixel(tr_c[d], adjustedTr_r[d]).y + getPixel(br_c[d], adjustedBr_r[d]).y) / 2f
+                )
+                val midRight2 = Offset(
+                    (getPixel(tr_c[d+1], adjustedTr_r[d+1]).x + getPixel(br_c[d+1], adjustedBr_r[d+1]).x) / 2f,
+                    (getPixel(tr_c[d+1], adjustedTr_r[d+1]).y + getPixel(br_c[d+1], adjustedBr_r[d+1]).y) / 2f
+                )
+                drawLine(color = primaryColor.copy(alpha = alpha * 1.6f), start = midRight1, end = midRight2, strokeWidth = 1.5f)
             } else {
                 // Open corridor right side boundary
-                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tr_c[d+1], tr_r[d+1]), end = getPixel(tr_c[d], tr_r[d+1]), strokeWidth = 2f)
-                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(br_c[d+1], br_r[d+1]), end = getPixel(br_c[d], br_r[d+1]), strokeWidth = 2f)
-                drawLine(color = primaryColor.copy(alpha = 0.3f), start = getPixel(tr_c[d+1], tr_r[d+1]), end = getPixel(br_c[d+1], br_r[d+1]), strokeWidth = 3f)
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tr_c[d+1], adjustedTr_r[d+1]), end = getPixel(tr_c[d], adjustedTr_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(br_c[d+1], adjustedBr_r[d+1]), end = getPixel(br_c[d], adjustedBr_r[d+1]), strokeWidth = 2f)
+                drawLine(color = primaryColor.copy(alpha = 0.3f), start = getPixel(tr_c[d+1], adjustedTr_r[d+1]), end = getPixel(br_c[d+1], adjustedBr_r[d+1]), strokeWidth = 3f)
             }
         }
 
         // --- 3. Front Wall Bulkhead (if blocked) ---
-        if (maxVisibleDepth <= 3) {
-            val d = maxVisibleDepth
-            val pTL = getPixel(tl_c[d], tl_r[d])
-            val pBR = getPixel(tr_c[d], br_r[d])
+        val d = maxVisibleDepth
+        val pTL = getPixel(tl_c[d.coerceAtMost(3)], adjustedTl_r[d.coerceAtMost(3)])
+        val pBR = getPixel(tr_c[d.coerceAtMost(3)], adjustedBr_r[d.coerceAtMost(3)])
+
+        if (d <= 3) {
             val wallAlpha = when (d) {
                 1 -> 0.75f
                 2 -> 0.5f
@@ -1222,8 +1383,6 @@ fun FirstPersonPerspectiveCanvas(
             )
         } else {
             // Far vanishing point boundary
-            val pTL = getPixel(tl_c[3], tl_r[3])
-            val pBR = getPixel(tr_c[3], br_r[3])
             drawRect(
                 color = primaryColor.copy(alpha = 0.25f),
                 topLeft = pTL,
@@ -1320,9 +1479,105 @@ fun FirstPersonPerspectiveCanvas(
             drawCircle(color = Color(0xFFC084FC), radius = sizeRadius, center = center, style = Stroke(width = 6f))
             drawCircle(color = Color(0xFFC084FC).copy(alpha = 0.6f), radius = sizeRadius * 0.65f, center = center, style = Stroke(width = 4f))
             drawCircle(color = Color(0xFFC084FC), radius = sizeRadius * 0.3f, center = center)
+        } else if (primaryNode == CellType.SECRET_CACHE) {
+            // Floating 2.5D neon hologram box
+            val center = getPixel(15f, 5f)
+            val sizeRadius = w * 0.09f
+            drawCircle(
+                color = Color(0xFF38BDF8).copy(alpha = 0.25f),
+                radius = sizeRadius * 1.5f,
+                center = center
+            )
+            drawRoundRect(
+                color = Color(0xFF38BDF8),
+                topLeft = Offset(center.x - sizeRadius, center.y - sizeRadius),
+                size = Size(sizeRadius * 2f, sizeRadius * 2f),
+                cornerRadius = CornerRadius(8f, 8f),
+                style = Stroke(width = 3f)
+            )
+            drawCircle(
+                color = Color(0xFF38BDF8),
+                radius = sizeRadius * 0.3f,
+                center = center
+            )
+        } else if (primaryNode == CellType.STAIRS_UP || primaryNode == CellType.STAIRS_DOWN) {
+            // Awesome 2.5D stair steps wireframe mesh overlaid in viewport center
+            val numSteps = 5
+            for (i in 0..numSteps) {
+                val ratio = i.toFloat() / numSteps
+                val stepY = pTL.y + (pBR.y - pTL.y) * ratio
+                val stepL = pTL.x + (pBR.x - pTL.x) * 0.18f * ratio
+                val stepR = pBR.x - (pBR.x - pTL.x) * 0.18f * ratio
+                drawLine(
+                    color = Color(0xFF10B981).copy(alpha = 0.75f),
+                    start = Offset(stepL, stepY),
+                    end = Offset(stepR, stepY),
+                    strokeWidth = 3.5f
+                )
+            }
+        } else if (primaryNode == CellType.GRAVITY_SLOPE) {
+            // Slanted yellow chevrons moving on the gravity slope ramp
+            val numChevrons = 4
+            for (i in 0 until numChevrons) {
+                val flowOffset = (animProgress * 1.5f) % 1.0f
+                val ratio = ((i.toFloat() / numChevrons) + flowOffset) % 1.0f
+                val yCoord = pTL.y + (pBR.y - pTL.y) * ratio
+                val spread = (pBR.x - pTL.x) * 0.35f * ratio
+                val midX = pTL.x + (pBR.x - pTL.x) * 0.5f
+
+                // Chevron pointing upward: '^'
+                drawLine(
+                    color = Color(0xFFEAB308).copy(alpha = 0.7f * (1f - ratio)),
+                    start = Offset(midX - spread, yCoord + 15f),
+                    end = Offset(midX, yCoord),
+                    strokeWidth = 3f
+                )
+                drawLine(
+                    color = Color(0xFFEAB308).copy(alpha = 0.7f * (1f - ratio)),
+                    start = Offset(midX, yCoord),
+                    end = Offset(midX + spread, yCoord + 15f),
+                    strokeWidth = 3f
+                )
+            }
         }
 
-        // HUD tactical brackets
+        // --- 5. Render Floating 3D Cyber Particle sparks (Duke Nukem 3D dust style!) ---
+        val timeSec = frameTime / 1000f
+        particles.forEach { p ->
+            var curX = p.xRatio + p.speedX * timeSec * 30f
+            var curY = p.yRatio + p.speedY * timeSec * 30f
+            var curZ = p.zRatio + p.speedZ * timeSec * 30f
+
+            // wrap particle bounds safely
+            while (curX < 0f) curX += 1f
+            while (curX > 1f) curX -= 1f
+            while (curY < 0f) curY += 1f
+            while (curY > 1f) curY -= 1f
+            while (curZ < 0.1f) curZ += 0.9f
+            while (curZ > 1f) curZ -= 0.9f
+
+            // Project 3D coordinate to screen with perspective scaling
+            val centerOffsetX = (curX - 0.5f) * w / curZ
+            val centerOffsetY = (curY - 0.5f) * h / curZ
+            val pxX = (w / 2f) + centerOffsetX
+            val pxY = (h / 2f) + centerOffsetY
+
+            if (pxX in 0f..w && pxY in 0f..h) {
+                val baseColor = if (isCombat) Color(0xFFF43F5E) else p.color
+                val drawColor = baseColor.copy(alpha = (1f - curZ).coerceIn(0f, 1f))
+                val drawSize = (p.size / curZ).coerceIn(1f, 12f)
+                drawCircle(
+                    color = drawColor,
+                    radius = drawSize,
+                    center = Offset(pxX, pxY)
+                )
+            }
+        }
+
+        // Restore shake transform translation
+        drawContext.canvas.restore()
+
+        // --- 6. Tactical HUD Crosshairs & Brackets ---
         drawLine(
             color = primaryColor.copy(alpha = 0.35f),
             start = Offset(w * 0.15f, h * 0.5f),
@@ -1340,6 +1595,42 @@ fun FirstPersonPerspectiveCanvas(
             radius = 3f,
             center = Offset(w * 0.5f, h * 0.5f)
         )
+
+        // --- 7. Scanline CRT CRT static filter overlay ---
+        val scanlineCount = 18
+        for (i in 0 until scanlineCount) {
+            val lineY = (h / scanlineCount) * i + (animProgress * (h / scanlineCount))
+            val finalY = lineY % h
+            drawLine(
+                color = primaryColor.copy(alpha = 0.05f),
+                start = Offset(0f, finalY),
+                end = Offset(w, finalY),
+                strokeWidth = 2.5f
+            )
+        }
+
+        // --- 8. Screen Alert Vignette Overlay ---
+        if (isCombat || uiState.integrity < 40) {
+            val alertColor = if (uiState.integrity < 40) Color(0xFFEF4444) else Color(0xFFF43F5E)
+            // Pulse outer vignette border
+            drawRect(
+                color = alertColor.copy(alpha = alertAlpha * 0.8f),
+                topLeft = Offset(0f, 0f),
+                size = size,
+                style = Stroke(width = 10f)
+            )
+
+            val gradient = Brush.radialGradient(
+                colors = listOf(Color.Transparent, alertColor.copy(alpha = alertAlpha * 0.35f)),
+                center = Offset(w/2f, h/2f),
+                radius = w * 0.72f
+            )
+            drawRect(
+                brush = gradient,
+                topLeft = Offset(0f, 0f),
+                size = size
+            )
+        }
     }
 }
 
@@ -1355,6 +1646,26 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
 
     val rowCount = maze.size
     val colCount = maze[0].size
+
+    val infiniteTransition = rememberInfiniteTransition(label = "RadarPulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "PulseScale"
+    )
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 0.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "PulseAlpha"
+    )
 
     Box(
         modifier = Modifier
@@ -1403,15 +1714,22 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
                     val isPlayer = (x == px && y == py)
 
                     if (isPlayer) {
-                        // Draw glowing radar circle under player
+                        val playerCenter = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+
+                        // Draw animated pulsing radar wave
                         drawCircle(
-                            color = Color(0xFF00E5FF).copy(alpha = 0.25f),
+                            color = Color(0xFF00E5FF).copy(alpha = pulseAlpha),
+                            radius = cellSize * pulseScale * 1.5f,
+                            center = playerCenter
+                        )
+                        // Draw core glowing radar circle under player
+                        drawCircle(
+                            color = Color(0xFF00E5FF).copy(alpha = 0.4f),
                             radius = cellSize * 0.7f,
-                            center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                            center = playerCenter
                         )
                         
                         // Draw player pointer
-                        val playerCenter = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
                         val playerSize = cellSize * 0.7f
                         val dirAngle = when (dir) {
                             Direction.NORTH -> 0f
@@ -1535,6 +1853,159 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
                                     start = Offset(center.x, center.y - cellSize * 0.15f),
                                     end = Offset(center.x, center.y + cellSize * 0.15f),
                                     strokeWidth = 3f
+                                )
+                            }
+                            CellType.SECRET_CACHE -> {
+                                // Classified Crypt-Cache: Pulsing neon sky-blue square with centered core
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                val rad = cellSize * 0.35f
+                                drawCircle(
+                                    color = Color(0xFF38BDF8).copy(alpha = 0.25f),
+                                    radius = cellSize * 0.45f,
+                                    center = center
+                                )
+                                drawRect(
+                                    color = Color(0xFF38BDF8),
+                                    topLeft = Offset(center.x - rad * 0.7f, center.y - rad * 0.7f),
+                                    size = Size(rad * 1.4f, rad * 1.4f),
+                                    style = Stroke(width = 3f)
+                                )
+                                drawCircle(
+                                    color = Color(0xFF38BDF8),
+                                    radius = cellSize * 0.12f,
+                                    center = center
+                                )
+                            }
+                            CellType.GRAND_HALL -> {
+                                // Indigo Grand Hall
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawRect(
+                                    color = Color(0xFF6366F1).copy(alpha = 0.15f),
+                                    topLeft = Offset(cellLeft + cellSize * 0.15f, cellTop + cellSize * 0.15f),
+                                    size = Size(cellSize * 0.7f, cellSize * 0.7f)
+                                )
+                                drawRect(
+                                    color = Color(0xFF6366F1),
+                                    topLeft = Offset(cellLeft + cellSize * 0.15f, cellTop + cellSize * 0.15f),
+                                    size = Size(cellSize * 0.7f, cellSize * 0.7f),
+                                    style = Stroke(width = 2f)
+                                )
+                                // Draw 4 structural pillar dots
+                                drawCircle(Color(0xFF818CF8), 1.5f, Offset(cellLeft + cellSize * 0.3f, cellTop + cellSize * 0.3f))
+                                drawCircle(Color(0xFF818CF8), 1.5f, Offset(cellLeft + cellSize * 0.7f, cellTop + cellSize * 0.3f))
+                                drawCircle(Color(0xFF818CF8), 1.5f, Offset(cellLeft + cellSize * 0.3f, cellTop + cellSize * 0.7f))
+                                drawCircle(Color(0xFF818CF8), 1.5f, Offset(cellLeft + cellSize * 0.7f, cellTop + cellSize * 0.7f))
+                            }
+                            CellType.DOME_CHAMBER -> {
+                                // Teal Dome central chamber
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawCircle(
+                                    color = Color(0xFF14B8A6).copy(alpha = 0.2f),
+                                    radius = cellSize * 0.4f,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFF14B8A6),
+                                    radius = cellSize * 0.4f,
+                                    center = center,
+                                    style = Stroke(width = 2f)
+                                )
+                                drawCircle(
+                                    color = Color(0xFF2DD4BF),
+                                    radius = cellSize * 0.2f,
+                                    center = center,
+                                    style = Stroke(width = 1f)
+                                )
+                            }
+                            CellType.VENT_TUNNEL -> {
+                                // Amber service vent
+                                drawRect(
+                                    color = Color(0xFFF59E0B).copy(alpha = 0.25f),
+                                    topLeft = Offset(cellLeft + cellSize * 0.3f, cellTop + cellSize * 0.3f),
+                                    size = Size(cellSize * 0.4f, cellSize * 0.4f)
+                                )
+                                drawRect(
+                                    color = Color(0xFFF59E0B),
+                                    topLeft = Offset(cellLeft + cellSize * 0.3f, cellTop + cellSize * 0.3f),
+                                    size = Size(cellSize * 0.4f, cellSize * 0.4f),
+                                    style = Stroke(width = 2f)
+                                )
+                            }
+                            CellType.ELEVATED_BALCONY -> {
+                                // Pink raised balcony
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawRect(
+                                    color = Color(0xFFEC4899).copy(alpha = 0.15f),
+                                    topLeft = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.1f),
+                                    size = Size(cellSize * 0.8f, cellSize * 0.8f)
+                                )
+                                drawLine(
+                                    color = Color(0xFFEC4899),
+                                    start = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.8f),
+                                    end = Offset(cellLeft + cellSize * 0.9f, cellTop + cellSize * 0.8f),
+                                    strokeWidth = 3f
+                                )
+                            }
+                            CellType.STAIRS_UP -> {
+                                // Cyber green upward stairs
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(cellLeft + cellSize * 0.2f, cellTop + cellSize * 0.8f),
+                                    end = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.2f),
+                                    strokeWidth = 2f
+                                )
+                                // Upwards arrow head
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(cellLeft + cellSize * 0.5f, cellTop + cellSize * 0.2f),
+                                    end = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.2f),
+                                    strokeWidth = 2f
+                                )
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.2f),
+                                    end = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.5f),
+                                    strokeWidth = 2f
+                                )
+                            }
+                            CellType.STAIRS_DOWN -> {
+                                // Cyber green downward stairs
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(cellLeft + cellSize * 0.2f, cellTop + cellSize * 0.2f),
+                                    end = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.8f),
+                                    strokeWidth = 2f
+                                )
+                                // Downwards arrow head
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(cellLeft + cellSize * 0.5f, cellTop + cellSize * 0.8f),
+                                    end = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.8f),
+                                    strokeWidth = 2f
+                                )
+                                drawLine(
+                                    color = Color(0xFF10B981),
+                                    start = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.5f),
+                                    end = Offset(cellLeft + cellSize * 0.8f, cellTop + cellSize * 0.8f),
+                                    strokeWidth = 2f
+                                )
+                            }
+                            CellType.GRAVITY_SLOPE -> {
+                                // Slanted gold ramp lines
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawLine(
+                                    color = Color(0xFFEAB308),
+                                    start = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.9f),
+                                    end = Offset(cellLeft + cellSize * 0.9f, cellTop + cellSize * 0.1f),
+                                    strokeWidth = 2.5f
+                                )
+                                drawLine(
+                                    color = Color(0xFFEAB308).copy(alpha = 0.5f),
+                                    start = Offset(cellLeft + cellSize * 0.3f, cellTop + cellSize * 0.9f),
+                                    end = Offset(cellLeft + cellSize * 0.9f, cellTop + cellSize * 0.3f),
+                                    strokeWidth = 1.5f
                                 )
                             }
                             else -> {

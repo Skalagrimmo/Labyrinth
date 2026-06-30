@@ -8,108 +8,412 @@ object GameEngine {
     // Procedural Maze Generator
     // Returns a 2D Array of CellType of size width x height
     fun generateMaze(width: Int = 10, height: Int = 10, layer: Int = 1): Array<Array<CellType>> {
-        val grid = Array(height) { Array(width) { CellType.WALL } }
+        val seedRandom = Random(System.currentTimeMillis() + layer * 123)
+        for (attempt in 1..3) {
+            val grid = Array(height) { Array(width) { CellType.WALL } }
+            val random = Random(seedRandom.nextInt())
+            val walkableCells = mutableSetOf<Pair<Int, Int>>()
 
-        // Start carve from (1, 1)
-        val startX = 1
-        val startY = 1
-        grid[startY][startX] = CellType.SAFE_ZONE
-
-        val visited = Array(height) { BooleanArray(width) { false } }
-        visited[startY][startX] = true
-
-        val stack = mutableListOf<Pair<Int, Int>>()
-        stack.add(Pair(startX, startY))
-
-        val random = Random(System.currentTimeMillis() + layer * 123)
-
-        // Standard DFS Maze Carving (on odd indices to ensure walls exist)
-        while (stack.isNotEmpty()) {
-            val (cx, cy) = stack.last()
-            val neighbors = mutableListOf<Triple<Int, Int, Pair<Int, Int>>>() // target x, target y, wall x & y
-
-            // Directions of step size 2
-            val dirs = listOf(
-                Triple(0, -2, Pair(0, -1)),
-                Triple(2, 0, Pair(1, 0)),
-                Triple(0, 2, Pair(0, 1)),
-                Triple(-2, 0, Pair(-1, 0))
-            )
-
-            for (d in dirs) {
-                val nx = cx + d.first
-                val ny = cy + d.second
-                if (nx in 1 until width - 1 && ny in 1 until height - 1) {
-                    if (!visited[ny][nx]) {
-                        neighbors.add(Triple(nx, ny, Pair(cx + d.third.first, cy + d.third.second)))
+            // Helper to safely carve cells
+            fun carveCell(x: Int, y: Int, type: CellType) {
+                if (x in 1 until width - 1 && y in 1 until height - 1) {
+                    grid[y][x] = type
+                    if (type != CellType.WALL) {
+                        walkableCells.add(Pair(x, y))
+                    } else {
+                        walkableCells.remove(Pair(x, y))
                     }
                 }
             }
 
-            if (neighbors.isNotEmpty()) {
-                val chosen = neighbors[random.nextInt(neighbors.size)]
-                val nx = chosen.first
-                val ny = chosen.second
-                val wx = chosen.third.first
-                val wy = chosen.third.second
+            // Keep track of placed architectural block rooms
+            data class DungeonBlock(
+                val x: Int,
+                val y: Int,
+                val w: Int,
+                val h: Int,
+                val type: String,
+                val carvedCells: MutableList<Pair<Int, Int>> = mutableListOf()
+            ) {
+                val centerX get() = x + w / 2
+                val centerY get() = y + h / 2
+            }
+            val blocks = mutableListOf<DungeonBlock>()
 
-                grid[wy][wx] = CellType.PATH
-                grid[ny][nx] = CellType.PATH
+            // 1. Generate diverse architectural forms (Forbidden to use identical rectangular rooms!)
+            val numAttempts = 15 + (width * height) / 25
+            for (i in 0 until numAttempts) {
+                val maxBw = minOf(6, width - 2).coerceAtLeast(3)
+                val maxBh = minOf(6, height - 2).coerceAtLeast(3)
+                val bw = if (maxBw > 3) 3 + random.nextInt(maxBw - 2) else 3
+                val bh = if (maxBh > 3) 3 + random.nextInt(maxBh - 2) else 3
+                val xRange = width - bw - 1
+                val yRange = height - bh - 1
+                val bx = 1 + (if (xRange > 0) random.nextInt(xRange) else 0)
+                val by = 1 + (if (yRange > 0) random.nextInt(yRange) else 0)
 
-                visited[ny][nx] = true
-                stack.add(Pair(nx, ny))
-            } else {
-                stack.removeAt(stack.size - 1)
+                val blockType = when (random.nextInt(6)) {
+                    0 -> "GRAND_HALL"
+                    1 -> "DOME_CHAMBER"
+                    2 -> "ELEVATED_BALCONY"
+                    3 -> "VENT_TUNNEL"
+                    4 -> "GRAVITY_SLOPE_ROOM"
+                    else -> "STAIRCASE_HUB"
+                }
+
+                val block = DungeonBlock(bx, by, bw, bh, blockType)
+                blocks.add(block)
+
+                // Carve specifically designed architectural forms
+                for (y in by until by + bh) {
+                    for (x in bx until bx + bw) {
+                        when (blockType) {
+                            "GRAND_HALL" -> {
+                                // Grand hall has vertical structural pillars (walls) in a grid pattern
+                                val isPillar = (x - bx) % 2 == 1 && (y - by) % 2 == 1
+                                if (isPillar) {
+                                    carveCell(x, y, CellType.WALL)
+                                } else {
+                                    carveCell(x, y, CellType.GRAND_HALL)
+                                    block.carvedCells.add(Pair(x, y))
+                                }
+                            }
+                            "DOME_CHAMBER" -> {
+                                // Circular dome vault (shaved off corners)
+                                val cx = bx + bw / 2.0
+                                val cy = by + bh / 2.0
+                                val dist = (x - cx) * (x - cx) + (y - cy) * (y - cy)
+                                val maxRad = minOf(bw, bh) / 2.0
+                                if (dist <= maxRad * maxRad) {
+                                    carveCell(x, y, CellType.DOME_CHAMBER)
+                                    block.carvedCells.add(Pair(x, y))
+                                } else {
+                                    carveCell(x, y, CellType.WALL)
+                                }
+                            }
+                            "ELEVATED_BALCONY" -> {
+                                carveCell(x, y, CellType.ELEVATED_BALCONY)
+                                block.carvedCells.add(Pair(x, y))
+                            }
+                            "VENT_TUNNEL" -> {
+                                carveCell(x, y, CellType.VENT_TUNNEL)
+                                block.carvedCells.add(Pair(x, y))
+                            }
+                            "GRAVITY_SLOPE_ROOM" -> {
+                                carveCell(x, y, CellType.GRAVITY_SLOPE)
+                                block.carvedCells.add(Pair(x, y))
+                            }
+                            "STAIRCASE_HUB" -> {
+                                val isUp = (x + y) % 2 == 0
+                                val type = if (isUp) CellType.STAIRS_UP else CellType.STAIRS_DOWN
+                                carveCell(x, y, type)
+                                block.carvedCells.add(Pair(x, y))
+                            }
+                        }
+                    }
+                }
+            }
+
+            val activeBlocks = blocks.filter { it.carvedCells.isNotEmpty() }
+
+            // Always guarantee starting position at (1,1) is secure
+            carveCell(1, 1, CellType.SAFE_ZONE)
+            carveCell(1, 2, CellType.PATH)
+            carveCell(2, 1, CellType.PATH)
+
+            // 2. Interconnect the architectural blocks with non-linear hallways to ensure loops/branches
+            for (idx in activeBlocks.indices) {
+                val b1 = activeBlocks[idx]
+                // Connect to the two closest blocks to create a highly connected network with loops
+                val connections = activeBlocks.indices
+                    .filter { it != idx }
+                    .sortedBy { targetIdx ->
+                        val b2 = activeBlocks[targetIdx]
+                        val dx = b1.centerX - b2.centerX
+                        val dy = b1.centerY - b2.centerY
+                        dx * dx + dy * dy
+                    }
+                    .take(2)
+
+                for (targetIdx in connections) {
+                    val b2 = activeBlocks[targetIdx]
+                    var cx = b1.centerX
+                    var cy = b1.centerY
+                    val tx = b2.centerX
+                    val ty = b2.centerY
+
+                    // Corridor style can vary along the connection
+                    val corridorType = when (random.nextInt(6)) {
+                        0 -> CellType.STAIRS_UP
+                        1 -> CellType.STAIRS_DOWN
+                        2 -> CellType.GRAVITY_SLOPE
+                        3 -> CellType.VENT_TUNNEL
+                        else -> CellType.PATH
+                    }
+
+                    while (cx != tx) {
+                        carveCell(cx, cy, corridorType)
+                        cx += if (tx > cx) 1 else -1
+                    }
+                    while (cy != ty) {
+                        carveCell(cx, cy, corridorType)
+                        cy += if (ty > cy) 1 else -1
+                    }
+                }
+            }
+
+            // 3. Maze Braiding (add alternative channels / loops by removing dead-ends or linking walls)
+            for (y in 2 until height - 2) {
+                for (x in 2 until width - 2) {
+                    if (grid[y][x] == CellType.WALL) {
+                        val horizSep = grid[y][x - 1] != CellType.WALL && grid[y][x + 1] != CellType.WALL
+                        val vertSep = grid[y - 1][x] != CellType.WALL && grid[y + 1][x] != CellType.WALL
+                        if ((horizSep || vertSep) && random.nextFloat() < 0.25f) {
+                            val braidType = when (random.nextInt(5)) {
+                                0 -> CellType.GRAVITY_SLOPE
+                                1 -> CellType.VENT_TUNNEL
+                                2 -> CellType.ELEVATED_BALCONY
+                                else -> CellType.PATH
+                            }
+                            carveCell(x, y, braidType)
+                        }
+                    }
+                }
+            }
+
+            // BFS Connectivity Check & Forced Connections
+            fun getReachableCells(): Set<Pair<Int, Int>> {
+                val visited = mutableSetOf<Pair<Int, Int>>()
+                val queue = java.util.ArrayDeque<Pair<Int, Int>>()
+                queue.add(Pair(1, 1))
+                visited.add(Pair(1, 1))
+                while (!queue.isEmpty()) {
+                    val (cx, cy) = queue.poll()
+                    for ((dx, dy) in listOf(Pair(0, 1), Pair(0, -1), Pair(1, 0), Pair(-1, 0))) {
+                        val nx = cx + dx
+                        val ny = cy + dy
+                        if (nx in 1 until width - 1 && ny in 1 until height - 1) {
+                            if (grid[ny][nx] != CellType.WALL && !visited.contains(Pair(nx, ny))) {
+                                visited.add(Pair(nx, ny))
+                                queue.add(Pair(nx, ny))
+                            }
+                        }
+                    }
+                }
+                return visited
+            }
+
+            var reachable = getReachableCells()
+
+            // Forced Connections: Connect isolated rooms to the nearest reachable room
+            var connectAttempts = 0
+            while (connectAttempts < 50) {
+                val (connectedBlocks, isolatedBlocks) = activeBlocks.partition { block ->
+                    block.carvedCells.any { cell -> reachable.contains(cell) }
+                }
+
+                if (isolatedBlocks.isEmpty()) {
+                    break
+                }
+
+                val b1 = isolatedBlocks.first()
+
+                if (connectedBlocks.isEmpty()) {
+                    // Connect directly to starting point (1, 1)
+                    var cx = b1.centerX
+                    var cy = b1.centerY
+                    val tx = 1
+                    val ty = 1
+                    while (cx != tx) {
+                        carveCell(cx, cy, CellType.PATH)
+                        cx += if (tx > cx) 1 else -1
+                    }
+                    while (cy != ty) {
+                        carveCell(cx, cy, CellType.PATH)
+                        cy += if (ty > cy) 1 else -1
+                    }
+                } else {
+                    // Find the nearest connected block
+                    val b2 = connectedBlocks.minByOrNull { bConn ->
+                        val dx = b1.centerX - bConn.centerX
+                        val dy = b1.centerY - bConn.centerY
+                        dx * dx + dy * dy
+                    }!!
+
+                    var cx = b1.centerX
+                    var cy = b1.centerY
+                    val tx = b2.centerX
+                    val ty = b2.centerY
+
+                    val corridorType = when (random.nextInt(4)) {
+                        0 -> CellType.STAIRS_UP
+                        1 -> CellType.STAIRS_DOWN
+                        2 -> CellType.GRAVITY_SLOPE
+                        else -> CellType.PATH
+                    }
+
+                    while (cx != tx) {
+                        carveCell(cx, cy, corridorType)
+                        cx += if (tx > cx) 1 else -1
+                    }
+                    while (cy != ty) {
+                        carveCell(cx, cy, corridorType)
+                        cy += if (ty > cy) 1 else -1
+                    }
+                }
+
+                reachable = getReachableCells()
+                connectAttempts++
+            }
+
+            // Ensure surrounding border walls are fully solid for security
+            for (x in 0 until width) {
+                grid[0][x] = CellType.WALL
+                grid[height - 1][x] = CellType.WALL
+            }
+            for (y in 0 until height) {
+                grid[y][0] = CellType.WALL
+                grid[y][width - 1] = CellType.WALL
+            }
+
+            val reachableWalkable = reachable.filter { (x, y) ->
+                (x > 2 || y > 2) && grid[y][x] != CellType.WALL
+            }.toMutableList()
+
+            if (reachableWalkable.size < 5) {
+                continue
+            }
+
+            // 4. Place critical mission items & entities
+            // Exit Placement: Ensure the exit room is always placed in a room that has at least one connection to the main path.
+            // The exit must never be in an isolated dead-end.
+            var maxDist = -1
+            var exitCell = Pair(width - 2, height - 2)
+            for (cell in reachableWalkable) {
+                val dist = abs(cell.first - 1) + abs(cell.second - 1)
+                if (dist > maxDist) {
+                    maxDist = dist
+                    exitCell = cell
+                }
+            }
+            grid[exitCell.second][exitCell.first] = CellType.ENCRYPTED_PORTAL
+            reachableWalkable.remove(exitCell)
+
+            reachableWalkable.shuffle(random)
+
+            // Data Stores (Hacking terminals)
+            val dataStoreCount = 2 + random.nextInt(2) + (layer / 3)
+            val placedDataStoreCount = minOf(dataStoreCount, reachableWalkable.size)
+            for (i in 0 until placedDataStoreCount) {
+                val cell = reachableWalkable[i]
+                grid[cell.second][cell.first] = CellType.DATA_STORE
+            }
+            reachableWalkable.removeAll(reachableWalkable.take(placedDataStoreCount))
+
+            // Virus Nodes (Active hostile processes)
+            val virusCount = 3 + random.nextInt(3) + (layer / 2)
+            val placedVirusCount = minOf(virusCount, reachableWalkable.size)
+            for (i in 0 until placedVirusCount) {
+                val cell = reachableWalkable[i]
+                grid[cell.second][cell.first] = CellType.VIRUS_NODE
+            }
+            reachableWalkable.removeAll(reachableWalkable.take(placedVirusCount))
+
+            // Classified Crypt-Caches
+            val secretCount = 2 + random.nextInt(3)
+            val placedSecretCount = minOf(secretCount, reachableWalkable.size)
+            for (i in 0 until placedSecretCount) {
+                val cell = reachableWalkable[i]
+                grid[cell.second][cell.first] = CellType.SECRET_CACHE
+            }
+            reachableWalkable.removeAll(reachableWalkable.take(placedSecretCount))
+
+            // Additional healing/safety Access Points
+            val extraAccessCount = 1 + random.nextInt(2)
+            val placedAccessCount = minOf(extraAccessCount, reachableWalkable.size)
+            for (i in 0 until placedAccessCount) {
+                val cell = reachableWalkable[i]
+                grid[cell.second][cell.first] = CellType.SAFE_ZONE
+            }
+            reachableWalkable.removeAll(reachableWalkable.take(placedAccessCount))
+
+            // Validate everything is connected
+            val finalReachable = getReachableCells()
+            val allRoomsConnected = activeBlocks.all { block ->
+                block.carvedCells.any { cell -> finalReachable.contains(cell) }
+            }
+            val exitAccessible = finalReachable.contains(exitCell)
+
+            if (allRoomsConnected && exitAccessible) {
+                return grid
             }
         }
 
-        // Place special nodes
-        // Ensure starting area is clean
-        grid[1][1] = CellType.SAFE_ZONE
-        grid[1][2] = CellType.PATH
-        grid[2][1] = CellType.PATH
+        return generateFallbackMaze(width, height)
+    }
 
-        val openCells = mutableListOf<Pair<Int, Int>>()
-        for (y in 1 until height - 1) {
-            for (x in 1 until width - 1) {
-                if (grid[y][x] == CellType.PATH && (x > 2 || y > 2)) {
-                    openCells.add(Pair(x, y))
+    private fun generateFallbackMaze(width: Int, height: Int): Array<Array<CellType>> {
+        val grid = Array(height) { Array(width) { CellType.WALL } }
+        val roomsCount = 4
+        
+        // Define centers of rooms along the diagonal
+        val centers = mutableListOf<Pair<Int, Int>>()
+        for (i in 0 until roomsCount) {
+            val t = i.toFloat() / (roomsCount - 1)
+            val cx = (1 + t * (width - 3)).toInt().coerceIn(1, width - 2)
+            val cy = (1 + t * (height - 3)).toInt().coerceIn(1, height - 2)
+            centers.add(Pair(cx, cy))
+        }
+        
+        // Carve rooms
+        for ((cx, cy) in centers) {
+            for (dy in -1..1) {
+                for (dx in -1..1) {
+                    val rx = cx + dx
+                    val ry = cy + dy
+                    if (rx in 1 until width - 1 && ry in 1 until height - 1) {
+                        grid[ry][rx] = CellType.PATH
+                    }
                 }
             }
         }
-
-        openCells.shuffle(random)
-
-        // 1. Exit Portal (as far away as possible)
-        var exitPlaced = false
-        var maxDist = -1
-        var exitCell = Pair(width - 2, height - 2)
-
-        for (cell in openCells) {
-            val dist = abs(cell.first - 1) + abs(cell.second - 1)
-            if (dist > maxDist) {
-                maxDist = dist
-                exitCell = cell
+        
+        // Connect rooms linearly
+        for (i in 0 until centers.size - 1) {
+            val (x1, y1) = centers[i]
+            val (x2, y2) = centers[i + 1]
+            var cx = x1
+            var cy = y1
+            while (cx != x2) {
+                if (cx in 1 until width - 1 && cy in 1 until height - 1) {
+                    grid[cy][cx] = CellType.PATH
+                }
+                cx += if (x2 > cx) 1 else -1
+            }
+            while (cy != y2) {
+                if (cx in 1 until width - 1 && cy in 1 until height - 1) {
+                    grid[cy][cx] = CellType.PATH
+                }
+                cy += if (y2 > cy) 1 else -1
             }
         }
-        grid[exitCell.second][exitCell.first] = CellType.ENCRYPTED_PORTAL
-        openCells.remove(exitCell)
-
-        // 2. Data Stores (Hacking terminals)
-        val dataStoreCount = 2 + random.nextInt(2)
-        for (i in 0 until minOf(dataStoreCount, openCells.size)) {
-            val cell = openCells[i]
-            grid[cell.second][cell.first] = CellType.DATA_STORE
+        
+        // Place critical elements
+        grid[1][1] = CellType.SAFE_ZONE
+        
+        val exitX = centers.last().first
+        val exitY = centers.last().second
+        grid[exitY][exitX] = CellType.ENCRYPTED_PORTAL
+        
+        // Place some items in other room centers
+        if (centers.size > 2) {
+            val (dx1, dy1) = centers[1]
+            grid[dy1][dx1] = CellType.DATA_STORE
+            
+            val (dx2, dy2) = centers[2]
+            grid[dy2][dx2] = CellType.VIRUS_NODE
         }
-        openCells.removeAll(openCells.take(minOf(dataStoreCount, openCells.size)))
-
-        // 3. Virus Nodes (Enemies)
-        val virusCount = 3 + random.nextInt(3) + (layer / 2)
-        for (i in 0 until minOf(virusCount, openCells.size)) {
-            val cell = openCells[i]
-            grid[cell.second][cell.first] = CellType.VIRUS_NODE
-        }
-
+        
         return grid
     }
 
@@ -450,6 +754,129 @@ object GameEngine {
             canvas.set(5, 18, '◤')
             
             for (c in 11..19) canvas.set(6, c, '▒')
+        } else if (primaryNode == CellType.SECRET_CACHE) {
+            // Quantum Crypt-Cache floating cube icon
+            canvas.set(3, 13, '╭')
+            for (c in 14..16) canvas.set(3, c, '─')
+            canvas.set(3, 17, '╮')
+            
+            canvas.set(4, 12, '│')
+            canvas.set(4, 14, 'S')
+            canvas.set(4, 15, 'E')
+            canvas.set(4, 16, 'C')
+            canvas.set(4, 18, '│')
+            
+            canvas.set(5, 13, '╰')
+            for (c in 14..16) canvas.set(5, c, '─')
+            canvas.set(5, 17, '╯')
+            
+            for (c in 12..18) canvas.set(6, c, '░')
+        } else if (primaryNode == CellType.GRAND_HALL) {
+            // Monumental pillars on the left and right sides
+            for (r in 2..8) {
+                canvas.set(r, 9, '┃')
+                canvas.set(r, 10, '█')
+                canvas.set(r, 20, '█')
+                canvas.set(r, 21, '┃')
+            }
+            canvas.set(1, 9, '╔')
+            canvas.set(1, 10, '╤')
+            canvas.set(9, 9, '╚')
+            canvas.set(9, 10, '╧')
+            canvas.set(1, 20, '╤')
+            canvas.set(1, 21, '╗')
+            canvas.set(9, 20, '╧')
+            canvas.set(9, 21, '╝')
+
+            val label = "GRAND HALL"
+            val colStart = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(5, colStart + i, label[i])
+            }
+        } else if (primaryNode == CellType.DOME_CHAMBER) {
+            // Curved arched rib lines of high-tech dome ceiling
+            canvas.drawLine(1, 6, 3, 15, '╭')
+            canvas.drawLine(1, 24, 3, 15, '╮')
+            canvas.set(3, 15, '◎')
+            canvas.drawLine(9, 6, 7, 15, '╰')
+            canvas.drawLine(9, 24, 7, 15, '╯')
+
+            val label = "DOME VAULT"
+            val colStart = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(5, colStart + i, label[i])
+            }
+        } else if (primaryNode == CellType.VENT_TUNNEL) {
+            // Low-ceiling vent tunnel structure
+            for (c in 6..24) {
+                canvas.set(2, c, '▄')
+                canvas.set(3, c, '█')
+            }
+            val label = "TUNNEL CONDUIT"
+            val colStart = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(5, colStart + i, label[i])
+            }
+        } else if (primaryNode == CellType.ELEVATED_BALCONY) {
+            // Raised balcony handrails
+            for (c in 7..23) {
+                canvas.set(6, c, '╦')
+                canvas.set(7, c, '║')
+                if (c % 2 == 0) canvas.set(8, c, '▒')
+            }
+            val label = "BALCONY LEDGE"
+            val colStart = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(4, colStart + i, label[i])
+            }
+        } else if (primaryNode == CellType.STAIRS_UP) {
+            // Upward steps wireframe
+            canvas.set(4, 11, '╭')
+            for (c in 12..18) canvas.set(4, c, '─')
+            canvas.set(4, 19, '╮')
+            canvas.set(5, 10, '┌')
+            for (c in 11..19) canvas.set(5, c, '─')
+            canvas.set(5, 20, '┐')
+            canvas.set(6, 9, '┌')
+            for (c in 10..20) canvas.set(6, c, '─')
+            canvas.set(6, 21, '┐')
+            canvas.set(7, 8, '┌')
+            for (c in 9..21) canvas.set(7, c, '─')
+            canvas.set(7, 22, '┐')
+
+            val label = "STAIRS UP"
+            val colStart = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(2, colStart + i, label[i])
+            }
+        } else if (primaryNode == CellType.STAIRS_DOWN) {
+            // Downward descending steps wireframe
+            canvas.set(8, 11, '╰')
+            for (c in 12..18) canvas.set(8, c, '─')
+            canvas.set(8, 19, '╯')
+            canvas.set(7, 10, '└')
+            for (c in 11..19) canvas.set(7, c, '─')
+            canvas.set(7, 20, '┘')
+            canvas.set(6, 9, '└')
+            for (c in 10..20) canvas.set(6, c, '─')
+            canvas.set(6, 21, '┘')
+
+            val label = "STAIRS DOWN"
+            val colStart = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(4, colStart + i, label[i])
+            }
+        } else if (primaryNode == CellType.GRAVITY_SLOPE) {
+            // Slanting slope lines
+            canvas.drawLine(8, 10, 4, 20, '/')
+            canvas.drawLine(9, 11, 5, 21, '/')
+            canvas.drawLine(7, 9, 3, 19, '/')
+
+            val label = "GRAVITY SLOPE"
+            val colStart = 15 - label.length / 2
+            for (i in label.indices) {
+                canvas.set(5, colStart + i, label[i])
+            }
         }
 
         // --- 5. Draw Outer Border Frame ---
@@ -565,7 +992,7 @@ object GameEngine {
         }
 
         // Target sequence is the characters at the path
-        val targetSequence = path.map { grid[it.second][it.first] }
+        val targetSequence = path.map { grid[it.first][it.second] }
 
         return HackingPuzzle(
             grid = grid,

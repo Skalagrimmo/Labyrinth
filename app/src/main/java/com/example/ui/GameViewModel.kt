@@ -140,7 +140,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // Generates the maze grid and updates 1st person perspective
     private fun generateNewLevel() {
         val level = _uiState.value.level
-        val maze = GameEngine.generateMaze(10, 10, level)
+        // Scale labyrinth size dynamically: 15x15 at layer 1, increasing up to 27x27 (always odd for perfect layout and size density)
+        val size = minOf(15 + ((level - 1) * 2), 27)
+        val maze = GameEngine.generateMaze(size, size, level)
         val perspective = GameEngine.render3DPerspective(maze, 1, 1, Direction.EAST)
 
         _uiState.update { state ->
@@ -258,6 +260,54 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             CellType.ENCRYPTED_PORTAL -> {
                 addLog("PORTAL GATE IN SIGHT. Secure decryption required to cycle sectors.", LogType.SUCCESS)
             }
+            CellType.SECRET_CACHE -> {
+                addLog("ALERT: Quantum fluctuation detected! You are standing on a Classified Crypt-Cache!", LogType.SUCCESS)
+                addLog("Aim ahead or position yourself to INTERACT [F] and extract rewards.", LogType.ALERT)
+            }
+            CellType.SAFE_ZONE -> {
+                if (x != 1 || y != 1) {
+                    val healed = minOf(20, _uiState.value.maxIntegrity - _uiState.value.integrity)
+                    val ramRestored = minOf(4, _uiState.value.maxRam - _uiState.value.ram)
+                    if (healed > 0 || ramRestored > 0) {
+                        val updatedMaze = _uiState.value.maze.map { it.clone() }.toTypedArray()
+                        updatedMaze[y][x] = CellType.PATH
+                        _uiState.update { state ->
+                            state.copy(
+                                integrity = state.integrity + healed,
+                                ram = state.ram + ramRestored,
+                                maze = updatedMaze
+                            )
+                        }
+                        updatePerspective()
+                        addLog("SAFE HOOK: Connected to Access Point. Integrity +$healed%, RAM +$ramRestored MB.", LogType.SUCCESS)
+                    } else {
+                        addLog("SAFE HOOK: Subsystems already at peak efficiency. Access Point on standby.", LogType.INFO)
+                    }
+                } else {
+                    addLog("CONNECTED TO SECTOR ACCESS POINT. Starting zone is fully secure.", LogType.INFO)
+                }
+            }
+            CellType.GRAND_HALL -> {
+                addLog("GRAND HALL: Entering a monumental core server chamber with towering concrete columns.", LogType.INFO)
+            }
+            CellType.DOME_CHAMBER -> {
+                addLog("DOME VAULT: Stepping into a high-security spherical dome vault with dynamic holographic ribs.", LogType.INFO)
+            }
+            CellType.VENT_TUNNEL -> {
+                addLog("VENT CONDUIT: Crouching through a low, heavily shielded utility ventilation shaft.", LogType.INFO)
+            }
+            CellType.ELEVATED_BALCONY -> {
+                addLog("BALCONY LEDGE: Elevated high overlook platforms. You have an expanded line of sight!", LogType.INFO)
+            }
+            CellType.STAIRS_UP -> {
+                addLog("STAIRS UP: Ascending vertical metal steps connecting server core layers.", LogType.INFO)
+            }
+            CellType.STAIRS_DOWN -> {
+                addLog("STAIRS_DOWN: Descending heavy-duty stairs leading into deeper hardware subsectors.", LogType.INFO)
+            }
+            CellType.GRAVITY_SLOPE -> {
+                addLog("GRAVITY SLOPE: Scaling a steep gravity-modulated concourse incline.", LogType.INFO)
+            }
             else -> {}
         }
     }
@@ -282,30 +332,54 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (_uiState.value.screen != ActiveScreen.EXPLORATION) return
 
         val state = _uiState.value
-        // Look directly ahead of us
+        // 1. First, check if there is an interactive cell directly ahead of us
         val targetX = state.gridX + state.direction.dx
         val targetY = state.gridY + state.direction.dy
 
-        if (targetY !in state.maze.indices || targetX !in state.maze[0].indices) {
-            addLog("NO INTERACTIVE INTERFACE DIRECTLY AHEAD.", LogType.ERROR)
+        var cellToInteractWith = CellType.PATH
+        var interactX = targetX
+        var interactY = targetY
+
+        if (targetY in state.maze.indices && targetX in state.maze[0].indices) {
+            val cellAhead = state.maze[targetY][targetX]
+            if (cellAhead == CellType.DATA_STORE || cellAhead == CellType.ENCRYPTED_PORTAL || cellAhead == CellType.VIRUS_NODE || cellAhead == CellType.SECRET_CACHE) {
+                cellToInteractWith = cellAhead
+            }
+        }
+
+        // 2. If no interactive cell is ahead, check if we are standing on one!
+        if (cellToInteractWith == CellType.PATH) {
+            val cellCurrent = state.maze[state.gridY][state.gridX]
+            if (cellCurrent == CellType.DATA_STORE || cellCurrent == CellType.ENCRYPTED_PORTAL || cellCurrent == CellType.VIRUS_NODE || cellCurrent == CellType.SECRET_CACHE) {
+                cellToInteractWith = cellCurrent
+                interactX = state.gridX
+                interactY = state.gridY
+            }
+        }
+
+        if (cellToInteractWith == CellType.PATH) {
+            addLog("NO INTERACTIVE INTERFACE DIRECTLY AHEAD OR UNDERFOOT.", LogType.ERROR)
             return
         }
 
-        val cell = state.maze[targetY][targetX]
-        when (cell) {
+        when (cellToInteractWith) {
             CellType.DATA_STORE -> {
                 addLog("INITIATING HANDSHAKE WITH DATA STORE CORE...", LogType.INFO)
-                startHackingPuzzle(targetX, targetY, difficulty = state.level)
+                startHackingPuzzle(interactX, interactY, difficulty = state.level)
+            }
+            CellType.SECRET_CACHE -> {
+                addLog("INITIATING HANDSHAKE WITH CLASSIFIED CRYPT-CACHE...", LogType.SUCCESS)
+                startHackingPuzzle(interactX, interactY, difficulty = state.level + 1)
             }
             CellType.ENCRYPTED_PORTAL -> {
                 addLog("SUB-SECTOR DECRYPTION INITIALIZED...", LogType.SUCCESS)
                 // Go to next cyberspace level!
-                _uiState.update { state ->
-                    val nextLvl = state.level + 1
-                    state.copy(
+                _uiState.update { stateNow ->
+                    val nextLvl = stateNow.level + 1
+                    stateNow.copy(
                         level = nextLvl,
-                        credits = state.credits + 150, // Bonus credits for sector completion
-                        totalCreditsEarned = state.totalCreditsEarned + 150
+                        credits = stateNow.credits + 150, // Bonus credits for sector completion
+                        totalCreditsEarned = stateNow.totalCreditsEarned + 150
                     )
                 }
                 addLog("DECRYPTED AND TRANSFERRED TO CORE SECTOR ${_uiState.value.level}.", LogType.SUCCESS)
@@ -313,10 +387,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             CellType.VIRUS_NODE -> {
                 addLog("FORCE-CONNECTING WITH ACTIVE THREAT...", LogType.ALERT)
-                triggerCombat(targetX, targetY)
+                triggerCombat(interactX, interactY)
             }
             else -> {
-                addLog("NO RESPONSE AT ADDR: (${targetX}, ${targetY}). IS PATH EMPTY?", LogType.ERROR)
+                addLog("NO RESPONSE AT ADDR: (${interactX}, ${interactY}). IS PATH EMPTY?", LogType.ERROR)
             }
         }
     }
@@ -419,12 +493,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun handleHackingSuccess() {
         val state = _uiState.value
-        val bountyCredits = 100 + (state.level * 50) + Random.nextInt(50)
-        val rewards = listOf("NanoMed.sys", "RAMBoost.exe", "Decryptor.pkg", "ChipsetMod.pkg")
+        val nodeType = if (state.targetNodeY in state.maze.indices && state.targetNodeX in state.maze[0].indices) {
+            state.maze[state.targetNodeY][state.targetNodeX]
+        } else {
+            CellType.DATA_STORE
+        }
+
+        val isSecretCache = nodeType == CellType.SECRET_CACHE
+        val baseBounty = if (isSecretCache) 300 + (state.level * 100) else 100 + (state.level * 50)
+        val bountyCredits = baseBounty + Random.nextInt(50)
+
+        val rewards = if (isSecretCache) {
+            listOf("SlasherMod.pkg", "AegisProtocol.sys", "OverflowExploit.exe", "Overclocker.sys", "HyperRAM.exe")
+        } else {
+            listOf("NanoMed.sys", "RAMBoost.exe", "Decryptor.pkg", "ChipsetMod.pkg")
+        }
         val randomReward = rewards[Random.nextInt(rewards.size)]
 
         val updatedInventory = state.inventory.toMutableList()
         updatedInventory.add(randomReward)
+        if (isSecretCache) {
+            val extraItem = listOf("NanoMed.sys", "RAMBoost.exe").random()
+            updatedInventory.add(extraItem)
+        }
 
         // Clear node from map
         val updatedMaze = state.maze.map { it.clone() }.toTypedArray()
@@ -445,8 +536,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         updatePerspective()
-        addLog("DECRYPTION CRACKED SUCCESSFULLY!", LogType.SUCCESS)
-        addLog("RETRIEVED CREDITS: +$bountyCredits MB. EXTRACTED UTILITY: $randomReward", LogType.SUCCESS)
+        if (isSecretCache) {
+            addLog("CLASSIFIED VAULT INTRUSION SUCCEEDED!", LogType.SUCCESS)
+            addLog("EXTRACTED ULTRA CREDITS: +$bountyCredits MB!", LogType.SUCCESS)
+            addLog("RETRIEVED ENHANCED UTILITIES: $randomReward and standard sub-routines.", LogType.SUCCESS)
+        } else {
+            addLog("DECRYPTION CRACKED SUCCESSFULLY!", LogType.SUCCESS)
+            addLog("RETRIEVED CREDITS: +$bountyCredits MB. EXTRACTED UTILITY: $randomReward", LogType.SUCCESS)
+        }
     }
 
     private fun handleHackingFailure() {

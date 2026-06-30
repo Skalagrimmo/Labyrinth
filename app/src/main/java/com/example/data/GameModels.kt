@@ -85,7 +85,15 @@ enum class CellType(val symbol: Char, val displayName: String) {
     DATA_STORE('D', "Encrypted Data Cache"),
     ENCRYPTED_PORTAL('P', "Sub-Sector Gate"),
     VIRUS_NODE('V', "Active Security Process"),
-    SAFE_ZONE('S', "Access Point")
+    SAFE_ZONE('S', "Access Point"),
+    SECRET_CACHE('C', "Classified Crypt-Cache"),
+    GRAND_HALL('H', "Grand Hall Core"),
+    DOME_CHAMBER('O', "Dome Central Vault"),
+    VENT_TUNNEL('T', "Narrow Service Conduit"),
+    ELEVATED_BALCONY('B', "High-Level Balcony"),
+    STAIRS_UP('U', "Vertical Uplink Stairs"),
+    STAIRS_DOWN('N', "Sub-Level Downstairs"),
+    GRAVITY_SLOPE('L', "Pulsing Gravity Slope")
 }
 
 data class Enemy(
