@@ -11,7 +11,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.random.Random
+
+enum class CombatTurn {
+    PLAYER,
+    ENEMY,
+    ANIMATING
+}
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -48,6 +56,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val level: Int = 1,
         val maze: Array<Array<CellType>> = emptyArray(),
         val perspectiveText: String = "",
+        val exploredCells: Set<Pair<Int, Int>> = emptySet(),
+        val activeWeather: com.example.data.CyberWeather = com.example.data.CyberWeather.CLEAR,
+        val weatherTurnsLeft: Int = 0,
+        val stepsSinceLastEvent: Int = 0,
+        val nextEventSteps: Int = 30,
+        val predictedWeather: com.example.data.CyberWeather? = null,
+        val originalMaze: Array<Array<CellType>>? = null,
 
         // Equipment & Abilities
         val installedCyberware: List<Cyberware> = emptyList(),
@@ -57,6 +72,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Active combat
         val activeEnemy: Enemy? = null,
         val enemyCombatAction: String = "",
+        val gameState: GameState = GameState.EXPLORATION,
 
         // Active hacking puzzle
         val activePuzzle: HackingPuzzle? = null,
@@ -69,7 +85,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Stats tracking for current run
         val nodesHackedCount: Int = 0,
         val totalCreditsEarned: Int = 100,
-        val runOutcome: String = ""
+        val runOutcome: String = "",
+
+        // Visual Turn-Based Combat State & Effects
+        val combatTurn: CombatTurn = CombatTurn.PLAYER,
+        val combatFlashEnemy: Boolean = false,
+        val combatFlashPlayer: Boolean = false,
+        val combatScreenShake: Boolean = false,
+        val playerDamagePopup: String? = null,
+        val enemyDamagePopup: String? = null,
+        val showShieldEffect: Boolean = false,
+        val showCombatBanner: String? = null, // e.g. "COMBAT STARTED", "VICTORY", "DEFEAT"
+        val isCombatInputEnabled: Boolean = true
     )
 
     enum class ActiveScreen {
@@ -89,6 +116,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Initialize with default logging
         addLog("DECENTRALIZED TERMINAL ESTABLISHED...", LogType.SUCCESS)
         addLog("CYBERSPACE INTRUSION PROTOCOL READY. SELECT PROFILE.", LogType.INFO)
+
+        // Launch real-time periodic update loop for seamless hybrid movement and combat proximity
+        viewModelScope.launch(Dispatchers.Default) {
+            while (true) {
+                update()
+                kotlinx.coroutines.delay(100)
+            }
+        }
     }
 
     // ----------------------------------------------------
@@ -139,23 +174,52 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // Generates the maze grid and updates 1st person perspective
     private fun generateNewLevel() {
-        val level = _uiState.value.level
-        // Scale labyrinth size dynamically: 15x15 at layer 1, increasing up to 27x27 (always odd for perfect layout and size density)
-        val size = minOf(15 + ((level - 1) * 2), 27)
-        val maze = GameEngine.generateMaze(size, size, level)
-        val perspective = GameEngine.render3DPerspective(maze, 1, 1, Direction.EAST)
+        viewModelScope.launch {
+            val level = _uiState.value.level
+            // Scale labyrinth size dynamically: 35x35 at layer 1, increasing up to 55x55 for vast immersive exploration (always odd for perfect layout and size density)
+            val size = minOf(35 + ((level - 1) * 4), 55)
+            val maze = withContext(Dispatchers.Default) {
+                GameEngine.generateMaze(size, size, level)
+            }
+            val perspective = withContext(Dispatchers.Default) {
+                GameEngine.render3DPerspective(maze, 1, 1, Direction.EAST)
+            }
 
-        _uiState.update { state ->
-            state.copy(
-                maze = maze,
-                gridX = 1,
-                gridY = 1,
-                direction = Direction.EAST,
-                perspectiveText = perspective
-            )
+            _uiState.update { state ->
+                state.copy(
+                    maze = maze,
+                    gridX = 1,
+                    gridY = 1,
+                    direction = Direction.EAST,
+                    perspectiveText = perspective,
+                    exploredCells = emptySet()
+                )
+            }
+            revealCellsAround(1, 1)
+            addLog("CYBERSPACE COGNITIVE NODE LAYER $level SECURED.", LogType.SUCCESS)
+            addLog("PROCEED CAUTIOUSLY. ACTIVE DESTRUCTION VIRUSES RECONSTRUCTED.", LogType.ALERT)
         }
-        addLog("CYBERSPACE COGNITIVE NODE LAYER $level SECURED.", LogType.SUCCESS)
-        addLog("PROCEED CAUTIOUSLY. ACTIVE DESTRUCTION VIRUSES RECONSTRUCTED.", LogType.ALERT)
+    }
+
+    fun revealCellsAround(x: Int, y: Int) {
+        _uiState.update { state ->
+            val updatedRevealed = state.exploredCells.toMutableSet()
+            updatedRevealed.add(Pair(x, y))
+            
+            val radius = 3
+            for (dy in -radius..radius) {
+                for (dx in -radius..radius) {
+                    val nx = x + dx
+                    val ny = y + dy
+                    if (ny in state.maze.indices && nx in state.maze[0].indices) {
+                        if (dx * dx + dy * dy <= radius * radius + 1) {
+                            updatedRevealed.add(Pair(nx, ny))
+                        }
+                    }
+                }
+            }
+            state.copy(exploredCells = updatedRevealed)
+        }
     }
 
     fun addLog(message: String, type: LogType = LogType.INFO) {
@@ -175,26 +239,47 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // ----------------------------------------------------
 
     fun moveForward() {
-        if (_uiState.value.screen != ActiveScreen.EXPLORATION) return
+        if (_uiState.value.screen != ActiveScreen.EXPLORATION || _uiState.value.gameState != GameState.EXPLORATION) return
 
         val state = _uiState.value
-        val nextX = state.gridX + state.direction.dx
-        val nextY = state.gridY + state.direction.dy
+        var nextX = state.gridX + state.direction.dx
+        var nextY = state.gridY + state.direction.dy
+
+        if (state.activeWeather == com.example.data.CyberWeather.DATA_STORM) {
+            if (Random.nextFloat() < 0.40f) {
+                val scrambledDirs = Direction.values().filter { it != state.direction }
+                val scrambledDir = scrambledDirs.random()
+                nextX = state.gridX + scrambledDir.dx
+                nextY = state.gridY + scrambledDir.dy
+                addLog("⚠️ DATA STORM STATIC: Scrambled movement vector! Redirected forward path.", LogType.ERROR)
+            }
+        }
 
         if (isValidMove(nextX, nextY)) {
             val cell = state.maze[nextY][nextX]
             if (cell == CellType.VIRUS_NODE) {
-                // Intercepted by security! Trigger combat
-                triggerCombat(nextX, nextY)
+                if (state.gameState != GameState.EXPLORATION) {
+                    addLog("ACCESS DENIED: Cannot overlap active threat host. Use Attack program.", LogType.ERROR)
+                } else {
+                    triggerCombatInline(nextX, nextY)
+                }
             } else {
                 _uiState.update { it.copy(gridX = nextX, gridY = nextY) }
                 updatePerspective()
+                revealCellsAround(nextX, nextY)
 
                 // Small chance of recovering 1 RAM during safe navigation
                 recoverRamOnMove()
 
                 addLog("MOVED FORWARD into sub-channel (${nextX}, ${nextY})")
                 checkCellTriggers(nextX, nextY, cell)
+                processWeatherOnStep()
+
+                update()
+
+                if (_uiState.value.gameState != GameState.EXPLORATION) {
+                    executeEnemyCombatTurnInline()
+                }
             }
         } else {
             addLog("ACCESS DENIED: Physical Firewall Blocked.", LogType.ERROR)
@@ -202,22 +287,44 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun moveBackward() {
-        if (_uiState.value.screen != ActiveScreen.EXPLORATION) return
+        if (_uiState.value.screen != ActiveScreen.EXPLORATION || _uiState.value.gameState != GameState.EXPLORATION) return
 
         val state = _uiState.value
-        val nextX = state.gridX - state.direction.dx
-        val nextY = state.gridY - state.direction.dy
+        var nextX = state.gridX - state.direction.dx
+        var nextY = state.gridY - state.direction.dy
+
+        if (state.activeWeather == com.example.data.CyberWeather.DATA_STORM) {
+            if (Random.nextFloat() < 0.40f) {
+                val scrambledDirs = Direction.values()
+                val scrambledDir = scrambledDirs.random()
+                nextX = state.gridX + scrambledDir.dx
+                nextY = state.gridY + scrambledDir.dy
+                addLog("⚠️ DATA STORM STATIC: Scrambled movement vector! Redirected backward path.", LogType.ERROR)
+            }
+        }
 
         if (isValidMove(nextX, nextY)) {
             val cell = state.maze[nextY][nextX]
             if (cell == CellType.VIRUS_NODE) {
-                triggerCombat(nextX, nextY)
+                if (state.gameState != GameState.EXPLORATION) {
+                    addLog("ACCESS DENIED: Cannot overlap active threat host. Use Attack program.", LogType.ERROR)
+                } else {
+                    triggerCombatInline(nextX, nextY)
+                }
             } else {
                 _uiState.update { it.copy(gridX = nextX, gridY = nextY) }
                 updatePerspective()
+                revealCellsAround(nextX, nextY)
                 recoverRamOnMove()
                 addLog("MOVED BACKWARD into sub-channel (${nextX}, ${nextY})")
                 checkCellTriggers(nextX, nextY, cell)
+                processWeatherOnStep()
+
+                update()
+
+                if (_uiState.value.gameState != GameState.EXPLORATION) {
+                    executeEnemyCombatTurnInline()
+                }
             }
         } else {
             addLog("ACCESS DENIED: Solid Core Boundary.", LogType.ERROR)
@@ -225,20 +332,30 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun turnLeft() {
-        if (_uiState.value.screen != ActiveScreen.EXPLORATION) return
+        if (_uiState.value.screen != ActiveScreen.EXPLORATION || _uiState.value.gameState != GameState.EXPLORATION) return
         _uiState.update { state ->
-            val newDir = state.direction.turnLeft()
-            state.copy(direction = newDir)
+            val actualDir = if (state.activeWeather == com.example.data.CyberWeather.DATA_STORM && Random.nextFloat() < 0.4f) {
+                addLog("⚠️ DATA STORM STATIC: Rotation circuit scrambled!", LogType.ERROR)
+                state.direction.turnRight()
+            } else {
+                state.direction.turnLeft()
+            }
+            state.copy(direction = actualDir)
         }
         updatePerspective()
         addLog("ROTATED VECTOR 90° LEFT.")
     }
 
     fun turnRight() {
-        if (_uiState.value.screen != ActiveScreen.EXPLORATION) return
+        if (_uiState.value.screen != ActiveScreen.EXPLORATION || _uiState.value.gameState != GameState.EXPLORATION) return
         _uiState.update { state ->
-            val newDir = state.direction.turnRight()
-            state.copy(direction = newDir)
+            val actualDir = if (state.activeWeather == com.example.data.CyberWeather.DATA_STORM && Random.nextFloat() < 0.4f) {
+                addLog("⚠️ DATA STORM STATIC: Rotation circuit scrambled!", LogType.ERROR)
+                state.direction.turnLeft()
+            } else {
+                state.direction.turnRight()
+            }
+            state.copy(direction = actualDir)
         }
         updatePerspective()
         addLog("ROTATED VECTOR 90° RIGHT.")
@@ -249,6 +366,141 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val gained = if (Random.nextInt(100) < 40) 1 else 0
             val newRam = minOf(state.maxRam, state.ram + gained)
             state.copy(ram = newRam)
+        }
+    }
+
+    fun processWeatherOnStep() {
+        viewModelScope.launch(Dispatchers.Default) {
+            _uiState.update { state ->
+                var weather = state.activeWeather
+                var turnsLeft = state.weatherTurnsLeft
+                var originalMaze = state.originalMaze
+                var currentMaze = state.maze
+
+                if (weather != com.example.data.CyberWeather.CLEAR) {
+                    turnsLeft--
+                    if (turnsLeft <= 0) {
+                        addLog("WEATHER CLEAR: Environmental distortion dissipated. Bandwidth stabilized.", LogType.SUCCESS)
+                        weather = com.example.data.CyberWeather.CLEAR
+                        if (originalMaze != null) {
+                            currentMaze = originalMaze
+                            originalMaze = null
+                        }
+                    }
+                }
+
+                var steps = state.stepsSinceLastEvent + 1
+                val nextEvent = state.nextEventSteps
+                var predicted = state.predictedWeather
+
+                if (steps >= nextEvent) {
+                    steps = 0
+                    val newNextEventSteps = 30 + Random.nextInt(71)
+                    val possibleWeathers = com.example.data.CyberWeather.values().filter { it != com.example.data.CyberWeather.CLEAR }
+                    val newWeather = predicted ?: possibleWeathers.random()
+                    predicted = null
+                    weather = newWeather
+                    turnsLeft = newWeather.effectDuration
+
+                    addLog("⚠️ CYBER-GRID WEATHER ALTERATION: ${newWeather.title}!!", LogType.ALERT)
+                    addLog("${newWeather.description}", LogType.INFO)
+
+                    when (newWeather) {
+                        com.example.data.CyberWeather.FRAGMENTATION -> {
+                            val backup = Array(currentMaze.size) { r -> currentMaze[r].copyOf() }
+                            originalMaze = backup
+                            
+                            val mutableMaze = Array(currentMaze.size) { r -> currentMaze[r].copyOf() }
+                            var mutatedCount = 0
+                            for (attempt in 0..100) {
+                                if (mutatedCount >= 10) break
+                                val rx = 1 + Random.nextInt(mutableMaze[0].size - 2)
+                                val ry = 1 + Random.nextInt(mutableMaze.size - 2)
+                                if (rx == state.gridX && ry == state.gridY) continue
+                                if (rx == 1 && ry == 1) continue
+                                val originalCell = mutableMaze[ry][rx]
+                                if (originalCell == CellType.PATH || originalCell == CellType.WALL) {
+                                    mutableMaze[ry][rx] = if (originalCell == CellType.PATH) CellType.WALL else CellType.PATH
+                                    mutatedCount++
+                                }
+                            }
+                            currentMaze = mutableMaze
+                            addLog("DANGER: Memory Fragmentation is shifting firewall partitions dynamically!", LogType.ALERT)
+                        }
+                        com.example.data.CyberWeather.ECHOES -> {
+                            val mutableMaze = Array(currentMaze.size) { r -> currentMaze[r].copyOf() }
+                            var spawned = 0
+                            for (attempt in 0..150) {
+                                if (spawned >= 4) break
+                                val rx = 1 + Random.nextInt(mutableMaze[0].size - 2)
+                                val ry = 1 + Random.nextInt(mutableMaze.size - 2)
+                                if (rx == state.gridX && ry == state.gridY) continue
+                                if (rx == 1 && ry == 1) continue
+                                if (mutableMaze[ry][rx] == CellType.PATH) {
+                                    mutableMaze[ry][rx] = CellType.ECHO
+                                    spawned++
+                                }
+                            }
+                            currentMaze = mutableMaze
+                            addLog("ALERT: Sub-sector telemetry streams are bleeding. Ghost netrunner hosts detected.", LogType.ALERT)
+                        }
+                        com.example.data.CyberWeather.COLD_SPOT -> {
+                            addLog("ALERT: System bus temperature critical low. Overclocking modules frozen.", LogType.ALERT)
+                        }
+                        com.example.data.CyberWeather.HOT_NODE -> {
+                            addLog("ALERT: High-voltage core packets discharging. Overclock active, but taking damage!", LogType.ALERT)
+                        }
+                        com.example.data.CyberWeather.DATA_STORM -> {
+                            addLog("ALERT: Dense signal interference static detected. Direction controllers scrambled!", LogType.ALERT)
+                        }
+                        else -> {}
+                    }
+
+                    state.copy(
+                        activeWeather = weather,
+                        weatherTurnsLeft = turnsLeft,
+                        stepsSinceLastEvent = steps,
+                        nextEventSteps = newNextEventSteps,
+                        predictedWeather = predicted,
+                        originalMaze = originalMaze,
+                        maze = currentMaze
+                    )
+                } else {
+                    var integrity = state.integrity
+                    var ram = state.ram
+                    val maxIntegrity = state.maxIntegrity
+                    val maxRam = state.maxRam
+
+                    when (weather) {
+                        com.example.data.CyberWeather.HOT_NODE -> {
+                            val damage = 2
+                            integrity = (integrity - damage).coerceAtLeast(1)
+                            addLog("HOT NODE OVERHEAT: Core took $damage thermal damage.", LogType.ERROR)
+                            if (Random.nextFloat() < 0.4f) {
+                                ram = (ram + 1).coerceAtMost(maxRam)
+                                addLog("HOT NODE OVERCLOCK: Recovered 1 MB RAM.", LogType.SUCCESS)
+                            }
+                        }
+                        com.example.data.CyberWeather.COLD_SPOT -> {
+                            if (Random.nextFloat() < 0.5f) {
+                                ram = (ram - 1).coerceAtLeast(0)
+                                addLog("COLD SPOT FREEZE: Sluggish bus drained 1 MB RAM.", LogType.ERROR)
+                            }
+                        }
+                        else -> {}
+                    }
+
+                    state.copy(
+                        activeWeather = weather,
+                        weatherTurnsLeft = turnsLeft,
+                        stepsSinceLastEvent = steps,
+                        integrity = integrity,
+                        ram = ram,
+                        originalMaze = originalMaze,
+                        maze = currentMaze
+                    )
+                }
+            }
         }
     }
 
@@ -308,7 +560,426 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             CellType.GRAVITY_SLOPE -> {
                 addLog("GRAVITY SLOPE: Scaling a steep gravity-modulated concourse incline.", LogType.INFO)
             }
+            CellType.ECHO -> {
+                val r = Random.nextFloat()
+                val updatedMaze = _uiState.value.maze.map { it.clone() }.toTypedArray()
+                updatedMaze[y][x] = CellType.PATH
+
+                _uiState.update { state -> state.copy(maze = updatedMaze) }
+                updatePerspective()
+
+                if (r < 0.45f) {
+                    addLog("PHANTOM ECHO DISSIPATED: The telemetry ghost dissolved into cold code static...", LogType.INFO)
+                } else if (r < 0.75f) {
+                    val creditsGained = 40 + Random.nextInt(41)
+                    _uiState.update { state ->
+                        state.copy(
+                            credits = state.credits + creditsGained,
+                            totalCreditsEarned = state.totalCreditsEarned + creditsGained
+                        )
+                    }
+                    addLog("PHANTOM ECHO DECRYPTED: Reclaimed $creditsGained credits from a decayed core cache!", LogType.SUCCESS)
+                } else {
+                    addLog("PHANTOM ECHO RE-ARMED: The decoy ghost hardened into an active Security Process!", LogType.ALERT)
+                    triggerCombatInline(x, y)
+                }
+            }
             else -> {}
+        }
+    }
+
+    fun update() {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) return
+
+        val playerX = state.gridX
+        val playerY = state.gridY
+        val maze = state.maze
+        if (maze.isEmpty()) return
+
+        var foundEnemy: Pair<Int, Int>? = null
+        val radius = 2
+        for (dy in -radius..radius) {
+            for (dx in -radius..radius) {
+                val nx = playerX + dx
+                val ny = playerY + dy
+                if (ny in maze.indices && nx in maze[0].indices) {
+                    if (maze[ny][nx] == CellType.VIRUS_NODE) {
+                        foundEnemy = Pair(nx, ny)
+                        break
+                    }
+                }
+            }
+            if (foundEnemy != null) break
+        }
+
+        if (state.gameState == GameState.EXPLORATION) {
+            if (foundEnemy != null) {
+                triggerCombatInline(foundEnemy.first, foundEnemy.second)
+            }
+        } else {
+            if (state.activeEnemy == null) {
+                _uiState.update { it.copy(gameState = GameState.EXPLORATION) }
+                addLog("COMBAT CONFLICT RESOLVED: SYSTEM REVERTED TO EXPLORATION MODES.", LogType.SUCCESS)
+            } else {
+                val dist = Math.max(Math.abs(playerX - state.targetNodeX), Math.abs(playerY - state.targetNodeY))
+                if (dist >= 3) {
+                    _uiState.update { it.copy(gameState = GameState.EXPLORATION, activeEnemy = null) }
+                    addLog("OUT OF RANGE. ESCAPED HOSTILE RADAR. BACK TO EXPLORATION.", LogType.ALERT)
+                }
+            }
+        }
+    }
+
+    fun triggerCombatInline(targetX: Int, targetY: Int) {
+        val level = _uiState.value.level
+        val enemy = GameEngine.spawnEnemy(level)
+
+        _uiState.update { state ->
+            val baseCombatShield = if (state.runnerClass == NetrunnerClass.CYBER_SHIELD) {
+                minOf(state.playerMaxShield, state.playerShield + 30)
+            } else {
+                state.playerShield
+            }
+            state.copy(
+                gameState = GameState.COMBAT_START,
+                activeEnemy = enemy,
+                playerShield = baseCombatShield,
+                targetNodeX = targetX,
+                targetNodeY = targetY,
+                enemyCombatAction = "",
+                combatTurn = CombatTurn.PLAYER,
+                showCombatBanner = "⚔️ COMBAT STARTED",
+                isCombatInputEnabled = false,
+                combatFlashEnemy = false,
+                combatFlashPlayer = false,
+                combatScreenShake = false,
+                playerDamagePopup = null,
+                enemyDamagePopup = null,
+                showShieldEffect = false
+            )
+        }
+
+        addLog("==========================================", LogType.ERROR)
+        addLog("⚠️ SECURITY INTRUSION THREAT TRIGGERED: ${enemy.name}!", LogType.ERROR)
+        addLog("DESCRIPTION: ${enemy.description}", LogType.ALERT)
+        addLog("SYSTEM SWITCHED TO TURN-BASED COMBAT ENTRYS.", LogType.INFO)
+
+        if (_uiState.value.runnerClass == NetrunnerClass.CYBER_SHIELD) {
+            addLog("SENTINEL PROTOCOL: +30 Shield initialized.", LogType.SUCCESS)
+        }
+
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(1200)
+            _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true, gameState = GameState.PLAYER_TURN) }
+        }
+    }
+
+    fun combatAttack() {
+        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
+        val state = _uiState.value
+        val enemy = state.activeEnemy ?: return
+
+        _uiState.update { it.copy(gameState = GameState.ENEMY_TURN) }
+        val program = state.installedPrograms.firstOrNull { it.damage > 0 }
+            ?: Program("basic_slash", "Slasher.sys", "Deals baseline security breach damage.", 0, damage = 12)
+
+        executeCombatProgramInline(program)
+    }
+
+    fun combatDefend() {
+        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
+            val state = _uiState.value
+            val shieldHeal = 15 + (state.level * 3)
+            val newShield = minOf(state.playerMaxShield, state.playerShield + shieldHeal)
+            _uiState.update { it.copy(
+                playerShield = newShield,
+                defenseBonus = state.defenseBonus + 10,
+                showShieldEffect = true
+            ) }
+            addLog("DEFENSIVE BUFFER LOADED: +$shieldHeal Shield. Direct defense hardened (+10%).", LogType.SUCCESS)
+
+            kotlinx.coroutines.delay(600)
+            _uiState.update { it.copy(showShieldEffect = false) }
+
+            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
+            kotlinx.coroutines.delay(800)
+            executeEnemyCombatTurnInline()
+        }
+    }
+
+    fun combatHack() {
+        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
+            val state = _uiState.value
+            val enemy = state.activeEnemy ?: return@launch
+
+            if (state.ram < 3) {
+                addLog("HACK PROTOCOL ABORTED: Needs 3 MB RAM.", LogType.ERROR)
+                _uiState.update { it.copy(isCombatInputEnabled = true, combatTurn = CombatTurn.PLAYER, gameState = GameState.PLAYER_TURN) }
+                return@launch
+            }
+
+            _uiState.update { it.copy(ram = it.ram - 3) }
+
+            val hackDmg = 25 + (state.level * 4) + state.damageBonus
+            val enemyRemIntegrity = maxOf(0, enemy.integrity - hackDmg)
+            enemy.integrity = enemyRemIntegrity
+
+            _uiState.update { it.copy(combatFlashEnemy = true, enemyDamagePopup = "-$hackDmg HP") }
+            addLog("DIRECT SYSTEM EXPLOIT COMPILED: Bypassed firewall entirely!", LogType.SUCCESS)
+            addLog("Dealt $hackDmg system-penetrating damage to ${enemy.name}.", LogType.SUCCESS)
+
+            kotlinx.coroutines.delay(600)
+            _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
+
+            if (enemy.integrity <= 0) {
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY") }
+                kotlinx.coroutines.delay(1200)
+                handleCombatVictoryInline(enemy)
+                _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+                return@launch
+            }
+
+            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
+            kotlinx.coroutines.delay(800)
+            executeEnemyCombatTurnInline()
+        }
+    }
+
+    fun combatScan() {
+        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
+            val state = _uiState.value
+            val enemy = state.activeEnemy ?: return@launch
+
+            addLog("--- SCANNING TARGET PROCESS DATA ---", LogType.ALERT)
+            addLog("NAME: ${enemy.name} | CLASS: Cyber-Entity Layer ${state.level}", LogType.INFO)
+            addLog("FIREWALL SHELL: ${enemy.shield}/${enemy.maxShield} (Armor Rating: ${enemy.armor})", LogType.INFO)
+            addLog("CORE DATA: ${enemy.integrity}/${enemy.maxIntegrity} | ATK MODULE: ${enemy.damage}", LogType.INFO)
+            addLog("ANALYSIS COMPLETE: Signal feedback scrambled enemy telemetry! Enemy damage reduced next turn.", LogType.SUCCESS)
+
+            _uiState.update { stateNow ->
+                stateNow.copy(
+                    enemyCombatAction = "Scan complete. Hostile systems recalibrating.",
+                    combatFlashEnemy = true
+                )
+            }
+            kotlinx.coroutines.delay(600)
+            _uiState.update { it.copy(combatFlashEnemy = false) }
+
+            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
+            kotlinx.coroutines.delay(800)
+            executeEnemyCombatTurnInline(isScanStunned = true)
+        }
+    }
+
+    fun executeCombatProgramInline(program: Program) {
+        if (!_uiState.value.isCombatInputEnabled || (_uiState.value.gameState != GameState.PLAYER_TURN && _uiState.value.gameState != GameState.ENEMY_TURN)) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
+            val state = _uiState.value
+            val enemy = state.activeEnemy ?: return@launch
+
+            if (state.ram < program.ramCost) {
+                addLog("INSUFFICIENT RAM: Requires ${program.ramCost}MB, but only ${state.ram}MB allocated.", LogType.ERROR)
+                _uiState.update { it.copy(isCombatInputEnabled = true, combatTurn = CombatTurn.PLAYER) }
+                return@launch
+            }
+
+            addLog("> RUNNING ${program.name}...", LogType.INFO)
+
+            _uiState.update { it.copy(ram = it.ram - program.ramCost) }
+
+            val baseDmg = program.damage
+            val statPower = (state.level * 2) + state.damageBonus
+            var rawPlayerDamage = baseDmg + statPower
+            var isCrit = false
+
+            val critRate = 10 + (state.ram * 2)
+            val finalCritRate = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) critRate + 25 else critRate
+
+            if (Random.nextInt(100) < finalCritRate) {
+                isCrit = true
+                val critMultiplier = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) 2.0f else 1.5f
+                rawPlayerDamage = (rawPlayerDamage * critMultiplier).toInt()
+            }
+
+            if (state.runnerClass == NetrunnerClass.BUFFER_OVERFLOW) {
+                val mult = 1.0f + (state.ram * 0.03f)
+                rawPlayerDamage = (rawPlayerDamage * mult).toInt()
+            }
+
+            val enemyArmor = enemy.armor
+            val effectiveArmor = if (isCrit) (enemyArmor * 0.5f).toInt() else enemyArmor
+            val finalDmg = if (program.piercesDefense) {
+                rawPlayerDamage
+            } else {
+                maxOf(2, rawPlayerDamage - effectiveArmor)
+            }
+
+            val enemyRemShield = maxOf(0, enemy.shield - finalDmg)
+            val shieldDmg = enemy.shield - enemyRemShield
+            val bodyDmg = finalDmg - shieldDmg
+            val enemyRemIntegrity = maxOf(0, enemy.integrity - bodyDmg)
+
+            enemy.shield = enemyRemShield
+            enemy.integrity = enemyRemIntegrity
+
+            addLog("[CALC]: Base:${baseDmg} + Stats:${statPower} = Raw:${baseDmg + statPower}", LogType.INFO)
+            if (isCrit) {
+                addLog("CRITICAL HIT! [x${if (state.runnerClass == NetrunnerClass.CODE_SLASHER) "2.0" else "1.5"}] Armor bypassed: ${effectiveArmor}/${enemyArmor}", LogType.SUCCESS)
+            }
+            addLog("Dealt ${finalDmg} damage to ${enemy.name} (Shield: -${shieldDmg}, Core: -${bodyDmg}) [Hostile Armor: ${enemyArmor}]", LogType.SUCCESS)
+
+            if (program.heal > 0) {
+                val healed = minOf(state.maxIntegrity - state.integrity, program.heal)
+                _uiState.update { it.copy(integrity = it.integrity + healed) }
+                addLog("System integrity patch compiled: +$healed% Integrity.", LogType.SUCCESS)
+            }
+
+            if (program.shield > 0) {
+                val shieldHealed = minOf(state.playerMaxShield - state.playerShield, program.shield)
+                _uiState.update { it.copy(playerShield = it.playerShield + shieldHealed) }
+                addLog("Temporary firewalls reinforced: +$shieldHealed Shield Barrier.", LogType.SUCCESS)
+            }
+
+            val hasDmg = finalDmg > 0
+            val hasHealOrShield = program.heal > 0 || program.shield > 0
+            _uiState.update { stateNow ->
+                stateNow.copy(
+                    combatFlashEnemy = hasDmg,
+                    enemyDamagePopup = if (hasDmg) "-$finalDmg HP" else null,
+                    showShieldEffect = hasHealOrShield
+                )
+            }
+
+            kotlinx.coroutines.delay(600)
+            _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null, showShieldEffect = false) }
+
+            if (enemy.integrity <= 0) {
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY") }
+                kotlinx.coroutines.delay(1200)
+                handleCombatVictoryInline(enemy)
+                _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+                return@launch
+            }
+
+            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
+            kotlinx.coroutines.delay(800)
+            executeEnemyCombatTurnInline()
+        }
+    }
+
+    private fun executeEnemyCombatTurnInline(isScanStunned: Boolean = false) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
+            val state = _uiState.value
+            val enemy = state.activeEnemy ?: return@launch
+
+            val actions = listOf(
+                "Trojan injection stream",
+                "Rootkit port scan exploit",
+                "Distributed Denial-of-Service packets",
+                "Logic logicbomb payload"
+            )
+            val selectedAction = actions[Random.nextInt(actions.size)]
+            var baseEnemyDmg = enemy.damage + Random.nextInt(-2, 3)
+            if (baseEnemyDmg < 2) baseEnemyDmg = 2
+
+            if (isScanStunned) {
+                baseEnemyDmg = (baseEnemyDmg * 0.4f).toInt().coerceAtLeast(1)
+                addLog("SCANNED ANOMALY: Enemy damage reduced by 60% due to packet interference.", LogType.ALERT)
+            }
+
+            val defenseModifier = state.defenseBonus
+            val finalEnemyDmg = maxOf(1, baseEnemyDmg - defenseModifier)
+
+            val currentShield = state.playerShield
+            val shieldDamage = minOf(currentShield, finalEnemyDmg)
+            val remainingShield = currentShield - shieldDamage
+            val integrityDamage = finalEnemyDmg - shieldDamage
+            val newPlayerIntegrity = maxOf(0, state.integrity - integrityDamage)
+
+            _uiState.update { stateNow ->
+                stateNow.copy(
+                    integrity = newPlayerIntegrity,
+                    playerShield = remainingShield,
+                    enemyCombatAction = "${enemy.name} ran $selectedAction: Dealt $finalEnemyDmg damage. (Shield absorbed: $shieldDamage, Core hit: $integrityDamage)",
+                    combatFlashPlayer = true,
+                    combatScreenShake = true,
+                    playerDamagePopup = "-$finalEnemyDmg HP"
+                )
+            }
+
+            addLog("${enemy.name} executes $selectedAction...", LogType.ERROR)
+            if (shieldDamage > 0) {
+                addLog("Player Shield absorbed $shieldDamage damage.", LogType.ALERT)
+            }
+            if (integrityDamage > 0) {
+                addLog("System Integrity degraded by $integrityDamage%.", LogType.ERROR)
+            }
+
+            kotlinx.coroutines.delay(600)
+            _uiState.update { it.copy(combatFlashPlayer = false, combatScreenShake = false, playerDamagePopup = null) }
+
+            _uiState.update { stateNow ->
+                stateNow.copy(
+                    ram = minOf(stateNow.maxRam, stateNow.ram + stateNow.ramRecoveryRate),
+                    defenseBonus = 0
+                )
+            }
+
+            if (newPlayerIntegrity <= 0) {
+                _uiState.update { it.copy(showCombatBanner = "💀 DEFEAT") }
+                kotlinx.coroutines.delay(1200)
+                handleGameOver("Destroyed by security process ${enemy.name}")
+                _uiState.update { it.copy(showCombatBanner = null) }
+                return@launch
+            }
+
+            _uiState.update { it.copy(combatTurn = CombatTurn.PLAYER, isCombatInputEnabled = true, gameState = GameState.PLAYER_TURN) }
+        }
+    }
+
+    private fun handleCombatVictoryInline(enemy: Enemy) {
+        val state = _uiState.value
+        val bounty = enemy.bountyCredits
+
+        val updatedMaze = state.maze.map { it.clone() }.toTypedArray()
+        if (state.targetNodeY in updatedMaze.indices && state.targetNodeX in updatedMaze[0].indices) {
+            updatedMaze[state.targetNodeY][state.targetNodeX] = CellType.PATH
+        }
+
+        val gotItem = Random.nextInt(100) < 60
+        val rewards = listOf("NanoMed.sys", "RAMBoost.exe", "Decryptor.pkg")
+        val lootItem = if (gotItem) rewards[Random.nextInt(rewards.size)] else null
+
+        val updatedInventory = state.inventory.toMutableList()
+        if (lootItem != null) {
+            updatedInventory.add(lootItem)
+        }
+
+        _uiState.update { stateNow ->
+            stateNow.copy(
+                gameState = GameState.EXPLORATION,
+                credits = stateNow.credits + bounty,
+                totalCreditsEarned = stateNow.totalCreditsEarned + bounty,
+                inventory = updatedInventory,
+                maze = updatedMaze,
+                activeEnemy = null
+            )
+        }
+
+        updatePerspective()
+        addLog("CRITICAL SUCCESS: PROCESS ${enemy.name} TERMINATED.", LogType.SUCCESS)
+        addLog("Bounty extraction: +$bounty MB credits compiled.", LogType.SUCCESS)
+        if (lootItem != null) {
+            addLog("Discovered discarded payload bundle: $lootItem.", LogType.SUCCESS)
         }
     }
 
@@ -320,7 +991,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updatePerspective() {
         val state = _uiState.value
-        val perspective = GameEngine.render3DPerspective(state.maze, state.gridX, state.gridY, state.direction)
+        val perspective = GameEngine.render3DPerspective(state.maze, state.gridX, state.gridY, state.direction, state.activeWeather)
         _uiState.update { it.copy(perspectiveText = perspective) }
     }
 
@@ -329,7 +1000,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     // ----------------------------------------------------
 
     fun interact() {
-        if (_uiState.value.screen != ActiveScreen.EXPLORATION) return
+        if (_uiState.value.screen != ActiveScreen.EXPLORATION || _uiState.value.gameState != GameState.EXPLORATION) return
 
         val state = _uiState.value
         // 1. First, check if there is an interactive cell directly ahead of us
@@ -387,7 +1058,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             CellType.VIRUS_NODE -> {
                 addLog("FORCE-CONNECTING WITH ACTIVE THREAT...", LogType.ALERT)
-                triggerCombat(interactX, interactY)
+                triggerCombatInline(interactX, interactY)
             }
             else -> {
                 addLog("NO RESPONSE AT ADDR: (${interactX}, ${interactY}). IS PATH EMPTY?", LogType.ERROR)
@@ -792,7 +1463,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun fleeCombat() {
         val state = _uiState.value
-        if (state.screen != ActiveScreen.COMBAT) return
+        if (state.gameState == GameState.EXPLORATION) return
 
         // Backtrack player to starting safe point or previous cell
         // We can place them safely at (1, 1) or just escape with small penalty
@@ -802,6 +1473,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { stateNow ->
             stateNow.copy(
                 screen = ActiveScreen.EXPLORATION,
+                gameState = GameState.EXPLORATION,
                 credits = newCredits,
                 activeEnemy = null,
                 gridX = 1,
@@ -810,6 +1482,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         updatePerspective()
+        revealCellsAround(1, 1)
         addLog("EMERGENCY ESCAPE ROUTE FLOODED. RETREATED TO PORT SECURE.", LogType.ALERT)
         addLog("Bypassed connection telemetry fees: -$penalty Credits.", LogType.ALERT)
     }
@@ -873,6 +1546,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     logText = "COMPILED FirewallBuffer.pkg: Increased passive shield protection (+2 defense bonus)."
                     stateNow.copy(
                         defenseBonus = stateNow.defenseBonus + 2,
+                        inventory = updatedInventory
+                    )
+                }
+                "GibsonForecast.sys" -> {
+                    val stepsRemaining = (stateNow.nextEventSteps - stateNow.stepsSinceLastEvent).coerceAtLeast(1)
+                    val nextWeather = stateNow.predictedWeather ?: com.example.data.CyberWeather.values().filter { it != com.example.data.CyberWeather.CLEAR }.random()
+                    logText = "COMPILED GibsonForecast.sys: Next sub-grid atmospheric event predicted: [${nextWeather.title}] in $stepsRemaining steps."
+                    stateNow.copy(
+                        predictedWeather = nextWeather,
                         inventory = updatedInventory
                     )
                 }

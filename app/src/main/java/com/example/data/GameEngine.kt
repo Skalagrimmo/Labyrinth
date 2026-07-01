@@ -40,13 +40,13 @@ object GameEngine {
             }
             val blocks = mutableListOf<DungeonBlock>()
 
-            // 1. Generate diverse architectural forms (Forbidden to use identical rectangular rooms!)
-            val numAttempts = 15 + (width * height) / 25
+            // 1. Generate diverse architectural forms (Spacious rooms requiring 8-12 steps to cross!)
+            val numAttempts = 12 + (width * height) / 150
             for (i in 0 until numAttempts) {
-                val maxBw = minOf(6, width - 2).coerceAtLeast(3)
-                val maxBh = minOf(6, height - 2).coerceAtLeast(3)
-                val bw = if (maxBw > 3) 3 + random.nextInt(maxBw - 2) else 3
-                val bh = if (maxBh > 3) 3 + random.nextInt(maxBh - 2) else 3
+                val maxBw = minOf(12, width - 2).coerceAtLeast(8)
+                val maxBh = minOf(12, height - 2).coerceAtLeast(8)
+                val bw = if (maxBw > 8) 8 + random.nextInt(maxBw - 7) else 8
+                val bh = if (maxBh > 8) 8 + random.nextInt(maxBh - 7) else 8
                 val xRange = width - bw - 1
                 val yRange = height - bh - 1
                 val bx = 1 + (if (xRange > 0) random.nextInt(xRange) else 0)
@@ -188,7 +188,7 @@ object GameEngine {
                 queue.add(Pair(1, 1))
                 visited.add(Pair(1, 1))
                 while (!queue.isEmpty()) {
-                    val (cx, cy) = queue.poll()
+                    val (cx, cy) = queue.poll()!!
                     for ((dx, dy) in listOf(Pair(0, 1), Pair(0, -1), Pair(1, 0), Pair(-1, 0))) {
                         val nx = cx + dx
                         val ny = cy + dy
@@ -301,8 +301,8 @@ object GameEngine {
 
             reachableWalkable.shuffle(random)
 
-            // Data Stores (Hacking terminals)
-            val dataStoreCount = 2 + random.nextInt(2) + (layer / 3)
+            // Data Stores (Hacking terminals) - Scaled with map grid size
+            val dataStoreCount = 2 + random.nextInt(2) + (layer / 3) + (width * height) / 500
             val placedDataStoreCount = minOf(dataStoreCount, reachableWalkable.size)
             for (i in 0 until placedDataStoreCount) {
                 val cell = reachableWalkable[i]
@@ -310,8 +310,8 @@ object GameEngine {
             }
             reachableWalkable.removeAll(reachableWalkable.take(placedDataStoreCount))
 
-            // Virus Nodes (Active hostile processes)
-            val virusCount = 3 + random.nextInt(3) + (layer / 2)
+            // Virus Nodes (Active hostile processes) - Scaled with map grid size
+            val virusCount = 4 + random.nextInt(3) + (layer / 2) + (width * height) / 350
             val placedVirusCount = minOf(virusCount, reachableWalkable.size)
             for (i in 0 until placedVirusCount) {
                 val cell = reachableWalkable[i]
@@ -319,8 +319,8 @@ object GameEngine {
             }
             reachableWalkable.removeAll(reachableWalkable.take(placedVirusCount))
 
-            // Classified Crypt-Caches
-            val secretCount = 2 + random.nextInt(3)
+            // Classified Crypt-Caches - Scaled with map grid size
+            val secretCount = 3 + random.nextInt(3) + (width * height) / 600
             val placedSecretCount = minOf(secretCount, reachableWalkable.size)
             for (i in 0 until placedSecretCount) {
                 val cell = reachableWalkable[i]
@@ -328,8 +328,8 @@ object GameEngine {
             }
             reachableWalkable.removeAll(reachableWalkable.take(placedSecretCount))
 
-            // Additional healing/safety Access Points
-            val extraAccessCount = 1 + random.nextInt(2)
+            // Additional healing/safety Access Points - Scaled with map grid size
+            val extraAccessCount = 1 + random.nextInt(2) + (width * height) / 800
             val placedAccessCount = minOf(extraAccessCount, reachableWalkable.size)
             for (i in 0 until placedAccessCount) {
                 val cell = reachableWalkable[i]
@@ -365,10 +365,10 @@ object GameEngine {
             centers.add(Pair(cx, cy))
         }
         
-        // Carve rooms
+        // Carve rooms (9x9 size to require 9 steps to cross)
         for ((cx, cy) in centers) {
-            for (dy in -1..1) {
-                for (dx in -1..1) {
+            for (dy in -4..4) {
+                for (dx in -4..4) {
                     val rx = cx + dx
                     val ry = cy + dy
                     if (rx in 1 until width - 1 && ry in 1 until height - 1) {
@@ -422,7 +422,8 @@ object GameEngine {
         grid: Array<Array<CellType>>,
         px: Int,
         py: Int,
-        dir: Direction
+        dir: Direction,
+        activeWeather: CyberWeather = CyberWeather.CLEAR
     ): String {
         val canvas = CharCanvas(11, 31)
 
@@ -484,11 +485,13 @@ object GameEngine {
         }
 
         // Find the first blocking wall straight ahead
-        var maxVisibleDepth = 3
-        for (d in 1..3) {
-            if (cellTypes[d] == CellType.WALL) {
-                maxVisibleDepth = d
-                break
+        var maxVisibleDepth = if (activeWeather == CyberWeather.DATA_STORM) 1 else 3
+        if (activeWeather != CyberWeather.DATA_STORM) {
+            for (d in 1..3) {
+                if (cellTypes[d] == CellType.WALL) {
+                    maxVisibleDepth = d
+                    break
+                }
             }
         }
 

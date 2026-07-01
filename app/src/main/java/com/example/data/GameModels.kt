@@ -93,7 +93,22 @@ enum class CellType(val symbol: Char, val displayName: String) {
     ELEVATED_BALCONY('B', "High-Level Balcony"),
     STAIRS_UP('U', "Vertical Uplink Stairs"),
     STAIRS_DOWN('N', "Sub-Level Downstairs"),
-    GRAVITY_SLOPE('L', "Pulsing Gravity Slope")
+    GRAVITY_SLOPE('L', "Pulsing Gravity Slope"),
+    ECHO('E', "Phantom Echo Data")
+}
+
+enum class CyberWeather(
+    val title: String,
+    val description: String,
+    val colorHex: Long,
+    val effectDuration: Int
+) {
+    CLEAR("Clear Bandwidth", "Data channels are stable and signal loss is minimal.", 0xFF10B981, 0),
+    DATA_STORM("Gibsonian Data Storm", "Dense streams of raw telemetric static scramble direction vectors and restrict line-of-sight.", 0xFFEF4444, 8),
+    COLD_SPOT("Frozen Sector (Cold Spot)", "System temperature drops to absolute zero. Movements feel sluggish and color registers desaturate.", 0xFF38BDF8, 10),
+    HOT_NODE("Overheated Sub-Grid (Hot Node)", "High-voltage processing packets flood the sector. Movement speed is boosted, but systems overheat.", 0xFFF57C00, 10),
+    FRAGMENTATION("Memory Fragmentation", "The physical sectors warp and shift. Doors and firewall codes are dynamic.", 0xFFEC4899, 6),
+    ECHOES("Spectral Echoes Flow", "Deceased netrunner telemetry fragments materialize as phantom echoes.", 0xFFC084FC, 12)
 }
 
 data class Enemy(
@@ -134,3 +149,12 @@ data class RunRecord(
     val timestamp: Long = System.currentTimeMillis(),
     val outcome: String // "DECEASED" or "DISCONNECTED" (won/alive)
 )
+
+enum class GameState {
+    EXPLORATION,
+    COMBAT_START,
+    PLAYER_TURN,
+    ENEMY_TURN,
+    COMBAT_END
+}
+
