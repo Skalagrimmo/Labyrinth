@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -309,7 +310,7 @@ fun TerminalScreen(
 
             // Always Visible Terminal Log Output (Footer console log)
             if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
-                TerminalLogConsole(uiState.logFeed)
+                TerminalLogConsole(uiState)
                 Spacer(modifier = Modifier.height(4.dp))
                 HighDensityBottomNavigation(
                     currentScreen = uiState.screen,
@@ -453,7 +454,7 @@ fun TerminalHeader(uiState: GameViewModel.GameUiState, onLeaderboardClick: () ->
                         .testTag("leaderboard_tab_button")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.List,
+                        imageVector = Icons.AutoMirrored.Filled.List,
                         contentDescription = "Mainframe Logs",
                         tint = CyberCyan,
                         modifier = Modifier.size(16.dp)
@@ -792,7 +793,7 @@ fun ExplorationView(
                                 ) {
                                     RepeatingNavigationButton(
                                         onClick = { viewModel.turnLeft() },
-                                        icon = { Icon(Icons.Default.KeyboardArrowLeft, "Turn Left", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
+                                        icon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Turn Left", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
                                         modifier = Modifier.testTag("btn_turn_left")
                                     )
 
@@ -804,7 +805,7 @@ fun ExplorationView(
 
                                     RepeatingNavigationButton(
                                         onClick = { viewModel.turnRight() },
-                                        icon = { Icon(Icons.Default.KeyboardArrowRight, "Turn Right", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
+                                        icon = { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Turn Right", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
                                         modifier = Modifier.testTag("btn_turn_right")
                                     )
                                 }
@@ -847,6 +848,36 @@ fun ExplorationView(
                                     modifier = Modifier.padding(vertical = 2.dp)
                                 )
 
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                // Real-Time Enemy Decryption Compile Bar (System Shock cyber style)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "💥 HOSTILE DECRYPTION PACKET:",
+                                        color = CyberAmber,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "${(uiState.enemyAttackCharge * 100).toInt()}% COMPILING",
+                                        color = CyberAmber,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                ProgressBarRetro(
+                                    current = (uiState.enemyAttackCharge * 100).toInt(),
+                                    max = 100,
+                                    color = CyberAmber,
+                                    modifier = Modifier.padding(vertical = 2.dp)
+                                )
+
                                 // Row 1: Primary Combat Actions (Attack, Defend, Item, Flee)
                                 var showItemMenu by remember { mutableStateOf(false) }
 
@@ -857,7 +888,7 @@ fun ExplorationView(
                                     // 1. Attack Button
                                     Button(
                                         onClick = { viewModel.combatAttack() },
-                                        enabled = uiState.isCombatInputEnabled && uiState.gameState == GameState.PLAYER_TURN,
+                                        enabled = uiState.isCombatInputEnabled && uiState.attackCooldown <= 0,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = CyberPink.copy(alpha = 0.5f),
                                             disabledContainerColor = CyberPink.copy(alpha = 0.25f)
@@ -865,36 +896,48 @@ fun ExplorationView(
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
-                                            .weight(1f)
+                                            .weight(1.3f)
                                             .height(26.dp)
                                             .testTag("btn_combat_attack")
                                     ) {
-                                        Text("ATTACK", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            text = if (uiState.attackCooldown > 0) "ATTACK (${String.format("%.1f", uiState.attackCooldown / 10f)}s)" else "ATTACK",
+                                            color = Color.White,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 7.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
 
                                     // 2. Defend Button
                                     Button(
                                         onClick = { viewModel.combatDefend() },
-                                        enabled = uiState.isCombatInputEnabled && uiState.gameState == GameState.PLAYER_TURN,
+                                        enabled = uiState.isCombatInputEnabled && uiState.defendCooldown <= 0 && uiState.activeFirewallTimeLeft <= 0,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = CyberDark.copy(alpha = 0.5f),
                                             disabledContainerColor = CyberDark.copy(alpha = 0.25f)
                                         ),
-                                        border = BorderStroke(1.dp, CyberBrightGreen.copy(alpha = 0.5f)),
+                                        border = BorderStroke(1.dp, if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberBrightGreen.copy(alpha = 0.5f)),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
-                                            .weight(1f)
+                                            .weight(1.3f)
                                             .height(26.dp)
                                             .testTag("btn_combat_defend")
                                     ) {
-                                        Text("DEFEND", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text(
+                                            text = if (uiState.activeFirewallTimeLeft > 0) "ACTIVE (${String.format("%.1f", uiState.activeFirewallTimeLeft / 10f)}s)" else if (uiState.defendCooldown > 0) "SHIELD (${String.format("%.1f", uiState.defendCooldown / 10f)}s)" else "DEFEND",
+                                            color = if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberBrightGreen,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 7.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
                                     }
 
                                     // 3. Item Button
                                     Button(
                                         onClick = { showItemMenu = !showItemMenu },
-                                        enabled = uiState.isCombatInputEnabled && uiState.gameState == GameState.PLAYER_TURN && uiState.inventory.isNotEmpty(),
+                                        enabled = uiState.isCombatInputEnabled && uiState.inventory.isNotEmpty(),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = CyberDark.copy(alpha = 0.5f),
                                             disabledContainerColor = CyberDark.copy(alpha = 0.25f)
@@ -973,7 +1016,7 @@ fun ExplorationView(
 
                                 // Row 3: Installed Programs Quick Launcher
                                 if (uiState.installedPrograms.isNotEmpty()) {
-                                    Divider(color = CyberBorder.copy(alpha = 0.4f), thickness = 1.dp, modifier = Modifier.padding(vertical = 2.dp))
+                                    HorizontalDivider(color = CyberBorder.copy(alpha = 0.4f), thickness = 1.dp, modifier = Modifier.padding(vertical = 2.dp))
                                     Text(
                                         text = "INSTALLED SOFTWARE PROTOCOLS //",
                                         color = CyberCyan,
@@ -990,12 +1033,15 @@ fun ExplorationView(
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         uiState.installedPrograms.forEach { prog ->
+                                            val progCooldown = uiState.programCooldowns[prog.id] ?: 0
+                                            val isReady = progCooldown <= 0
                                             val hasRam = uiState.ram >= prog.ramCost
+                                            val isButtonEnabled = hasRam && isReady && uiState.isCombatInputEnabled
                                             Box(
                                                 modifier = Modifier
-                                                    .background(if (hasRam) CyberMutedGreen else CyberDark, RoundedCornerShape(4.dp))
-                                                    .border(1.dp, if (hasRam) CyberCyan else CyberBorder.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                                                    .clickable(enabled = hasRam) {
+                                                    .background(if (isButtonEnabled) CyberMutedGreen else CyberDark, RoundedCornerShape(4.dp))
+                                                    .border(1.dp, if (isButtonEnabled) CyberCyan else CyberBorder.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                                    .clickable(enabled = isButtonEnabled) {
                                                         viewModel.executeCombatProgramInline(prog)
                                                     }
                                                     .padding(horizontal = 6.dp, vertical = 3.dp)
@@ -1006,15 +1052,15 @@ fun ExplorationView(
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     Text(
-                                                        text = prog.name,
-                                                        color = if (hasRam) CyberCyan else Color.Gray,
+                                                        text = if (progCooldown > 0) "${prog.name} (${String.format("%.1f", progCooldown / 10f)}s)" else prog.name,
+                                                        color = if (isButtonEnabled) CyberCyan else Color.Gray,
                                                         fontFamily = FontFamily.Monospace,
                                                         fontSize = 8.sp,
                                                         fontWeight = FontWeight.Bold
                                                     )
                                                     Text(
                                                         text = "(${prog.ramCost}MB)",
-                                                        color = if (hasRam) CyberPink else Color.Gray,
+                                                        color = if (isButtonEnabled) CyberPink else Color.Gray,
                                                         fontFamily = FontFamily.Monospace,
                                                         fontSize = 7.sp
                                                     )
@@ -1158,7 +1204,7 @@ fun ExplorationView(
                             )
                         }
 
-                        Divider(color = CyberBorder, thickness = 1.dp)
+                        HorizontalDivider(color = CyberBorder, thickness = 1.dp)
 
                         // Cyber-Space Weather Environmental HUD
                         Spacer(modifier = Modifier.height(4.dp))
@@ -1245,7 +1291,7 @@ fun ExplorationView(
                         }
 
                         Spacer(modifier = Modifier.height(4.dp))
-                        Divider(color = CyberBorder, thickness = 1.dp)
+                        HorizontalDivider(color = CyberBorder, thickness = 1.dp)
 
                         // Click to interact/hack
                         Button(
@@ -2318,7 +2364,7 @@ fun FirstPersonPerspectiveCanvas(
             }
 
             // --- A3. Glowing Cyber Shield (shimmering curved defensive dome) ---
-            if (uiState.showShieldEffect) {
+            if (uiState.showShieldEffect || uiState.activeFirewallTimeLeft > 0) {
                 val shieldPath = Path()
                 shieldPath.moveTo(0f, h)
                 shieldPath.cubicTo(w * 0.25f, h * 0.72f, w * 0.75f, h * 0.72f, w, h)
@@ -2391,14 +2437,14 @@ fun FirstPersonPerspectiveCanvas(
                     .background(Color.Black.copy(alpha = 0.85f))
                     .border(
                         width = 1.dp,
-                        color = (if (uiState.combatTurn == com.example.ui.CombatTurn.PLAYER) CyberCyan else CyberPink).copy(alpha = badgePulse),
+                        color = (if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberPink).copy(alpha = badgePulse),
                         shape = RoundedCornerShape(4.dp)
                     )
                     .padding(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 Text(
-                    text = if (uiState.combatTurn == com.example.ui.CombatTurn.PLAYER) "🎯 YOUR TURN // ACTIVE" else "💢 ENEMIES TURN // COMPUTING...",
-                    color = if (uiState.combatTurn == com.example.ui.CombatTurn.PLAYER) CyberCyan else CyberPink,
+                    text = if (uiState.activeFirewallTimeLeft > 0) "🛡️ FIREWALL ACTIVE [${String.format("%.1f", uiState.activeFirewallTimeLeft / 10f)}s]" else "⚡ REAL-TIME SYSTEM OVERLOAD ACTIVE",
+                    color = if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberPink,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 8.sp
@@ -3144,7 +3190,7 @@ fun CombatView(
                         )
                     }
 
-                    Divider(color = CyberBorder, thickness = 1.dp)
+                    HorizontalDivider(color = CyberBorder, thickness = 1.dp)
 
                     // Render installed programs
                     uiState.installedPrograms.forEach { prog ->
@@ -3881,7 +3927,7 @@ fun GameOverView(
                     fontSize = 11.sp
                 )
 
-                Divider(color = CyberBorder)
+                HorizontalDivider(color = CyberBorder)
 
                 Text(
                     text = "RUNNER SPECS: ${uiState.runnerClass.title}",
@@ -3989,27 +4035,23 @@ fun ProgressBarRetro(
 }
 
 // ==========================================
-// Sub-Composable: Terminal Scrolling Logs
+// Sub-Composable: Terminal Scrolling Logs & Visual Telemetry Dashboard
 // ==========================================
 @Composable
-fun TerminalLogConsole(logs: List<LogMessage>) {
+fun TerminalLogConsole(uiState: GameViewModel.GameUiState) {
+    val logs = uiState.logFeed
+    var activeConsoleTab by remember { mutableStateOf(0) } // 0 = TELEMETRY DIAGNOSTICS, 1 = RAW SIGNAL FEED
+
     val infiniteTransition = rememberInfiniteTransition(label = "crt_pulse")
     val glowIntensity by infiniteTransition.animateFloat(
-        initialValue = 0.6f,
+        initialValue = 0.7f,
         targetValue = 1.0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1500, easing = LinearEasing),
+            animation = tween(1800, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "glow_float"
     )
-
-    val listState = rememberLazyListState()
-    LaunchedEffect(logs.size) {
-        if (logs.isNotEmpty()) {
-            listState.scrollToItem(logs.size - 1)
-        }
-    }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = CyberDark),
@@ -4017,53 +4059,444 @@ fun TerminalLogConsole(logs: List<LogMessage>) {
         shape = RoundedCornerShape(12.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .height(70.dp)
+            .height(115.dp) // Perfect height for dual-pane diagnostics
     ) {
         Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
-            Text(
-                text = "SYSTEM LOG MONITOR // LIVE DIAGNOSTICS",
-                color = CyberCyan,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
+            // Header row
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(
+                                if (uiState.gameState != GameState.EXPLORATION) CyberPink else CyberCyan,
+                                CircleShape
+                            )
+                    )
+                    Text(
+                        text = if (activeConsoleTab == 0) "CYBER-TELEMETRY // VISUAL SYSTEM GRAPHICS" else "RAW COGNITIVE LOG // LOGICAL TRACE",
+                        color = if (uiState.gameState != GameState.EXPLORATION) CyberPink else CyberCyan,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.graphicsLayer { alpha = glowIntensity }
+                    )
+                }
+
+                // Aesthetic tabs
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .border(
+                                1.dp,
+                                if (activeConsoleTab == 0) CyberCyan else CyberBorder,
+                                RoundedCornerShape(4.dp)
+                            )
+                            .background(if (activeConsoleTab == 0) CyberCyan.copy(alpha = 0.15f) else Color.Transparent)
+                            .clickable { activeConsoleTab = 0 }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "VISUAL TELEMETRY",
+                            color = if (activeConsoleTab == 0) CyberCyan else Color.Gray,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .border(
+                                1.dp,
+                                if (activeConsoleTab == 1) CyberCyan else CyberBorder,
+                                RoundedCornerShape(4.dp)
+                            )
+                            .background(if (activeConsoleTab == 1) CyberCyan.copy(alpha = 0.15f) else Color.Transparent)
+                            .clickable { activeConsoleTab = 1 }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "LOG FEED",
+                            color = if (activeConsoleTab == 1) CyberCyan else Color.Gray,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            HorizontalDivider(color = CyberBorder.copy(alpha = 0.3f), thickness = 1.dp, modifier = Modifier.padding(bottom = 4.dp))
+
+            Box(
                 modifier = Modifier
-                    .padding(bottom = 2.dp)
-                    .graphicsLayer { alpha = glowIntensity }
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                if (activeConsoleTab == 0) {
+                    TelemetryDashboardView(uiState)
+                } else {
+                    val listState = rememberLazyListState()
+                    LaunchedEffect(logs.size) {
+                        if (logs.isNotEmpty()) {
+                            listState.scrollToItem(logs.size - 1)
+                        }
+                    }
+
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .testTag("terminal_live_logs"),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        items(logs) { log ->
+                            val color = when (log.type) {
+                                LogType.INFO -> CyberCyan
+                                LogType.ALERT -> CyberAmber
+                                LogType.SUCCESS -> CyberBrightGreen
+                                LogType.ERROR -> CyberPink
+                            }
+                            val prefix = when (log.type) {
+                                LogType.INFO -> "> "
+                                LogType.ALERT -> "[!] "
+                                LogType.SUCCESS -> "[+] "
+                                LogType.ERROR -> "[X] "
+                            }
+
+                            Text(
+                                text = "$prefix${log.text}",
+                                color = color,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                lineHeight = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun TelemetryDashboardView(uiState: GameViewModel.GameUiState) {
+    val phaseTransition = rememberInfiniteTransition(label = "OscPhase")
+    val phaseProgress by phaseTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 2f * Math.PI.toFloat(),
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "phase"
+    )
+
+    Row(
+        modifier = Modifier.fillMaxSize(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // COLUMN 1: OSCILLOSCOPE CYBER-WAVE (40% width)
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF030406)),
+            border = BorderStroke(1.dp, CyberBorder.copy(alpha = 0.5f)),
+            modifier = Modifier
+                .weight(1.3f)
+                .fillMaxHeight()
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val width = size.width
+                    val height = size.height
+                    val midY = height / 2f
+
+                    val isCombat = uiState.gameState != GameState.EXPLORATION
+                    val isWeatherFlare = uiState.activeWeather == com.example.data.CyberWeather.DATA_STORM
+                    val isWeatherCold = uiState.activeWeather == com.example.data.CyberWeather.COLD_SPOT
+                    val integrityFraction = uiState.integrity.toFloat() / uiState.maxIntegrity.coerceAtLeast(1)
+
+                    val baseColor = when {
+                        isCombat -> CyberPink
+                        isWeatherFlare -> CyberAmber
+                        isWeatherCold -> Color(0xFF60A5FA)
+                        else -> CyberCyan
+                    }
+
+                    val amplitude = when {
+                        integrityFraction < 0.3f -> height * 0.40f
+                        isCombat -> height * 0.32f
+                        isWeatherFlare -> height * 0.35f
+                        isWeatherCold -> height * 0.12f
+                        else -> height * 0.22f
+                    }
+
+                    val frequency = when {
+                        isCombat -> 5.5f
+                        isWeatherFlare -> 8f
+                        isWeatherCold -> 1.5f
+                        else -> 3f
+                    }
+
+                    // Draw subtle grid line coordinates
+                    drawLine(Color(0x1F00F3FF), Offset(0f, midY), Offset(width, midY), strokeWidth = 1f)
+                    for (gridX in (width / 5).toInt() until width.toInt() step (width / 5).toInt()) {
+                        drawLine(Color(0x1100F3FF), Offset(gridX.toFloat(), 0f), Offset(gridX.toFloat(), height), strokeWidth = 1f)
+                    }
+
+                    val path1 = Path()
+                    val path2 = Path()
+
+                    for (x in 0..width.toInt() step 2) {
+                        val xFloat = x.toFloat()
+                        val radians = (xFloat / width) * frequency * (2f * Math.PI.toFloat()) + phaseProgress
+
+                        val glitchOffset = if (isWeatherFlare && x % 10 == 0) {
+                            val rand = java.util.Random(x.toLong() + (phaseProgress * 10).toLong())
+                            (rand.nextFloat() - 0.5f) * amplitude * 0.5f
+                        } else 0f
+
+                        val yFloat = midY + (Math.sin(radians.toDouble()).toFloat() * amplitude) + glitchOffset
+
+                        if (x == 0) {
+                            path1.moveTo(xFloat, yFloat)
+                        } else {
+                            path1.lineTo(xFloat, yFloat)
+                        }
+
+                        val yFloat2 = midY + (Math.cos((radians - 1.2f).toDouble()).toFloat() * amplitude * 0.6f)
+                        if (x == 0) {
+                            path2.moveTo(xFloat, yFloat2)
+                        } else {
+                            path2.lineTo(xFloat, yFloat2)
+                        }
+                    }
+
+                    drawPath(path2, color = baseColor.copy(alpha = 0.25f), style = Stroke(width = 1f))
+                    drawPath(path1, color = baseColor, style = Stroke(width = 1.5f))
+                }
+
+                // Wave label
+                Text(
+                    text = if (uiState.gameState != GameState.EXPLORATION) "COMBAT WAVE: SIG_ALRT" else "COHERENCE: SIG_OK",
+                    color = (if (uiState.gameState != GameState.EXPLORATION) CyberPink else CyberCyan).copy(alpha = 0.8f),
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 7.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                )
+            }
+        }
+
+        // COLUMN 2: SUB-SYSTEM ANALYTICS (30% width)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            val isCombat = uiState.gameState != GameState.EXPLORATION
+
+            // Core load animated flutter
+            var cpuLoad by remember { mutableStateOf(34f) }
+            LaunchedEffect(isCombat) {
+                while (true) {
+                    val base = if (isCombat) 74f else 32f
+                    val flutter = (Math.random() * 8 - 4).toFloat()
+                    cpuLoad = (base + flutter).coerceIn(10f, 99f)
+                    delay(500)
+                }
+            }
+
+            // Sync index
+            val syncIndex = (60 + uiState.level * 8).coerceIn(60, 100).toFloat() / 100f
+
+            MiniSensorRow(
+                label = "MEM [ RAM ]",
+                valueText = "${uiState.ram}/${uiState.maxRam}MB",
+                progress = uiState.ram.toFloat() / uiState.maxRam.coerceAtLeast(1),
+                color = CyberPink
             )
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .testTag("terminal_live_logs"),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                items(logs) { log ->
-                    val color = when (log.type) {
-                        LogType.INFO -> CyberCyan
-                        LogType.ALERT -> CyberAmber
-                        LogType.SUCCESS -> CyberBrightGreen
-                        LogType.ERROR -> CyberPink
-                    }
-                    val prefix = when (log.type) {
-                        LogType.INFO -> "> "
-                        LogType.ALERT -> "[!] "
-                        LogType.SUCCESS -> "[+] "
-                        LogType.ERROR -> "[X] "
-                    }
+            MiniSensorRow(
+                label = "CORE [ CPU ]",
+                valueText = "${cpuLoad.toInt()}% LOAD",
+                progress = cpuLoad / 100f,
+                color = CyberCyan
+            )
 
+            MiniSensorRow(
+                label = "SYNC [ LNK ]",
+                valueText = "${(syncIndex * 100).toInt()}% SYNC",
+                progress = syncIndex,
+                color = CyberAmber
+            )
+        }
+
+        // COLUMN 3: DIGITAL BEACONS & DATA MATRIX (30% width)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            // System LEDs indicators
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // LED 1: SEC
+                val secActive = uiState.gameState != GameState.EXPLORATION
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(CyberMutedGreen, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(if (secActive) CyberPink else Color(0xFF10B981), CircleShape)
+                    )
                     Text(
-                        text = "$prefix${log.text}",
-                        color = color,
+                        text = if (secActive) "ALRT" else "SAFE",
+                        color = if (secActive) CyberPink else Color(0xFF10B981),
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 9.sp,
-                        lineHeight = 11.sp
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                // LED 2: WTR
+                val isWeatherClear = uiState.activeWeather == com.example.data.CyberWeather.CLEAR
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .background(CyberMutedGreen, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(if (isWeatherClear) Color(0xFF10B981) else CyberAmber, CircleShape)
+                    )
+                    Text(
+                        text = if (isWeatherClear) "NORM" else "HAZR",
+                        color = if (isWeatherClear) Color(0xFF10B981) else CyberAmber,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // Hex datastream memory dump
+            val hexStateList = remember { mutableStateListOf("0x4A1E MEM_STABLE", "0x5F12 SYNC_WAIT", "0x9E2B LNK_ESTB") }
+            LaunchedEffect(Unit) {
+                val rand = java.util.Random()
+                val ops = listOf("TX_READ", "RX_WRITE", "ALLOC_M", "PORT_PN", "SEC_PUL", "GATE_CY")
+                while (true) {
+                    delay(700)
+                    val nextHex = "0x${Integer.toHexString(rand.nextInt(0xFFF)).uppercase()}"
+                    val nextOp = ops[rand.nextInt(ops.size)]
+
+                    if (hexStateList.size >= 3) {
+                        hexStateList.removeAt(0)
+                    }
+                    hexStateList.add("$nextHex $nextOp")
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .background(Color.Black, RoundedCornerShape(4.dp))
+                    .border(1.dp, CyberBorder.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                    .padding(3.dp),
+                verticalArrangement = Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text = "MATRIX DATASTREAM //",
+                    color = CyberMutedText,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 6.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                hexStateList.forEach { line ->
+                    Text(
+                        text = line,
+                        color = CyberBrightGreen,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 7.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
         }
     }
 }
+
+@Composable
+fun MiniSensorRow(label: String, valueText: String, progress: Float, color: Color) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = Color.Gray,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = valueText,
+                color = color,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 7.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(modifier = Modifier.height(1.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().height(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            val activeSegments = (progress * 10).toInt().coerceIn(0, 10)
+            for (i in 0 until 10) {
+                val segmentColor = if (i < activeSegments) color else Color.Gray.copy(alpha = 0.15f)
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(segmentColor, RoundedCornerShape(1.dp))
+                )
+            }
+        }
+    }
+}
+
 
 // ==========================================
 // Sub-Composable: High Density Bottom Navigation

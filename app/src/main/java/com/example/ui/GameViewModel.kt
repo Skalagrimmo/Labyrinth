@@ -98,6 +98,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val showShieldEffect: Boolean = false,
         val showCombatBanner: String? = null, // e.g. "COMBAT STARTED", "VICTORY", "DEFEAT"
         val isCombatInputEnabled: Boolean = true,
+        val enemyAttackCharge: Float = 0f,
+        val activeFirewallTimeLeft: Int = 0,
+        val defendCooldown: Int = 0,
+        val attackCooldown: Int = 0,
+        val programCooldowns: Map<String, Int> = emptyMap(),
 
         // World Expansion State
         val currentZone: com.example.data.Zone = com.example.data.Zone.BUILDING,
@@ -917,7 +922,132 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (dist >= 3) {
                     _uiState.update { it.copy(gameState = GameState.EXPLORATION, activeEnemy = null) }
                     addLog("OUT OF RANGE. ESCAPED HOSTILE RADAR. BACK TO EXPLORATION.", LogType.ALERT)
+                } else {
+                    if (state.isCombatInputEnabled && state.gameState != GameState.COMBAT_START) {
+                        runRealTimeCombatTick()
+                    }
                 }
+            }
+        }
+    }
+
+    private var realTimeTickCounter = 0
+
+    private fun runRealTimeCombatTick() {
+        val state = _uiState.value
+        val enemy = state.activeEnemy ?: return
+
+        // 1. Decrement player action cooldowns
+        val newAttackCooldown = (state.attackCooldown - 1).coerceAtLeast(0)
+        val newDefendCooldown = (state.defendCooldown - 1).coerceAtLeast(0)
+        val newFirewallTimeLeft = (state.activeFirewallTimeLeft - 1).coerceAtLeast(0)
+
+        val updatedProgCooldowns = state.programCooldowns.mapValues { it.value - 1 }
+            .filterValues { it > 0 }
+
+        // 2. RAM Recovery in real-time during combat!
+        // Every 1.0 seconds (10 ticks), player recovers RAM recovery rate
+        realTimeTickCounter++
+        var newRam = state.ram
+        if (realTimeTickCounter >= 10) {
+            realTimeTickCounter = 0
+            newRam = minOf(state.maxRam, state.ram + state.ramRecoveryRate)
+        }
+
+        // 3. Enemy Attack Charge Update
+        // Enemy charges their attack in real-time. Charge rate depends on level/speed.
+        val chargeDelta = 0.04f + (state.level * 0.005f)
+        var newCharge = state.enemyAttackCharge + chargeDelta
+        var enemyFired = false
+
+        if (newCharge >= 1.0f) {
+            newCharge = 0.0f
+            enemyFired = true
+        }
+
+        _uiState.update { stateNow ->
+            stateNow.copy(
+                attackCooldown = newAttackCooldown,
+                defendCooldown = newDefendCooldown,
+                activeFirewallTimeLeft = newFirewallTimeLeft,
+                programCooldowns = updatedProgCooldowns,
+                ram = newRam,
+                enemyAttackCharge = newCharge
+            )
+        }
+
+        // 4. Handle Enemy Attack Execution
+        if (enemyFired) {
+            executeEnemyAttackRealTime(enemy)
+        }
+    }
+
+    private fun executeEnemyAttackRealTime(enemy: Enemy) {
+        val state = _uiState.value
+        
+        val actions = listOf(
+            "Trojan injection stream",
+            "Rootkit port scan exploit",
+            "Distributed Denial-of-Service packets",
+            "Logic logicbomb payload"
+        )
+        val selectedAction = actions[Random.nextInt(actions.size)]
+        var baseEnemyDmg = enemy.damage + Random.nextInt(-2, 3)
+        if (baseEnemyDmg < 2) baseEnemyDmg = 2
+
+        // Gravity Slope check (Evasion boost reduces enemy hit intensity by 30%)
+        val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
+        if (standCell == com.example.data.CellType.GRAVITY_SLOPE) {
+            baseEnemyDmg = (baseEnemyDmg * 0.70f).toInt().coerceAtLeast(1)
+            addLog("✨ GRAVITY EVASION: Magnetic slope rapid momentum absorbed 30% of incoming packet force!", LogType.SUCCESS)
+        }
+
+        // Active Firewall Shield reduction: if active, reduce damage by 75%!
+        val isFirewallActive = state.activeFirewallTimeLeft > 0
+        val finalEnemyDmg = if (isFirewallActive) {
+            val reduced = (baseEnemyDmg * 0.25f).toInt()
+            addLog("🛡️ FIREWALL ACTIVE: Blocked 75% of incoming cyber payload!", LogType.SUCCESS)
+            reduced.coerceAtLeast(1)
+        } else {
+            maxOf(1, baseEnemyDmg - state.defenseBonus)
+        }
+
+        val currentShield = state.playerShield
+        val shieldDamage = minOf(currentShield, finalEnemyDmg)
+        val remainingShield = currentShield - shieldDamage
+        val integrityDamage = finalEnemyDmg - shieldDamage
+        val newPlayerIntegrity = maxOf(0, state.integrity - integrityDamage)
+
+        _uiState.update { stateNow ->
+            stateNow.copy(
+                integrity = newPlayerIntegrity,
+                playerShield = remainingShield,
+                enemyCombatAction = "${enemy.name} ran $selectedAction: Dealt $finalEnemyDmg damage. (Shield absorbed: $shieldDamage, Core hit: $integrityDamage)",
+                combatFlashPlayer = true,
+                combatScreenShake = true,
+                playerDamagePopup = "-$finalEnemyDmg HP"
+            )
+        }
+
+        addLog("💥 INCOMING THREAT: ${enemy.name} executes $selectedAction!", LogType.ERROR)
+        if (shieldDamage > 0) {
+            addLog("Player Shield absorbed $shieldDamage damage.", LogType.ALERT)
+        }
+        if (integrityDamage > 0) {
+            addLog("System Integrity degraded by $integrityDamage%.", LogType.ERROR)
+        }
+
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(400)
+            _uiState.update { it.copy(combatFlashPlayer = false, combatScreenShake = false, playerDamagePopup = null) }
+        }
+
+        if (newPlayerIntegrity <= 0) {
+            _uiState.update { it.copy(showCombatBanner = "💀 DEFEAT") }
+            viewModelScope.launch {
+                kotlinx.coroutines.delay(1200)
+                handleGameOver("Destroyed by security process ${enemy.name}")
+                _uiState.update { it.copy(showCombatBanner = null) }
             }
         }
     }
@@ -1133,21 +1263,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 targetNodeY = targetY,
                 enemyCombatAction = "",
                 combatTurn = CombatTurn.PLAYER,
-                showCombatBanner = "⚔️ COMBAT STARTED",
+                showCombatBanner = "⚔️ SYSTEM OVERLOAD INTRUSION",
                 isCombatInputEnabled = false,
                 combatFlashEnemy = false,
                 combatFlashPlayer = false,
                 combatScreenShake = false,
                 playerDamagePopup = null,
                 enemyDamagePopup = null,
-                showShieldEffect = false
+                showShieldEffect = false,
+                enemyAttackCharge = 0f,
+                activeFirewallTimeLeft = 0,
+                defendCooldown = 0,
+                attackCooldown = 0,
+                programCooldowns = emptyMap()
             )
         }
 
         addLog("==========================================", LogType.ERROR)
         addLog("⚠️ SECURITY INTRUSION THREAT TRIGGERED: ${enemy.name}!", LogType.ERROR)
         addLog("DESCRIPTION: ${enemy.description}", LogType.ALERT)
-        addLog("SYSTEM SWITCHED TO TURN-BASED COMBAT ENTRYS.", LogType.INFO)
+        addLog("SYSTEM DETECTED RECALIBRATION: INITIATING REAL-TIME SHOCK COMBAT.", LogType.INFO)
 
         if (_uiState.value.runnerClass == NetrunnerClass.CYBER_SHIELD) {
             addLog("SENTINEL PROTOCOL: +30 Shield initialized.", LogType.SUCCESS)
@@ -1160,11 +1295,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun combatAttack() {
-        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
+        if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
+        if (state.attackCooldown > 0) return
         val enemy = state.activeEnemy ?: return
 
-        _uiState.update { it.copy(gameState = GameState.ENEMY_TURN) }
+        // Set baseline attack cooldown: 0.8 seconds (8 ticks)
+        _uiState.update { it.copy(attackCooldown = 8) }
+
         val program = state.installedPrograms.firstOrNull { it.damage > 0 }
             ?: Program("basic_slash", "Slasher.sys", "Deals baseline security breach damage.", 0, damage = 12)
 
@@ -1172,43 +1310,53 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun combatDefend() {
-        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
-            val state = _uiState.value
-            val shieldHeal = 15 + (state.level * 3)
-            val newShield = minOf(state.playerMaxShield, state.playerShield + shieldHeal)
-            _uiState.update { it.copy(
-                playerShield = newShield,
-                defenseBonus = state.defenseBonus + 10,
-                showShieldEffect = true
-            ) }
-            addLog("DEFENSIVE BUFFER LOADED: +$shieldHeal Shield. Direct defense hardened (+10%).", LogType.SUCCESS)
+        if (!_uiState.value.isCombatInputEnabled) return
+        val state = _uiState.value
+        if (state.defendCooldown > 0) return
 
+        _uiState.update { stateNow ->
+            val shieldHeal = 15 + (stateNow.level * 3)
+            val newShield = minOf(stateNow.playerMaxShield, stateNow.playerShield + shieldHeal)
+            stateNow.copy(
+                playerShield = newShield,
+                activeFirewallTimeLeft = 15, // 1.5 seconds active
+                defendCooldown = 40,        // 4.0 seconds cooldown
+                showShieldEffect = true
+            )
+        }
+        addLog("🛡️ ACTIVE FIREWALL INITIATED: Damage incoming in the next 1.5s reduced by 75%!", LogType.SUCCESS)
+
+        viewModelScope.launch {
             kotlinx.coroutines.delay(600)
             _uiState.update { it.copy(showShieldEffect = false) }
-
-            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
-            kotlinx.coroutines.delay(800)
-            executeEnemyCombatTurnInline()
         }
     }
 
     fun combatHack() {
-        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
+        if (!_uiState.value.isCombatInputEnabled) return
+        val state = _uiState.value
+        val enemy = state.activeEnemy ?: return
+
+        val currentCooldown = state.programCooldowns["combat_hack"] ?: 0
+        if (currentCooldown > 0) {
+            addLog("EXPLOIT PROTOCOL COOLDOWN: Recalibrating exploit parameters.", LogType.ALERT)
+            return
+        }
+
+        if (state.ram < 3) {
+            addLog("HACK PROTOCOL ABORTED: Needs 3 MB RAM.", LogType.ERROR)
+            return
+        }
+
+        val updatedCooldowns = state.programCooldowns.toMutableMap()
+        updatedCooldowns["combat_hack"] = 30 // 3.0 seconds cooldown
+
+        _uiState.update { it.copy(
+            ram = it.ram - 3,
+            programCooldowns = updatedCooldowns
+        ) }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
-            val state = _uiState.value
-            val enemy = state.activeEnemy ?: return@launch
-
-            if (state.ram < 3) {
-                addLog("HACK PROTOCOL ABORTED: Needs 3 MB RAM.", LogType.ERROR)
-                _uiState.update { it.copy(isCombatInputEnabled = true, combatTurn = CombatTurn.PLAYER, gameState = GameState.PLAYER_TURN) }
-                return@launch
-            }
-
-            _uiState.update { it.copy(ram = it.ram - 3) }
-
             val hackDmg = 25 + (state.level * 4) + state.damageBonus
             val enemyRemIntegrity = maxOf(0, enemy.integrity - hackDmg)
             enemy.integrity = enemyRemIntegrity
@@ -1217,67 +1365,84 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             addLog("DIRECT SYSTEM EXPLOIT COMPILED: Bypassed firewall entirely!", LogType.SUCCESS)
             addLog("Dealt $hackDmg system-penetrating damage to ${enemy.name}.", LogType.SUCCESS)
 
-            kotlinx.coroutines.delay(600)
+            kotlinx.coroutines.delay(400)
             _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
 
             if (enemy.integrity <= 0) {
-                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY") }
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
                 kotlinx.coroutines.delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
-                return@launch
             }
-
-            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
-            kotlinx.coroutines.delay(800)
-            executeEnemyCombatTurnInline()
         }
     }
 
     fun combatScan() {
-        if (!_uiState.value.isCombatInputEnabled || _uiState.value.gameState != GameState.PLAYER_TURN) return
+        if (!_uiState.value.isCombatInputEnabled) return
+        val state = _uiState.value
+        val enemy = state.activeEnemy ?: return
+
+        val currentCooldown = state.programCooldowns["combat_scan"] ?: 0
+        if (currentCooldown > 0) {
+            addLog("SCAN RECALIBRATION: Telemetry scanners are offline.", LogType.ALERT)
+            return
+        }
+
+        val updatedCooldowns = state.programCooldowns.toMutableMap()
+        updatedCooldowns["combat_scan"] = 40 // 4.0 seconds cooldown
+
+        _uiState.update { it.copy(
+            programCooldowns = updatedCooldowns,
+            enemyAttackCharge = 0f // Reset enemy charge bar on scan!
+        ) }
+
+        addLog("--- SCANNING TARGET PROCESS DATA ---", LogType.ALERT)
+        addLog("NAME: ${enemy.name} | CLASS: Cyber-Entity Layer ${state.level}", LogType.INFO)
+        addLog("FIREWALL SHELL: ${enemy.shield}/${enemy.maxShield} (Armor Rating: ${enemy.armor})", LogType.INFO)
+        addLog("CORE DATA: ${enemy.integrity}/${enemy.maxIntegrity} | ATK MODULE: ${enemy.damage}", LogType.INFO)
+        addLog("ANALYSIS COMPLETE: Signal feedback scrambled enemy telemetry! Hostile decryption progress reset.", LogType.SUCCESS)
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
-            val state = _uiState.value
-            val enemy = state.activeEnemy ?: return@launch
-
-            addLog("--- SCANNING TARGET PROCESS DATA ---", LogType.ALERT)
-            addLog("NAME: ${enemy.name} | CLASS: Cyber-Entity Layer ${state.level}", LogType.INFO)
-            addLog("FIREWALL SHELL: ${enemy.shield}/${enemy.maxShield} (Armor Rating: ${enemy.armor})", LogType.INFO)
-            addLog("CORE DATA: ${enemy.integrity}/${enemy.maxIntegrity} | ATK MODULE: ${enemy.damage}", LogType.INFO)
-            addLog("ANALYSIS COMPLETE: Signal feedback scrambled enemy telemetry! Enemy damage reduced next turn.", LogType.SUCCESS)
-
             _uiState.update { stateNow ->
                 stateNow.copy(
                     enemyCombatAction = "Scan complete. Hostile systems recalibrating.",
                     combatFlashEnemy = true
                 )
             }
-            kotlinx.coroutines.delay(600)
+            kotlinx.coroutines.delay(400)
             _uiState.update { it.copy(combatFlashEnemy = false) }
-
-            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
-            kotlinx.coroutines.delay(800)
-            executeEnemyCombatTurnInline(isScanStunned = true)
         }
     }
 
     fun executeCombatProgramInline(program: Program) {
-        if (!_uiState.value.isCombatInputEnabled || (_uiState.value.gameState != GameState.PLAYER_TURN && _uiState.value.gameState != GameState.ENEMY_TURN)) return
+        if (!_uiState.value.isCombatInputEnabled) return
+        val state = _uiState.value
+        val enemy = state.activeEnemy ?: return
+
+        // Individual program cooldown
+        val currentCooldown = state.programCooldowns[program.id] ?: 0
+        if (currentCooldown > 0) {
+            addLog("SOFTWARE COOLDOWN: ${program.name} is recalibrating.", LogType.ALERT)
+            return
+        }
+
+        if (state.ram < program.ramCost) {
+            addLog("INSUFFICIENT RAM: Requires ${program.ramCost}MB, but only ${state.ram}MB allocated.", LogType.ERROR)
+            return
+        }
+
+        val updatedCooldowns = state.programCooldowns.toMutableMap()
+        updatedCooldowns[program.id] = 20 // 2.0 seconds cooldown for tactical programs
+
+        _uiState.update { stateNow ->
+            stateNow.copy(
+                ram = stateNow.ram - program.ramCost,
+                programCooldowns = updatedCooldowns
+            )
+        }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isCombatInputEnabled = false, combatTurn = CombatTurn.ANIMATING, gameState = GameState.ENEMY_TURN) }
-            val state = _uiState.value
-            val enemy = state.activeEnemy ?: return@launch
-
-            if (state.ram < program.ramCost) {
-                addLog("INSUFFICIENT RAM: Requires ${program.ramCost}MB, but only ${state.ram}MB allocated.", LogType.ERROR)
-                _uiState.update { it.copy(isCombatInputEnabled = true, combatTurn = CombatTurn.PLAYER) }
-                return@launch
-            }
-
             addLog("> RUNNING ${program.name}...", LogType.INFO)
-
-            _uiState.update { it.copy(ram = it.ram - program.ramCost) }
 
             val baseDmg = program.damage
             val statPower = (state.level * 2) + state.damageBonus
@@ -1291,7 +1456,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             var isCrit = false
-
             val critRate = 10 + (state.ram * 2)
             val finalCritRate = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) critRate + 25 else critRate
 
@@ -1350,20 +1514,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            kotlinx.coroutines.delay(600)
+            kotlinx.coroutines.delay(400)
             _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null, showShieldEffect = false) }
 
             if (enemy.integrity <= 0) {
-                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY") }
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
                 kotlinx.coroutines.delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
-                return@launch
             }
-
-            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
-            kotlinx.coroutines.delay(800)
-            executeEnemyCombatTurnInline()
         }
     }
 
