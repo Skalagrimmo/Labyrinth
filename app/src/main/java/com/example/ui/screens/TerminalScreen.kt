@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -94,10 +95,10 @@ fun RepeatingNavigationButton(
     val view = LocalView.current
     Box(
         modifier = modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .border(1.dp, CyberBorderLight, RoundedCornerShape(8.dp))
-            .background(CyberMutedGreen)
+            .size(36.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .border(1.dp, CyberBorderLight.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
+            .background(CyberMutedGreen.copy(alpha = 0.5f))
             .repeatingClickable(
                 onClick = {
                     view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
@@ -384,8 +385,29 @@ fun TerminalHeader(uiState: GameViewModel.GameUiState, onLeaderboardClick: () ->
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                val locationText = when (uiState.currentZone) {
+                    com.example.data.Zone.BUILDING -> {
+                        val floorTheme = when (uiState.buildingFloor) {
+                            1 -> "Residential"
+                            2 -> "Office"
+                            3 -> "Technical"
+                            4 -> "Storage"
+                            else -> "Unknown"
+                        }
+                        "🏢 Floor ${uiState.buildingFloor}: $floorTheme"
+                    }
+                    com.example.data.Zone.COLLECTORS -> "🌀 TUNNELS L${uiState.collectorsLevel}"
+                    com.example.data.Zone.CITY -> {
+                        val district = when (uiState.cityDistrictIndex) {
+                            0 -> "Neon District"
+                            1 -> "Tech Plaza"
+                            else -> "Corp Core"
+                        }
+                        "🏙️ CITY [$district]"
+                    }
+                }
                 Text(
-                    text = "LYR ${uiState.level}",
+                    text = locationText,
                     color = CyberAmber,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
@@ -633,9 +655,18 @@ fun ExplorationView(
     onSafeDisconnect: () -> Unit
 ) {
     val view = LocalView.current
-    Column(
+    val fadeAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = uiState.fadeAlpha,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = 350, easing = androidx.compose.animation.core.LinearEasing),
+        label = "TransitionFade"
+    )
+
+    Box(
         modifier = Modifier.fillMaxSize()
     ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
         // Main split: Left Viewport (3D ASCII), Right Panel (Map + Stats)
         Row(
             modifier = Modifier
@@ -749,7 +780,7 @@ fun ExplorationView(
                                 // UP arrow (Custom repeating navigation button)
                                 RepeatingNavigationButton(
                                     onClick = { viewModel.moveForward() },
-                                    icon = { Icon(Icons.Default.KeyboardArrowUp, "Forward", tint = CyberCyan, modifier = Modifier.size(24.dp)) },
+                                    icon = { Icon(Icons.Default.KeyboardArrowUp, "Forward", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
                                     modifier = Modifier.testTag("btn_move_forward")
                                 )
 
@@ -761,19 +792,19 @@ fun ExplorationView(
                                 ) {
                                     RepeatingNavigationButton(
                                         onClick = { viewModel.turnLeft() },
-                                        icon = { Icon(Icons.Default.KeyboardArrowLeft, "Turn Left", tint = CyberCyan, modifier = Modifier.size(24.dp)) },
+                                        icon = { Icon(Icons.Default.KeyboardArrowLeft, "Turn Left", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
                                         modifier = Modifier.testTag("btn_turn_left")
                                     )
 
                                     RepeatingNavigationButton(
                                         onClick = { viewModel.moveBackward() },
-                                        icon = { Icon(Icons.Default.KeyboardArrowDown, "Backward", tint = CyberCyan, modifier = Modifier.size(24.dp)) },
+                                        icon = { Icon(Icons.Default.KeyboardArrowDown, "Backward", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
                                         modifier = Modifier.testTag("btn_move_back")
                                     )
 
                                     RepeatingNavigationButton(
                                         onClick = { viewModel.turnRight() },
-                                        icon = { Icon(Icons.Default.KeyboardArrowRight, "Turn Right", tint = CyberCyan, modifier = Modifier.size(24.dp)) },
+                                        icon = { Icon(Icons.Default.KeyboardArrowRight, "Turn Right", tint = CyberCyan, modifier = Modifier.size(20.dp)) },
                                         modifier = Modifier.testTag("btn_turn_right")
                                     )
                                 }
@@ -827,12 +858,15 @@ fun ExplorationView(
                                     Button(
                                         onClick = { viewModel.combatAttack() },
                                         enabled = uiState.isCombatInputEnabled && uiState.gameState == GameState.PLAYER_TURN,
-                                        colors = ButtonDefaults.buttonColors(containerColor = CyberPink),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CyberPink.copy(alpha = 0.5f),
+                                            disabledContainerColor = CyberPink.copy(alpha = 0.25f)
+                                        ),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(32.dp)
+                                            .height(26.dp)
                                             .testTag("btn_combat_attack")
                                     ) {
                                         Text("ATTACK", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
@@ -842,13 +876,16 @@ fun ExplorationView(
                                     Button(
                                         onClick = { viewModel.combatDefend() },
                                         enabled = uiState.isCombatInputEnabled && uiState.gameState == GameState.PLAYER_TURN,
-                                        colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
-                                        border = BorderStroke(1.dp, CyberBrightGreen),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CyberDark.copy(alpha = 0.5f),
+                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                        ),
+                                        border = BorderStroke(1.dp, CyberBrightGreen.copy(alpha = 0.5f)),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(32.dp)
+                                            .height(26.dp)
                                             .testTag("btn_combat_defend")
                                     ) {
                                         Text("DEFEND", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
@@ -858,13 +895,16 @@ fun ExplorationView(
                                     Button(
                                         onClick = { showItemMenu = !showItemMenu },
                                         enabled = uiState.isCombatInputEnabled && uiState.gameState == GameState.PLAYER_TURN && uiState.inventory.isNotEmpty(),
-                                        colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
-                                        border = BorderStroke(1.dp, CyberCyan),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CyberDark.copy(alpha = 0.5f),
+                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                        ),
+                                        border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(32.dp)
+                                            .height(26.dp)
                                             .testTag("btn_combat_item")
                                     ) {
                                         Text("ITEM", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
@@ -874,13 +914,16 @@ fun ExplorationView(
                                     Button(
                                         onClick = { viewModel.fleeCombat() },
                                         enabled = uiState.isCombatInputEnabled,
-                                        colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
-                                        border = BorderStroke(1.dp, CyberAmber),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CyberDark.copy(alpha = 0.5f),
+                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                        ),
+                                        border = BorderStroke(1.dp, CyberAmber.copy(alpha = 0.5f)),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(32.dp)
+                                            .height(26.dp)
                                             .testTag("btn_combat_flee")
                                     ) {
                                         Text("FLEE", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
@@ -1153,6 +1196,54 @@ fun ExplorationView(
                                 fontSize = 8.sp
                             )
                         }
+                        
+                        // Vertical Structural Cell HUD
+                        val currentCell = if (uiState.maze.isNotEmpty() && uiState.gridY in uiState.maze.indices && uiState.gridX in uiState.maze[0].indices) {
+                            uiState.maze[uiState.gridY][uiState.gridX]
+                        } else null
+
+                        currentCell?.let { cell ->
+                            if (cell == com.example.data.CellType.ELEVATED_BALCONY ||
+                                cell == com.example.data.CellType.GRAVITY_SLOPE ||
+                                cell == com.example.data.CellType.ELEVATOR ||
+                                cell == com.example.data.CellType.STAIRS_UP ||
+                                cell == com.example.data.CellType.STAIRS_DOWN) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "VERTICAL STRUCTURE CELL:",
+                                    color = CyberMutedText,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                val (cellText, cellColor) = when (cell) {
+                                    com.example.data.CellType.ELEVATED_BALCONY -> "BALCONY VANTAGE (+25% ATK)" to Color(0xFF10B981)
+                                    com.example.data.CellType.GRAVITY_SLOPE -> "GRAVITY SLOPE (30% EVADE)" to Color(0xFFEAB308)
+                                    com.example.data.CellType.ELEVATOR -> "EXPRESS ELEVATOR ACCESS" to Color(0xFF00E5FF)
+                                    com.example.data.CellType.STAIRS_UP -> "STAIRWELL: ASCENT LINK" to Color(0xFF8B5CF6)
+                                    com.example.data.CellType.STAIRS_DOWN -> "STAIRWELL: DESCENT LINK" to Color(0xFF3B82F6)
+                                    else -> "" to Color.Gray
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(6.dp)
+                                            .background(cellColor, androidx.compose.foundation.shape.CircleShape)
+                                    )
+                                    Text(
+                                        text = cellText.uppercase(),
+                                        color = cellColor,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+                        }
+
                         Spacer(modifier = Modifier.height(4.dp))
                         Divider(color = CyberBorder, thickness = 1.dp)
 
@@ -1162,12 +1253,15 @@ fun ExplorationView(
                                 view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                 viewModel.interact()
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = CyberPink),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = CyberPink.copy(alpha = 0.5f),
+                                disabledContainerColor = CyberPink.copy(alpha = 0.25f)
+                            ),
                             shape = RoundedCornerShape(8.dp),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(32.dp)
+                                .height(26.dp)
                                 .testTag("btn_interact_hack")
                         ) {
                             Text(
@@ -1288,6 +1382,14 @@ fun ExplorationView(
                 Text("DISCONNECT RUN", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
         }
+    }
+    }
+    if (fadeAlpha > 0f) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = fadeAlpha))
+        )
     }
 }
 
@@ -1515,7 +1617,32 @@ fun FirstPersonPerspectiveCanvas(
         }
     }
 
-    val basePrimaryColor = if (isCombat) Color(0xFFFB7185) else Color(0xFF00E5FF)
+    val basePrimaryColor = if (isCombat) {
+        Color(0xFFFB7185)
+    } else {
+        when (uiState.currentZone) {
+            com.example.data.Zone.BUILDING -> {
+                when (uiState.buildingFloor) {
+                    1 -> Color(0xFF00E5FF) // Neon Cyan
+                    2 -> Color(0xFF60A5FA) // Electric Blue
+                    3 -> Color(0xFFF97316) // Warning Orange
+                    4 -> Color(0xFFC084FC) // Executive Purple
+                    else -> Color(0xFF00E5FF)
+                }
+            }
+            com.example.data.Zone.COLLECTORS -> {
+                if (uiState.collectorsLevel == 1) Color(0xFF10B981) // Poison Green
+                else Color(0xFF8B5CF6) // Toxic Violet
+            }
+            com.example.data.Zone.CITY -> {
+                when (uiState.cityDistrictIndex) {
+                    0 -> Color(0xFFEC4899) // Hot Pink (Neon District)
+                    1 -> Color(0xFFFBBF24) // Golden Yellow (Tech Plaza)
+                    else -> Color(0xFF00E5FF) // Cyan (Corp Core)
+                }
+            }
+        }
+    }
     val primaryColor = if (uiState.combatFlashEnemy) Color.White else basePrimaryColor
     val wallPath = remember { Path() }
     val threatPath = remember { Path() }
@@ -1887,6 +2014,162 @@ fun FirstPersonPerspectiveCanvas(
                         strokeWidth = 3f
                     )
                 }
+            } else if (primaryNode == CellType.ELEVATOR) {
+                // Futuristic 3D Elevator Shaft cage
+                val cx = pTL.x + (pBR.x - pTL.x) * 0.5f
+                val cy = pTL.y + (pBR.y - pTL.y) * 0.5f
+                val hSize = pBR.x - pTL.x
+                val vSize = pBR.y - pTL.y
+
+                // Outer Glass Tube Shaft Frame
+                drawRect(
+                    color = Color(0xFF00E5FF).copy(alpha = 0.35f),
+                    topLeft = Offset(pTL.x + hSize * 0.15f, pTL.y),
+                    size = Size(hSize * 0.7f, vSize),
+                    style = Stroke(width = 3.5f)
+                )
+
+                // Vertical Lift Columns
+                drawLine(
+                    color = Color(0xFF00E5FF).copy(alpha = 0.7f),
+                    start = Offset(pTL.x + hSize * 0.3f, pTL.y),
+                    end = Offset(pTL.x + hSize * 0.3f, pBR.y),
+                    strokeWidth = 2.5f
+                )
+                drawLine(
+                    color = Color(0xFF00E5FF).copy(alpha = 0.7f),
+                    start = Offset(pTL.x + hSize * 0.7f, pTL.y),
+                    end = Offset(pTL.x + hSize * 0.7f, pBR.y),
+                    strokeWidth = 2.5f
+                )
+
+                // Elevator lift capsule moving vertically with animation progress
+                val liftOffsetY = vSize * 0.35f * kotlin.math.sin(animProgress * 2f * kotlin.math.PI.toFloat())
+                val capY = cy - vSize * 0.2f + liftOffsetY
+                val capW = hSize * 0.36f
+                val capH = vSize * 0.4f
+
+                // Outer Lift Capsule Box
+                drawRoundRect(
+                    color = Color(0xFF00E5FF),
+                    topLeft = Offset(cx - capW / 2, capY),
+                    size = Size(capW, capH),
+                    cornerRadius = CornerRadius(10f, 10f),
+                    style = Stroke(width = 4f)
+                )
+
+                // Glass Capsule Interior Glow
+                drawRoundRect(
+                    color = Color(0xFF00E5FF).copy(alpha = 0.18f),
+                    topLeft = Offset(cx - capW / 2, capY),
+                    size = Size(capW, capH),
+                    cornerRadius = CornerRadius(10f, 10f)
+                )
+
+                // Horizontal sliding caution stripes inside capsule door
+                val stripeCount = 3
+                for (s in 0 until stripeCount) {
+                    val sY = capY + capH * 0.25f + (capH * 0.5f) * (s.toFloat() / (stripeCount - 1))
+                    drawLine(
+                        color = Color(0xFFEAB308).copy(alpha = 0.8f),
+                        start = Offset(cx - capW * 0.35f, sY),
+                        end = Offset(cx + capW * 0.35f, sY),
+                        strokeWidth = 2f
+                    )
+                }
+
+                // Digital upward/downward flashing arrows indicator
+                val arrowDir = if (animProgress < 0.5f) 1 else -1
+                if (arrowDir > 0) {
+                    // Up arrow inside capsule
+                    drawLine(Color(0xFF00E5FF), Offset(cx, capY + capH * 0.15f), Offset(cx - 10f, capY + capH * 0.28f), strokeWidth = 3f)
+                    drawLine(Color(0xFF00E5FF), Offset(cx, capY + capH * 0.15f), Offset(cx + 10f, capY + capH * 0.28f), strokeWidth = 3f)
+                } else {
+                    // Down arrow inside capsule
+                    drawLine(Color(0xFF00E5FF), Offset(cx, capY + capH * 0.85f), Offset(cx - 10f, capY + capH * 0.72f), strokeWidth = 3f)
+                    drawLine(Color(0xFF00E5FF), Offset(cx, capY + capH * 0.85f), Offset(cx + 10f, capY + capH * 0.72f), strokeWidth = 3f)
+                }
+
+            } else if (primaryNode == CellType.ELEVATED_BALCONY) {
+                // High-fidelity Neon Overlook Balcony / Hanging Gallery railing
+                val cx = pTL.x + (pBR.x - pTL.x) * 0.5f
+                val hSize = pBR.x - pTL.x
+                val vSize = pBR.y - pTL.y
+                val railingTopY = pTL.y + vSize * 0.5f
+
+                // Draw solid background grid for the floor below (deep blue vector mist)
+                drawRect(
+                    color = Color(0xFF020617).copy(alpha = 0.8f),
+                    topLeft = Offset(pTL.x, railingTopY),
+                    size = Size(hSize, pBR.y - railingTopY)
+                )
+
+                // Draw structural cross support grids under the floor
+                val numGridLines = 6
+                for (g in 0..numGridLines) {
+                    val ratio = g.toFloat() / numGridLines
+                    val lineX = pTL.x + hSize * ratio
+                    drawLine(
+                        color = Color(0xFF10B981).copy(alpha = 0.15f),
+                        start = Offset(lineX, railingTopY),
+                        end = Offset(cx + (lineX - cx) * 1.5f, pBR.y),
+                        strokeWidth = 1.5f
+                    )
+                }
+
+                // Balcony horizontal neon safety rails
+                val railCount = 4
+                for (r in 0 until railCount) {
+                    val rY = railingTopY + (pBR.y - railingTopY) * (r.toFloat() / railCount)
+                    drawLine(
+                        color = Color(0xFF10B981).copy(alpha = 0.85f - (r * 0.15f)),
+                        start = Offset(pTL.x, rY),
+                        end = Offset(pBR.x, rY),
+                        strokeWidth = 4f - (r * 0.5f)
+                    )
+                }
+
+                // Vertical steel baluster lines connecting rails
+                val balusterCount = 10
+                for (b in 0..balusterCount) {
+                    val bX = pTL.x + hSize * (b.toFloat() / balusterCount)
+                    drawLine(
+                        color = Color(0xFF10B981).copy(alpha = 0.4f),
+                        start = Offset(bX, railingTopY),
+                        end = Offset(bX, pBR.y),
+                        strokeWidth = 2f
+                    )
+                }
+
+                // Floating 2.5D Holographic Danger warning display above the railing
+                val holoY = railingTopY - 15f - ((animProgress * 12f) % 8f)
+                drawRoundRect(
+                    color = Color(0xFF10B981),
+                    topLeft = Offset(cx - 75f, holoY - 18f),
+                    size = Size(150f, 24f),
+                    cornerRadius = CornerRadius(5f, 5f),
+                    style = Stroke(width = 2f)
+                )
+                drawRoundRect(
+                    color = Color(0xFF10B981).copy(alpha = 0.1f),
+                    topLeft = Offset(cx - 75f, holoY - 18f),
+                    size = Size(150f, 24f),
+                    cornerRadius = CornerRadius(5f, 5f)
+                )
+
+                // Warning hazard bar symbol inside hologram
+                drawLine(
+                    color = Color(0xFFEAB308),
+                    start = Offset(cx - 65f, holoY - 6f),
+                    end = Offset(cx - 55f, holoY - 6f),
+                    strokeWidth = 3f
+                )
+                drawLine(
+                    color = Color(0xFFEAB308),
+                    start = Offset(cx + 55f, holoY - 6f),
+                    end = Offset(cx + 65f, holoY - 6f),
+                    strokeWidth = 3f
+                )
             }
 
             // --- 5. Render Floating 3D Cyber Particle sparks (Duke Nukem 3D dust style!) ---
@@ -2912,12 +3195,15 @@ fun CombatView(
                     // Flee combat
                     Button(
                         onClick = onFlee,
-                        colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
-                        border = BorderStroke(1.dp, CyberPink),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = CyberDark.copy(alpha = 0.5f),
+                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                        ),
+                        border = BorderStroke(1.dp, CyberPink.copy(alpha = 0.5f)),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(32.dp)
+                            .height(26.dp)
                             .testTag("btn_flee_combat")
                     ) {
                         Text(

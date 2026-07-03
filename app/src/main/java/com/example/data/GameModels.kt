@@ -94,7 +94,14 @@ enum class CellType(val symbol: Char, val displayName: String) {
     STAIRS_UP('U', "Vertical Uplink Stairs"),
     STAIRS_DOWN('N', "Sub-Level Downstairs"),
     GRAVITY_SLOPE('L', "Pulsing Gravity Slope"),
-    ECHO('E', "Phantom Echo Data")
+    ECHO('E', "Phantom Echo Data"),
+    ELEVATOR('X', "Express Elevator Column")
+}
+
+enum class Zone(val displayName: String) {
+    BUILDING("Corporate Building"),
+    COLLECTORS("Collector Tunnels"),
+    CITY("Metropolitan Cyber-City")
 }
 
 enum class CyberWeather(
@@ -108,7 +115,11 @@ enum class CyberWeather(
     COLD_SPOT("Frozen Sector (Cold Spot)", "System temperature drops to absolute zero. Movements feel sluggish and color registers desaturate.", 0xFF38BDF8, 10),
     HOT_NODE("Overheated Sub-Grid (Hot Node)", "High-voltage processing packets flood the sector. Movement speed is boosted, but systems overheat.", 0xFFF57C00, 10),
     FRAGMENTATION("Memory Fragmentation", "The physical sectors warp and shift. Doors and firewall codes are dynamic.", 0xFFEC4899, 6),
-    ECHOES("Spectral Echoes Flow", "Deceased netrunner telemetry fragments materialize as phantom echoes.", 0xFFC084FC, 12)
+    ECHOES("Spectral Echoes Flow", "Deceased netrunner telemetry fragments materialize as phantom echoes.", 0xFFC084FC, 12);
+
+    companion object {
+        val VALUES = values()
+    }
 }
 
 data class Enemy(

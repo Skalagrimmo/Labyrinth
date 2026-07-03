@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
 import kotlin.random.Random
 
 enum class CombatTurn {
@@ -96,7 +97,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val enemyDamagePopup: String? = null,
         val showShieldEffect: Boolean = false,
         val showCombatBanner: String? = null, // e.g. "COMBAT STARTED", "VICTORY", "DEFEAT"
-        val isCombatInputEnabled: Boolean = true
+        val isCombatInputEnabled: Boolean = true,
+
+        // World Expansion State
+        val currentZone: com.example.data.Zone = com.example.data.Zone.BUILDING,
+        val buildingFloor: Int = 1,
+        val collectorsLevel: Int = 1,
+        val cityDistrictIndex: Int = 0,
+        val hasElevatorKeycard: Boolean = false,
+        val fadeAlpha: Float = 0f,
+        val buildingFloors: Map<Int, Array<Array<com.example.data.CellType>>> = emptyMap(),
+        val buildingExplored: Map<Int, Set<Pair<Int, Int>>> = emptyMap(),
+        val collectorsLevels: Map<Int, Array<Array<com.example.data.CellType>>> = emptyMap(),
+        val collectorsExplored: Map<Int, Set<Pair<Int, Int>>> = emptyMap(),
+        val cityDistricts: Map<Int, Array<Array<com.example.data.CellType>>> = emptyMap(),
+        val cityExplored: Map<Int, Set<Pair<Int, Int>>> = emptyMap()
     )
 
     enum class ActiveScreen {
@@ -111,6 +126,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState: StateFlow<GameUiState> = _uiState.asStateFlow()
+
+    private val underlyingCellTypes = java.util.concurrent.ConcurrentHashMap<String, com.example.data.CellType>()
+    private var aiTickCounter = 0
 
     init {
         // Initialize with default logging
@@ -169,14 +187,271 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("SPECIALIZATION: ${selectedClass.passiveDesc}", LogType.INFO)
         addLog("INITIALIZING CYBER-SECTOR GRID...", LogType.ALERT)
 
-        generateNewLevel()
+        loadOrCreateLevel(com.example.data.Zone.BUILDING, 1, 1, 1)
     }
 
-    // Generates the maze grid and updates 1st person perspective
+    fun loadOrCreateLevel(
+        targetZone: com.example.data.Zone,
+        targetFloorOrLevel: Int,
+        targetX: Int? = null,
+        targetY: Int? = null,
+        isAscending: Boolean = true,
+        byElevator: Boolean = false
+    ) {
+        viewModelScope.launch {
+            // Trigger Fade-out!
+            _uiState.update { it.copy(fadeAlpha = 1f) }
+            delay(400) // wait for fade transition
+
+            val state = _uiState.value
+            
+            // 1. Cache current floor/level data first
+            val updatedBuildingFloors = state.buildingFloors.toMutableMap()
+            val updatedBuildingExplored = state.buildingExplored.toMutableMap()
+            val updatedCollectorsLevels = state.collectorsLevels.toMutableMap()
+            val updatedCollectorsExplored = state.collectorsExplored.toMutableMap()
+            val updatedCityDistricts = state.cityDistricts.toMutableMap()
+            val updatedCityExplored = state.cityExplored.toMutableMap()
+
+            when (state.currentZone) {
+                com.example.data.Zone.BUILDING -> {
+                    if (state.maze.isNotEmpty()) {
+                        updatedBuildingFloors[state.buildingFloor] = state.maze
+                        updatedBuildingExplored[state.buildingFloor] = state.exploredCells
+                    }
+                }
+                com.example.data.Zone.COLLECTORS -> {
+                    if (state.maze.isNotEmpty()) {
+                        updatedCollectorsLevels[state.collectorsLevel] = state.maze
+                        updatedCollectorsExplored[state.collectorsLevel] = state.exploredCells
+                    }
+                }
+                com.example.data.Zone.CITY -> {
+                    if (state.maze.isNotEmpty()) {
+                        updatedCityDistricts[state.cityDistrictIndex] = state.maze
+                        updatedCityExplored[state.cityDistrictIndex] = state.exploredCells
+                    }
+                }
+            }
+
+            // 2. Fetch or Generate target floor/level
+            var targetMaze: Array<Array<com.example.data.CellType>>? = null
+            var targetExplored = emptySet<Pair<Int, Int>>()
+
+            when (targetZone) {
+                com.example.data.Zone.BUILDING -> {
+                    targetMaze = updatedBuildingFloors[targetFloorOrLevel]
+                    targetExplored = updatedBuildingExplored[targetFloorOrLevel] ?: emptySet()
+                    if (targetMaze == null || targetMaze.isEmpty()) {
+                        targetMaze = GameEngine.generateBuildingFloor(targetFloorOrLevel)
+                    }
+                }
+                com.example.data.Zone.COLLECTORS -> {
+                    targetMaze = updatedCollectorsLevels[targetFloorOrLevel]
+                    targetExplored = updatedCollectorsExplored[targetFloorOrLevel] ?: emptySet()
+                    if (targetMaze == null || targetMaze.isEmpty()) {
+                        targetMaze = GameEngine.generateCollectorTunnels(targetFloorOrLevel)
+                    }
+                }
+                com.example.data.Zone.CITY -> {
+                    targetMaze = updatedCityDistricts[targetFloorOrLevel]
+                    targetExplored = updatedCityExplored[targetFloorOrLevel] ?: emptySet()
+                    if (targetMaze == null || targetMaze.isEmpty()) {
+                        targetMaze = GameEngine.generateCitySector(targetFloorOrLevel)
+                    }
+                }
+            }
+
+            val finalMaze = targetMaze!!
+
+            // 3. Coordinate positioning
+            var finalX = 1
+            var finalY = 1
+
+            if (targetX != null && targetY != null) {
+                finalX = targetX
+                finalY = targetY
+            } else if (byElevator) {
+                // Find central ELEVATOR cell
+                val height = finalMaze.size
+                val width = finalMaze[0].size
+                val cx = width / 2
+                val cy = height / 2
+                if (finalMaze[cy][cx] == com.example.data.CellType.ELEVATOR) {
+                    finalX = cx
+                    finalY = cy
+                } else {
+                    finalX = 1
+                    finalY = 1
+                }
+            } else {
+                // Find logical stairs on the target floor
+                val searchType = if (isAscending) {
+                    com.example.data.CellType.STAIRS_DOWN // climbing up -> emerge on stairs_down
+                } else {
+                    com.example.data.CellType.STAIRS_UP // climbing down -> emerge on stairs_up
+                }
+
+                var found = false
+                for (y in finalMaze.indices) {
+                    for (x in finalMaze[0].indices) {
+                        if (finalMaze[y][x] == searchType) {
+                            finalX = x
+                            finalY = y
+                            found = true
+                            break
+                        }
+                    }
+                    if (found) break
+                }
+                if (!found) {
+                    finalX = 1
+                    finalY = 1
+                }
+            }
+
+            val perspective = withContext(Dispatchers.Default) {
+                GameEngine.render3DPerspective(finalMaze, finalX, finalY, Direction.EAST)
+            }
+
+            // 4. Update state
+            _uiState.update { s ->
+                s.copy(
+                    currentZone = targetZone,
+                    buildingFloor = if (targetZone == com.example.data.Zone.BUILDING) targetFloorOrLevel else s.buildingFloor,
+                    collectorsLevel = if (targetZone == com.example.data.Zone.COLLECTORS) targetFloorOrLevel else s.collectorsLevel,
+                    cityDistrictIndex = if (targetZone == com.example.data.Zone.CITY) targetFloorOrLevel else s.cityDistrictIndex,
+                    maze = finalMaze,
+                    gridX = finalX,
+                    gridY = finalY,
+                    direction = Direction.EAST,
+                    perspectiveText = perspective,
+                    exploredCells = targetExplored,
+                    buildingFloors = updatedBuildingFloors,
+                    buildingExplored = updatedBuildingExplored,
+                    collectorsLevels = updatedCollectorsLevels,
+                    collectorsExplored = updatedCollectorsExplored,
+                    cityDistricts = updatedCityDistricts,
+                    cityExplored = updatedCityExplored,
+                    level = when (targetZone) {
+                        com.example.data.Zone.BUILDING -> targetFloorOrLevel
+                        com.example.data.Zone.COLLECTORS -> 4 + targetFloorOrLevel
+                        com.example.data.Zone.CITY -> 6 + targetFloorOrLevel
+                    }
+                )
+            }
+
+            revealCellsAround(finalX, finalY)
+
+            // Trigger Fade-in!
+            delay(100)
+            _uiState.update { it.copy(fadeAlpha = 0f) }
+            
+            addLog("TRANSITIONED TO: ${targetZone.displayName}, " + when (targetZone) {
+                com.example.data.Zone.BUILDING -> {
+                    val theme = when (targetFloorOrLevel) {
+                        1 -> "Residential"
+                        2 -> "Office"
+                        3 -> "Technical"
+                        4 -> "Storage"
+                        else -> "Unknown"
+                    }
+                    "Floor $targetFloorOrLevel: $theme"
+                }
+                com.example.data.Zone.COLLECTORS -> "Level $targetFloorOrLevel"
+                com.example.data.Zone.CITY -> "Sector $targetFloorOrLevel"
+            }, LogType.SUCCESS)
+        }
+    }
+
+    fun ascendStairs() {
+        val state = _uiState.value
+        when (state.currentZone) {
+            com.example.data.Zone.BUILDING -> {
+                if (state.buildingFloor < 4) {
+                    val targetFloor = state.buildingFloor + 1
+                    val theme = when (targetFloor) {
+                        1 -> "Residential"
+                        2 -> "Office"
+                        3 -> "Technical"
+                        4 -> "Storage"
+                        else -> "Unknown"
+                    }
+                    addLog("CLIMBING UPWARD STAIRS TO FLOOR $targetFloor: $theme...", LogType.INFO)
+                    loadOrCreateLevel(com.example.data.Zone.BUILDING, targetFloor, isAscending = true)
+                } else {
+                    addLog("ROOF ARCHITECTURE SEALED. NO FURTHER ASCENSION POSSIBLE.", LogType.ERROR)
+                }
+            }
+            com.example.data.Zone.COLLECTORS -> {
+                if (state.collectorsLevel < 2) {
+                    addLog("CLIMBING STEEP LADDER TUNNEL TO LEVEL ${state.collectorsLevel + 1}...", LogType.INFO)
+                    loadOrCreateLevel(com.example.data.Zone.COLLECTORS, state.collectorsLevel + 1, isAscending = true)
+                } else {
+                    addLog("TUNNEL CEILING SEALED. PORTAL IS THE ONLY EXIT HERE.", LogType.ERROR)
+                }
+            }
+            com.example.data.Zone.CITY -> {
+                addLog("SKY-RISERS CAN ONLY BE ACCESSED VIA LOCAL PORTALS.", LogType.ERROR)
+            }
+        }
+    }
+
+    fun descendStairs() {
+        val state = _uiState.value
+        when (state.currentZone) {
+            com.example.data.Zone.BUILDING -> {
+                if (state.buildingFloor > 1) {
+                    val targetFloor = state.buildingFloor - 1
+                    val theme = when (targetFloor) {
+                        1 -> "Residential"
+                        2 -> "Office"
+                        3 -> "Technical"
+                        4 -> "Storage"
+                        else -> "Unknown"
+                    }
+                    addLog("DESCENDING HEAVY REINFORCED METAL STAIRWELL TO FLOOR $targetFloor: $theme...", LogType.INFO)
+                    loadOrCreateLevel(com.example.data.Zone.BUILDING, targetFloor, isAscending = false)
+                } else {
+                    addLog("BASEMENT CONCRETE FLOOR SEALED. CANNOT DESCEND FURTHER.", LogType.ERROR)
+                }
+            }
+            com.example.data.Zone.COLLECTORS -> {
+                if (state.collectorsLevel > 1) {
+                    addLog("CLIMBING DOWN TO LOWER DRAINAGE SECTOR ${state.collectorsLevel - 1}...", LogType.INFO)
+                    loadOrCreateLevel(com.example.data.Zone.COLLECTORS, state.collectorsLevel - 1, isAscending = false)
+                } else {
+                    addLog("BOTTOM SEDIMENT LEVEL REACHED. NO FURTHER DESCENT.", LogType.ERROR)
+                }
+            }
+            com.example.data.Zone.CITY -> {
+                addLog("UNDERGROUND TUNNELS CANNOT BE ACCESSED DIRECTLY FROM THIS DISTRICT PLAZA.", LogType.ERROR)
+            }
+        }
+    }
+
+    fun interactWithElevator() {
+        val state = _uiState.value
+        if (state.currentZone != com.example.data.Zone.BUILDING) {
+            addLog("ELEVATOR: Communication link offline outside the corporate tower.", LogType.ERROR)
+            return
+        }
+
+        if (!state.hasElevatorKeycard) {
+            addLog("ELEVATOR LINK ERROR: Secure Keycard required.", LogType.ERROR)
+            addLog("SEARCH THE ROOMS ON FLOOR 2 FOR THE SECURE KEYCARD.", LogType.ALERT)
+            return
+        }
+
+        val nextFloor = (state.buildingFloor % 4) + 1
+        addLog("ELEVATOR: Keycard authenticated. Initiating fast vertical lift to FLOOR $nextFloor...", LogType.SUCCESS)
+        loadOrCreateLevel(com.example.data.Zone.BUILDING, nextFloor, byElevator = true)
+    }
+
+    // Generates fallback procedural level
     private fun generateNewLevel() {
         viewModelScope.launch {
             val level = _uiState.value.level
-            // Scale labyrinth size dynamically: 35x35 at layer 1, increasing up to 55x55 for vast immersive exploration (always odd for perfect layout and size density)
             val size = minOf(35 + ((level - 1) * 4), 55)
             val maze = withContext(Dispatchers.Default) {
                 GameEngine.generateMaze(size, size, level)
@@ -196,8 +471,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
             revealCellsAround(1, 1)
-            addLog("CYBERSPACE COGNITIVE NODE LAYER $level SECURED.", LogType.SUCCESS)
-            addLog("PROCEED CAUTIOUSLY. ACTIVE DESTRUCTION VIRUSES RECONSTRUCTED.", LogType.ALERT)
         }
     }
 
@@ -247,7 +520,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (state.activeWeather == com.example.data.CyberWeather.DATA_STORM) {
             if (Random.nextFloat() < 0.40f) {
-                val scrambledDirs = Direction.values().filter { it != state.direction }
+                val scrambledDirs = Direction.VALUES.filter { it != state.direction }
                 val scrambledDir = scrambledDirs.random()
                 nextX = state.gridX + scrambledDir.dx
                 nextY = state.gridY + scrambledDir.dy
@@ -295,7 +568,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (state.activeWeather == com.example.data.CyberWeather.DATA_STORM) {
             if (Random.nextFloat() < 0.40f) {
-                val scrambledDirs = Direction.values()
+                val scrambledDirs = Direction.VALUES
                 val scrambledDir = scrambledDirs.random()
                 nextX = state.gridX + scrambledDir.dx
                 nextY = state.gridY + scrambledDir.dy
@@ -371,7 +644,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     fun processWeatherOnStep() {
         viewModelScope.launch(Dispatchers.Default) {
+            val pendingLogs = mutableListOf<Pair<String, LogType>>()
             _uiState.update { state ->
+                pendingLogs.clear()
                 var weather = state.activeWeather
                 var turnsLeft = state.weatherTurnsLeft
                 var originalMaze = state.originalMaze
@@ -380,7 +655,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (weather != com.example.data.CyberWeather.CLEAR) {
                     turnsLeft--
                     if (turnsLeft <= 0) {
-                        addLog("WEATHER CLEAR: Environmental distortion dissipated. Bandwidth stabilized.", LogType.SUCCESS)
+                        pendingLogs.add(Pair("WEATHER CLEAR: Environmental distortion dissipated. Bandwidth stabilized.", LogType.SUCCESS))
                         weather = com.example.data.CyberWeather.CLEAR
                         if (originalMaze != null) {
                             currentMaze = originalMaze
@@ -396,14 +671,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 if (steps >= nextEvent) {
                     steps = 0
                     val newNextEventSteps = 30 + Random.nextInt(71)
-                    val possibleWeathers = com.example.data.CyberWeather.values().filter { it != com.example.data.CyberWeather.CLEAR }
+                    val possibleWeathers = com.example.data.CyberWeather.VALUES.filter { it != com.example.data.CyberWeather.CLEAR }
                     val newWeather = predicted ?: possibleWeathers.random()
                     predicted = null
                     weather = newWeather
                     turnsLeft = newWeather.effectDuration
 
-                    addLog("⚠️ CYBER-GRID WEATHER ALTERATION: ${newWeather.title}!!", LogType.ALERT)
-                    addLog("${newWeather.description}", LogType.INFO)
+                    pendingLogs.add(Pair("⚠️ CYBER-GRID WEATHER ALTERATION: ${newWeather.title}!!", LogType.ALERT))
+                    pendingLogs.add(Pair("${newWeather.description}", LogType.INFO))
 
                     when (newWeather) {
                         com.example.data.CyberWeather.FRAGMENTATION -> {
@@ -425,7 +700,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                             }
                             currentMaze = mutableMaze
-                            addLog("DANGER: Memory Fragmentation is shifting firewall partitions dynamically!", LogType.ALERT)
+                            pendingLogs.add(Pair("DANGER: Memory Fragmentation is shifting firewall partitions dynamically!", LogType.ALERT))
                         }
                         com.example.data.CyberWeather.ECHOES -> {
                             val mutableMaze = Array(currentMaze.size) { r -> currentMaze[r].copyOf() }
@@ -442,16 +717,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                                 }
                             }
                             currentMaze = mutableMaze
-                            addLog("ALERT: Sub-sector telemetry streams are bleeding. Ghost netrunner hosts detected.", LogType.ALERT)
+                            pendingLogs.add(Pair("ALERT: Sub-sector telemetry streams are bleeding. Ghost netrunner hosts detected.", LogType.ALERT))
                         }
                         com.example.data.CyberWeather.COLD_SPOT -> {
-                            addLog("ALERT: System bus temperature critical low. Overclocking modules frozen.", LogType.ALERT)
+                            pendingLogs.add(Pair("ALERT: System bus temperature critical low. Overclocking modules frozen.", LogType.ALERT))
                         }
                         com.example.data.CyberWeather.HOT_NODE -> {
-                            addLog("ALERT: High-voltage core packets discharging. Overclock active, but taking damage!", LogType.ALERT)
+                            pendingLogs.add(Pair("ALERT: High-voltage core packets discharging. Overclock active, but taking damage!", LogType.ALERT))
                         }
                         com.example.data.CyberWeather.DATA_STORM -> {
-                            addLog("ALERT: Dense signal interference static detected. Direction controllers scrambled!", LogType.ALERT)
+                            pendingLogs.add(Pair("ALERT: Dense signal interference static detected. Direction controllers scrambled!", LogType.ALERT))
                         }
                         else -> {}
                     }
@@ -475,16 +750,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         com.example.data.CyberWeather.HOT_NODE -> {
                             val damage = 2
                             integrity = (integrity - damage).coerceAtLeast(1)
-                            addLog("HOT NODE OVERHEAT: Core took $damage thermal damage.", LogType.ERROR)
+                            pendingLogs.add(Pair("HOT NODE OVERHEAT: Core took $damage thermal damage.", LogType.ERROR))
                             if (Random.nextFloat() < 0.4f) {
                                 ram = (ram + 1).coerceAtMost(maxRam)
-                                addLog("HOT NODE OVERCLOCK: Recovered 1 MB RAM.", LogType.SUCCESS)
+                                pendingLogs.add(Pair("HOT NODE OVERCLOCK: Recovered 1 MB RAM.", LogType.SUCCESS))
                             }
                         }
                         com.example.data.CyberWeather.COLD_SPOT -> {
                             if (Random.nextFloat() < 0.5f) {
                                 ram = (ram - 1).coerceAtLeast(0)
-                                addLog("COLD SPOT FREEZE: Sluggish bus drained 1 MB RAM.", LogType.ERROR)
+                                pendingLogs.add(Pair("COLD SPOT FREEZE: Sluggish bus drained 1 MB RAM.", LogType.ERROR))
                             }
                         }
                         else -> {}
@@ -500,6 +775,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         maze = currentMaze
                     )
                 }
+            }
+
+            pendingLogs.forEach { (message, type) ->
+                addLog(message, type)
             }
         }
     }
@@ -552,10 +831,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("BALCONY LEDGE: Elevated high overlook platforms. You have an expanded line of sight!", LogType.INFO)
             }
             CellType.STAIRS_UP -> {
-                addLog("STAIRS UP: Ascending vertical metal steps connecting server core layers.", LogType.INFO)
+                addLog("STAIRS UP: Stand here and press INTERACT [F] to ascend.", LogType.INFO)
             }
             CellType.STAIRS_DOWN -> {
-                addLog("STAIRS_DOWN: Descending heavy-duty stairs leading into deeper hardware subsectors.", LogType.INFO)
+                addLog("STAIRS DOWN: Stand here and press INTERACT [F] to descend.", LogType.INFO)
+            }
+            CellType.ELEVATOR -> {
+                addLog("ELEVATOR COLUMN: Stand here and press INTERACT [F] to activate vertical transport.", LogType.ALERT)
             }
             CellType.GRAVITY_SLOPE -> {
                 addLog("GRAVITY SLOPE: Scaling a steep gravity-modulated concourse incline.", LogType.INFO)
@@ -616,6 +898,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (state.gameState == GameState.EXPLORATION) {
             if (foundEnemy != null) {
                 triggerCombatInline(foundEnemy.first, foundEnemy.second)
+                return
+            }
+
+            // --- ADVANCED VERTICALITY ENEMY AI TICK ---
+            // Triggers every 1.5 seconds during exploration
+            aiTickCounter++
+            if (aiTickCounter >= 15) {
+                aiTickCounter = 0
+                runEnemyAITick(playerX, playerY, maze, state)
             }
         } else {
             if (state.activeEnemy == null) {
@@ -628,6 +919,199 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     addLog("OUT OF RANGE. ESCAPED HOSTILE RADAR. BACK TO EXPLORATION.", LogType.ALERT)
                 }
             }
+        }
+    }
+
+    private fun runEnemyAITick(
+        playerX: Int,
+        playerY: Int,
+        maze: Array<Array<CellType>>,
+        state: GameUiState
+    ) {
+        val currentFloorKey = when (state.currentZone) {
+            com.example.data.Zone.BUILDING -> "BUILDING_${state.buildingFloor}"
+            com.example.data.Zone.COLLECTORS -> "COLLECTORS_${state.collectorsLevel}"
+            com.example.data.Zone.CITY -> "CITY_${state.cityDistrictIndex}"
+        }
+
+        val height = maze.size
+        val width = maze[0].size
+        val clonedMaze = Array(height) { y -> Array(width) { x -> maze[y][x] } }
+
+        val originalEnemyCoords = mutableListOf<Pair<Int, Int>>()
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                if (clonedMaze[y][x] == CellType.VIRUS_NODE) {
+                    originalEnemyCoords.add(Pair(x, y))
+                }
+            }
+        }
+
+        var mazeModified = false
+
+        for (enemyCoord in originalEnemyCoords) {
+            val ex = enemyCoord.first
+            val ey = enemyCoord.second
+
+            if (clonedMaze[ey][ex] != CellType.VIRUS_NODE) continue
+
+            val dx = Math.abs(playerX - ex)
+            val dy = Math.abs(playerY - ey)
+            val dist = Math.max(dx, dy)
+
+            val originalKey = "${currentFloorKey}_${ex}_${ey}"
+            val currentUnderlyingType = underlyingCellTypes[originalKey] ?: CellType.PATH
+
+            // 1. Balcony & Gallery Vantage Sniping AI
+            if (currentUnderlyingType == CellType.ELEVATED_BALCONY && dist <= 3) {
+                val shieldDamage = minOf(state.playerShield, kotlin.random.Random.nextInt(2, 5))
+                val integrityDamage = if (shieldDamage < 4) (kotlin.random.Random.nextInt(2, 5) - shieldDamage).coerceAtLeast(0) else 0
+                val totalDmg = shieldDamage + integrityDamage
+                if (totalDmg > 0) {
+                    _uiState.update { s ->
+                        s.copy(
+                            playerShield = maxOf(0, s.playerShield - shieldDamage),
+                            integrity = maxOf(0, s.integrity - integrityDamage)
+                        )
+                    }
+                    addLog("⚠️ GALLERY SNIPER: Hostile process at ($ex, $ey) sniped you from the elevated gallery! Dealt $totalDmg static damage.", LogType.ALERT)
+                    if (_uiState.value.integrity <= 0) {
+                        handleGameOver("Destroyed by remote gallery sniper")
+                        return
+                    }
+                }
+                continue // Remain in high vantage balcony for sniping
+            }
+
+            // 2. Vertical Elevator / Stairs Transiting AI
+            if (state.currentZone == com.example.data.Zone.BUILDING &&
+                (currentUnderlyingType == CellType.ELEVATOR ||
+                 currentUnderlyingType == CellType.STAIRS_UP ||
+                 currentUnderlyingType == CellType.STAIRS_DOWN) &&
+                kotlin.random.Random.nextFloat() < 0.20f) {
+                
+                val destFloor = if (currentUnderlyingType == CellType.STAIRS_UP && state.buildingFloor < 4) {
+                    state.buildingFloor + 1
+                } else if (currentUnderlyingType == CellType.STAIRS_DOWN && state.buildingFloor > 1) {
+                    state.buildingFloor - 1
+                } else if (currentUnderlyingType == CellType.ELEVATOR) {
+                    val otherFloors = (1..4).filter { it != state.buildingFloor }
+                    otherFloors[kotlin.random.Random.nextInt(otherFloors.size)]
+                } else {
+                    null
+                }
+
+                if (destFloor != null) {
+                    val destFloorMaze = state.buildingFloors[destFloor]
+                    if (destFloorMaze != null && destFloorMaze.isNotEmpty()) {
+                        var targetSpawn: Pair<Int, Int>? = null
+                        for (ty in destFloorMaze.indices) {
+                            for (tx in destFloorMaze[0].indices) {
+                                if (destFloorMaze[ty][tx] == currentUnderlyingType) {
+                                    for (sdir in listOf(Pair(-1,0), Pair(1,0), Pair(0,-1), Pair(0,1))) {
+                                        val sx = tx + sdir.first
+                                        val sy = ty + sdir.second
+                                        if (sy in destFloorMaze.indices && sx in destFloorMaze[0].indices &&
+                                            destFloorMaze[sy][sx] == CellType.PATH) {
+                                            targetSpawn = Pair(sx, sy)
+                                            break
+                                        }
+                                    }
+                                }
+                                if (targetSpawn != null) break
+                            }
+                            if (targetSpawn != null) break
+                        }
+
+                        if (targetSpawn != null) {
+                            clonedMaze[ey][ex] = currentUnderlyingType
+                            underlyingCellTypes.remove(originalKey)
+
+                            val updatedDestMaze = Array(destFloorMaze.size) { y -> Array(destFloorMaze[0].size) { x -> destFloorMaze[y][x] } }
+                            updatedDestMaze[targetSpawn.second][targetSpawn.first] = CellType.VIRUS_NODE
+                            
+                            val destKey = "BUILDING_${destFloor}_${targetSpawn.first}_${targetSpawn.second}"
+                            underlyingCellTypes[destKey] = CellType.PATH
+
+                            val updatedFloorsMap = state.buildingFloors.toMutableMap()
+                            updatedFloorsMap[destFloor] = updatedDestMaze
+                            _uiState.update { s -> s.copy(buildingFloors = updatedFloorsMap) }
+
+                            addLog("⚠️ SECTOR WARNING: Hostile process migrated through vertical shafts to FLOOR $destFloor!", LogType.ALERT)
+                            mazeModified = true
+                            continue
+                        }
+                    }
+                }
+            }
+
+            // 3. Movement pathfinding (normal patrol or gravity assist slope dash)
+            val isOnSlope = currentUnderlyingType == CellType.GRAVITY_SLOPE
+            val maxSteps = if (isOnSlope && dist <= 5) 2 else 1
+
+            var currentEx = ex
+            var currentEy = ey
+
+            for (step in 1..maxSteps) {
+                val neighbors = listOf(
+                    Pair(currentEx - 1, currentEy),
+                    Pair(currentEx + 1, currentEy),
+                    Pair(currentEx, currentEy - 1),
+                    Pair(currentEx, currentEy + 1)
+                ).filter { (nx, ny) ->
+                    ny in 0 until height && nx in 0 until width &&
+                    clonedMaze[ny][nx] != CellType.WALL &&
+                    clonedMaze[ny][nx] != CellType.VIRUS_NODE &&
+                    clonedMaze[ny][nx] != CellType.DATA_STORE &&
+                    clonedMaze[ny][nx] != CellType.SECRET_CACHE &&
+                    clonedMaze[ny][nx] != CellType.SAFE_ZONE
+                }
+
+                if (neighbors.isEmpty()) break
+
+                val nextPos = if (dist <= 4) {
+                    neighbors.minByOrNull { (nx, ny) ->
+                        val ndx = Math.abs(playerX - nx)
+                        val ndy = Math.abs(playerY - ny)
+                        Math.max(ndx, ndy)
+                    }
+                } else {
+                    neighbors[kotlin.random.Random.nextInt(neighbors.size)]
+                }
+
+                if (nextPos != null) {
+                    val nx = nextPos.first
+                    val ny = nextPos.second
+
+                    val destKey = "${currentFloorKey}_${nx}_${ny}"
+                    if (!underlyingCellTypes.containsKey(destKey)) {
+                        underlyingCellTypes[destKey] = clonedMaze[ny][nx]
+                    }
+
+                    val srcKey = "${currentFloorKey}_${currentEx}_${currentEy}"
+                    val srcUnderlying = underlyingCellTypes[srcKey] ?: CellType.PATH
+
+                    clonedMaze[currentEy][currentEx] = srcUnderlying
+                    underlyingCellTypes.remove(srcKey)
+
+                    clonedMaze[ny][nx] = CellType.VIRUS_NODE
+                    
+                    if (isOnSlope && step == 1) {
+                        addLog("⚠️ GRAVITY DASH: Security process at ($currentEx, $currentEy) charged down the gravity ramp!", LogType.ALERT)
+                    }
+
+                    currentEx = nx
+                    currentEy = ny
+                    mazeModified = true
+                } else {
+                    break
+                }
+            }
+        }
+
+        if (mazeModified) {
+            _uiState.update { s -> s.copy(maze = clonedMaze) }
+            updatePerspective()
         }
     }
 
@@ -798,6 +1282,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val baseDmg = program.damage
             val statPower = (state.level * 2) + state.damageBonus
             var rawPlayerDamage = baseDmg + statPower
+
+            // Balcony Vantage: +25% attack damage bonus
+            val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
+            if (standCell == com.example.data.CellType.ELEVATED_BALCONY) {
+                rawPlayerDamage = (rawPlayerDamage * 1.25f).toInt()
+                addLog("✨ BALCONY VANTAGE ACTIVE: Attack payload magnified by 25% from high-level gallery overlook!", LogType.SUCCESS)
+            }
+
             var isCrit = false
 
             val critRate = 10 + (state.ram * 2)
@@ -890,6 +1382,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val selectedAction = actions[Random.nextInt(actions.size)]
             var baseEnemyDmg = enemy.damage + Random.nextInt(-2, 3)
             if (baseEnemyDmg < 2) baseEnemyDmg = 2
+
+            // Gravity Slope check (Evasion boost reduces enemy hit intensity by 30%)
+            val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
+            if (standCell == com.example.data.CellType.GRAVITY_SLOPE) {
+                baseEnemyDmg = (baseEnemyDmg * 0.70f).toInt().coerceAtLeast(1)
+                addLog("✨ GRAVITY EVASION: Magnetic slope rapid momentum absorbed 30% of incoming packet force!", LogType.SUCCESS)
+            }
 
             if (isScanStunned) {
                 baseEnemyDmg = (baseEnemyDmg * 0.4f).toInt().coerceAtLeast(1)
@@ -1013,7 +1512,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (targetY in state.maze.indices && targetX in state.maze[0].indices) {
             val cellAhead = state.maze[targetY][targetX]
-            if (cellAhead == CellType.DATA_STORE || cellAhead == CellType.ENCRYPTED_PORTAL || cellAhead == CellType.VIRUS_NODE || cellAhead == CellType.SECRET_CACHE) {
+            if (cellAhead == CellType.DATA_STORE || cellAhead == CellType.ENCRYPTED_PORTAL || 
+                cellAhead == CellType.VIRUS_NODE || cellAhead == CellType.SECRET_CACHE ||
+                cellAhead == CellType.STAIRS_UP || cellAhead == CellType.STAIRS_DOWN ||
+                cellAhead == CellType.ELEVATOR) {
                 cellToInteractWith = cellAhead
             }
         }
@@ -1021,7 +1523,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // 2. If no interactive cell is ahead, check if we are standing on one!
         if (cellToInteractWith == CellType.PATH) {
             val cellCurrent = state.maze[state.gridY][state.gridX]
-            if (cellCurrent == CellType.DATA_STORE || cellCurrent == CellType.ENCRYPTED_PORTAL || cellCurrent == CellType.VIRUS_NODE || cellCurrent == CellType.SECRET_CACHE) {
+            if (cellCurrent == CellType.DATA_STORE || cellCurrent == CellType.ENCRYPTED_PORTAL || 
+                cellCurrent == CellType.VIRUS_NODE || cellCurrent == CellType.SECRET_CACHE ||
+                cellCurrent == CellType.STAIRS_UP || cellCurrent == CellType.STAIRS_DOWN ||
+                cellCurrent == CellType.ELEVATOR) {
                 cellToInteractWith = cellCurrent
                 interactX = state.gridX
                 interactY = state.gridY
@@ -1042,19 +1547,40 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("INITIATING HANDSHAKE WITH CLASSIFIED CRYPT-CACHE...", LogType.SUCCESS)
                 startHackingPuzzle(interactX, interactY, difficulty = state.level + 1)
             }
+            CellType.STAIRS_UP -> {
+                ascendStairs()
+            }
+            CellType.STAIRS_DOWN -> {
+                descendStairs()
+            }
+            CellType.ELEVATOR -> {
+                interactWithElevator()
+            }
             CellType.ENCRYPTED_PORTAL -> {
                 addLog("SUB-SECTOR DECRYPTION INITIALIZED...", LogType.SUCCESS)
-                // Go to next cyberspace level!
-                _uiState.update { stateNow ->
-                    val nextLvl = stateNow.level + 1
-                    stateNow.copy(
-                        level = nextLvl,
-                        credits = stateNow.credits + 150, // Bonus credits for sector completion
-                        totalCreditsEarned = stateNow.totalCreditsEarned + 150
-                    )
+                val stateNow = _uiState.value
+                when (stateNow.currentZone) {
+                    com.example.data.Zone.BUILDING -> {
+                        addLog("EMERGING FROM BUILDING REACTOR CORE. ENTERING COLLECTOR SUB-TUNNELS...", LogType.ALERT)
+                        _uiState.update { it.copy(credits = it.credits + 200, totalCreditsEarned = it.totalCreditsEarned + 200) }
+                        loadOrCreateLevel(com.example.data.Zone.COLLECTORS, 1, isAscending = true)
+                    }
+                    com.example.data.Zone.COLLECTORS -> {
+                        addLog("DRAINAGE SEQUENCE COMPLETE. EMERGING INTO METROPOLITAN CYBER-CITY MAIN GRID!", LogType.SUCCESS)
+                        _uiState.update { it.copy(credits = it.credits + 300, totalCreditsEarned = it.totalCreditsEarned + 300) }
+                        loadOrCreateLevel(com.example.data.Zone.CITY, 0, isAscending = true)
+                    }
+                    com.example.data.Zone.CITY -> {
+                        addLog("ULTIMATE NETRUN-GATE PENETRATED! CYBERSPACE SECURED!", LogType.SUCCESS)
+                        _uiState.update { s ->
+                            s.copy(
+                                screen = ActiveScreen.GAME_OVER,
+                                gameState = GameState.COMBAT_END,
+                                runOutcome = "CORE GRID TAKEOVER: SUCCESSFUL NETRUN"
+                            )
+                        }
+                    }
                 }
-                addLog("DECRYPTED AND TRANSFERRED TO CORE SECTOR ${_uiState.value.level}.", LogType.SUCCESS)
-                generateNewLevel()
             }
             CellType.VIRUS_NODE -> {
                 addLog("FORCE-CONNECTING WITH ACTIVE THREAT...", LogType.ALERT)
@@ -1194,19 +1720,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             updatedMaze[state.targetNodeY][state.targetNodeX] = CellType.PATH
         }
 
+        val obtainedKeycard = state.currentZone == com.example.data.Zone.BUILDING && state.buildingFloor == 2 && isSecretCache && !state.hasElevatorKeycard
+
         _uiState.update { stateNow ->
             stateNow.copy(
                 screen = ActiveScreen.EXPLORATION,
                 credits = stateNow.credits + bountyCredits,
                 totalCreditsEarned = stateNow.totalCreditsEarned + bountyCredits,
-                inventory = updatedInventory,
+                inventory = if (obtainedKeycard) updatedInventory + "Elevator Keycard" else updatedInventory,
                 nodesHackedCount = stateNow.nodesHackedCount + 1,
                 maze = updatedMaze,
-                activePuzzle = null
+                activePuzzle = null,
+                hasElevatorKeycard = stateNow.hasElevatorKeycard || obtainedKeycard
             )
         }
 
         updatePerspective()
+        if (obtainedKeycard) {
+            addLog("🔑 SECURE KEYCARD RETRIEVED FROM CRYPT-CACHE!", LogType.SUCCESS)
+            addLog("ELEVATOR LINK ONLINE: You can now access the Express Elevator shaft in the building center!", LogType.SUCCESS)
+        }
         if (isSecretCache) {
             addLog("CLASSIFIED VAULT INTRUSION SUCCEEDED!", LogType.SUCCESS)
             addLog("EXTRACTED ULTRA CREDITS: +$bountyCredits MB!", LogType.SUCCESS)
@@ -1268,7 +1801,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 25 // Base starting combat shield barrier
             }
             state.copy(
-                screen = ActiveScreen.COMBAT,
                 activeEnemy = enemy,
                 playerShield = baseCombatShield,
                 targetNodeX = targetX,
@@ -1306,6 +1838,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val baseDmg = program.damage
         val statPower = (state.level * 2) + state.damageBonus
         var rawPlayerDamage = baseDmg + statPower
+
+        // Balcony Vantage: +25% attack damage bonus
+        val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
+        if (standCell == com.example.data.CellType.ELEVATED_BALCONY) {
+            rawPlayerDamage = (rawPlayerDamage * 1.25f).toInt()
+            addLog("✨ BALCONY VANTAGE ACTIVE: Attack payload magnified by 25% from high-level gallery overlook!", LogType.SUCCESS)
+        }
+
         var isCrit = false
 
         // Crit rate calculation
@@ -1551,7 +2091,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 "GibsonForecast.sys" -> {
                     val stepsRemaining = (stateNow.nextEventSteps - stateNow.stepsSinceLastEvent).coerceAtLeast(1)
-                    val nextWeather = stateNow.predictedWeather ?: com.example.data.CyberWeather.values().filter { it != com.example.data.CyberWeather.CLEAR }.random()
+                    val nextWeather = stateNow.predictedWeather ?: com.example.data.CyberWeather.VALUES.filter { it != com.example.data.CyberWeather.CLEAR }.random()
                     logText = "COMPILED GibsonForecast.sys: Next sub-grid atmospheric event predicted: [${nextWeather.title}] in $stepsRemaining steps."
                     stateNow.copy(
                         predictedWeather = nextWeather,

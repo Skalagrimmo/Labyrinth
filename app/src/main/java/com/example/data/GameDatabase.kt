@@ -47,11 +47,11 @@ abstract class GameDatabase : RoomDatabase() {
 class GameRepository(private val runRecordDao: RunRecordDao) {
     val allRunRecords: Flow<List<RunRecord>> = runRecordDao.getAllRecords()
 
-    suspend fun insert(record: RunRecord) {
+    suspend fun insert(record: RunRecord) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         runRecordDao.insertRecord(record)
     }
 
-    suspend fun clearAll() {
+    suspend fun clearAll() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         runRecordDao.clearRecords()
     }
 }
