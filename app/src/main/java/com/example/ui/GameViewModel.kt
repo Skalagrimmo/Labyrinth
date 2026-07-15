@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
@@ -37,7 +38,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     // Primary Game UI State
     data class GameUiState(
-        val screen: ActiveScreen = ActiveScreen.CHARACTER_CREATION,
+        val screen: ActiveScreen = ActiveScreen.START_MENU,
         val runnerName: String = "",
         val runnerClass: NetrunnerClass = NetrunnerClass.CODE_SLASHER,
         val maxIntegrity: Int = 100,
@@ -120,6 +121,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     enum class ActiveScreen {
+        START_MENU,
         CHARACTER_CREATION,
         EXPLORATION,
         COMBAT,
@@ -2348,6 +2350,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun exitLeaderboard() {
         if (_uiState.value.integrity <= 0) {
             _uiState.update { it.copy(screen = ActiveScreen.GAME_OVER) }
+        } else if (_uiState.value.runnerName.isEmpty()) {
+            _uiState.update { it.copy(screen = ActiveScreen.START_MENU) }
         } else {
             _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
             updatePerspective()
@@ -2406,8 +2410,358 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun restartGame() {
-        _uiState.update { GameUiState() }
+        _uiState.update { GameUiState(screen = ActiveScreen.START_MENU) }
         addLog("REBOOTING TERMINAL CORE V8.91...", LogType.ALERT)
+        addLog("SELECT ARCHETYPE PROFILE TO COMPILE.", LogType.INFO)
+    }
+
+    fun startNewRun() {
+        _uiState.update { GameUiState(screen = ActiveScreen.CHARACTER_CREATION) }
+        addLog("ESTABLISHING SECURE CONNECTION...", LogType.SUCCESS)
         addLog("SELECT NETRUNNER ARCHETYPE PROFILE TO COMPILE.", LogType.INFO)
+    }
+
+    private var previousScreenBeforeMenu: ActiveScreen = ActiveScreen.CHARACTER_CREATION
+
+    fun returnToStartMenu() {
+        val currentScreen = _uiState.value.screen
+        if (currentScreen != ActiveScreen.START_MENU) {
+            previousScreenBeforeMenu = currentScreen
+        }
+        _uiState.update { it.copy(screen = ActiveScreen.START_MENU) }
+    }
+
+    fun resumeGame() {
+        _uiState.update { it.copy(screen = previousScreenBeforeMenu) }
+        updatePerspective()
+    }
+
+    // ----------------------------------------------------
+    // PERSISTENCE: Save / Load Game state via SharedPreferences
+    // ----------------------------------------------------
+    private fun serializeMaze(maze: Array<Array<com.example.data.CellType>>): String {
+        return maze.joinToString(";") { row ->
+            row.joinToString(",") { it.name }
+        }
+    }
+
+    private fun deserializeMaze(str: String): Array<Array<com.example.data.CellType>> {
+        if (str.isEmpty()) return emptyArray()
+        val rows = str.split(";")
+        return rows.map { row ->
+            row.split(",").map { cellName ->
+                try {
+                    com.example.data.CellType.valueOf(cellName)
+                } catch (e: Exception) {
+                    com.example.data.CellType.WALL
+                }
+            }.toTypedArray()
+        }.toTypedArray()
+    }
+
+    private fun serializeExploredCells(cells: Set<Pair<Int, Int>>): String {
+        return cells.joinToString(";") { "${it.first},${it.second}" }
+    }
+
+    private fun deserializeExploredCells(str: String): Set<Pair<Int, Int>> {
+        if (str.isEmpty()) return emptySet()
+        return str.split(";").mapNotNull {
+            val parts = it.split(",")
+            if (parts.size == 2) {
+                val first = parts[0].toIntOrNull()
+                val second = parts[1].toIntOrNull()
+                if (first != null && second != null) {
+                    Pair(first, second)
+                } else null
+            } else null
+        }.toSet()
+    }
+
+    private fun serializeFloors(floors: Map<Int, Array<Array<com.example.data.CellType>>>): String {
+        return floors.map { (floor, maze) ->
+            "$floor:${serializeMaze(maze)}"
+        }.joinToString("|")
+    }
+
+    private fun deserializeFloors(str: String): Map<Int, Array<Array<com.example.data.CellType>>> {
+        if (str.isEmpty()) return emptyMap()
+        val map = mutableMapOf<Int, Array<Array<com.example.data.CellType>>>()
+        str.split("|").forEach { entry ->
+            val parts = entry.split(":", limit = 2)
+            if (parts.size == 2) {
+                val floor = parts[0].toIntOrNull()
+                if (floor != null) {
+                    map[floor] = deserializeMaze(parts[1])
+                }
+            }
+        }
+        return map
+    }
+
+    private fun serializeExploredMap(explored: Map<Int, Set<Pair<Int, Int>>>): String {
+        return explored.map { (floor, cells) ->
+            "$floor:${serializeExploredCells(cells)}"
+        }.joinToString("|")
+    }
+
+    private fun deserializeExploredMap(str: String): Map<Int, Set<Pair<Int, Int>>> {
+        if (str.isEmpty()) return emptyMap()
+        val map = mutableMapOf<Int, Set<Pair<Int, Int>>>()
+        str.split("|").forEach { entry ->
+            val parts = entry.split(":", limit = 2)
+            if (parts.size == 2) {
+                val floor = parts[0].toIntOrNull()
+                if (floor != null) {
+                    map[floor] = deserializeExploredCells(parts[1])
+                }
+            }
+        }
+        return map
+    }
+
+    fun hasSavedGame(): Boolean {
+        val sharedPrefs = getApplication<Application>().getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        return sharedPrefs.getBoolean("has_saved_game", false)
+    }
+
+    fun saveGame() {
+        val state = _uiState.value
+        if (state.runnerName.isEmpty()) return
+        val sharedPrefs = getApplication<Application>().getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        sharedPrefs.edit().apply {
+            putBoolean("has_saved_game", true)
+            putString("runnerName", state.runnerName)
+            putString("runnerClass", state.runnerClass.name)
+            putInt("maxIntegrity", state.maxIntegrity)
+            putInt("integrity", state.integrity)
+            putInt("playerMaxShield", state.playerMaxShield)
+            putInt("playerShield", state.playerShield)
+            putInt("maxRam", state.maxRam)
+            putInt("ram", state.ram)
+            putInt("ramRecoveryRate", state.ramRecoveryRate)
+            putInt("credits", state.credits)
+            putInt("damageBonus", state.damageBonus)
+            putInt("defenseBonus", state.defenseBonus)
+            putInt("gridX", state.gridX)
+            putInt("gridY", state.gridY)
+            putString("direction", state.direction.name)
+            putInt("level", state.level)
+            putString("currentZone", state.currentZone.name)
+            putInt("buildingFloor", state.buildingFloor)
+            putInt("collectorsLevel", state.collectorsLevel)
+            putInt("cityDistrictIndex", state.cityDistrictIndex)
+            putBoolean("hasElevatorKeycard", state.hasElevatorKeycard)
+
+            // Collection fields
+            putString("inventory", state.inventory.joinToString(","))
+            putString("installedCyberware", state.installedCyberware.joinToString(",") { it.id })
+            putString("installedPrograms", state.installedPrograms.joinToString(",") { it.id })
+            putString("exploredCells", serializeExploredCells(state.exploredCells))
+            
+            // Weather
+            putString("activeWeather", state.activeWeather.name)
+            putInt("weatherTurnsLeft", state.weatherTurnsLeft)
+            putInt("stepsSinceLastEvent", state.stepsSinceLastEvent)
+            putInt("nextEventSteps", state.nextEventSteps)
+            putString("predictedWeather", state.predictedWeather?.name ?: "")
+
+            // Stats
+            putInt("nodesHackedCount", state.nodesHackedCount)
+            putInt("totalCreditsEarned", state.totalCreditsEarned)
+
+            // Map generation state caching
+            putString("maze", serializeMaze(state.maze))
+            putString("originalMaze", state.originalMaze?.let { serializeMaze(it) } ?: "")
+            putString("buildingFloors", serializeFloors(state.buildingFloors))
+            putString("buildingExplored", serializeExploredMap(state.buildingExplored))
+            putString("collectorsLevels", serializeFloors(state.collectorsLevels))
+            putString("collectorsExplored", serializeExploredMap(state.collectorsExplored))
+            putString("cityDistricts", serializeFloors(state.cityDistricts))
+            putString("cityExplored", serializeExploredMap(state.cityExplored))
+
+            // Game state and logs
+            putString("gameState", state.gameState.name)
+            putString("logFeed", state.logFeed.joinToString("$$") { "${it.text}||${it.type.name}||${it.timestamp}" })
+
+            apply()
+        }
+        addLog("💾 COGNITIVE STATE PERSISTED TO CHIP STORAGE.", LogType.SUCCESS)
+    }
+
+    fun loadGame() {
+        val sharedPrefs = getApplication<Application>().getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("has_saved_game", false)) {
+            addLog("⚠️ ERROR: NO RESTORE POINT FOUND.", LogType.ERROR)
+            return
+        }
+
+        try {
+            val runnerClass = try {
+                NetrunnerClass.valueOf(sharedPrefs.getString("runnerClass", "") ?: "CODE_SLASHER")
+            } catch (e: Exception) {
+                NetrunnerClass.CODE_SLASHER
+            }
+
+            val direction = try {
+                Direction.valueOf(sharedPrefs.getString("direction", "") ?: "EAST")
+            } catch (e: Exception) {
+                Direction.EAST
+            }
+
+            val currentZone = try {
+                com.example.data.Zone.valueOf(sharedPrefs.getString("currentZone", "") ?: "BUILDING")
+            } catch (e: Exception) {
+                com.example.data.Zone.BUILDING
+            }
+
+            val activeWeather = try {
+                com.example.data.CyberWeather.valueOf(sharedPrefs.getString("activeWeather", "") ?: "CLEAR")
+            } catch (e: Exception) {
+                com.example.data.CyberWeather.CLEAR
+            }
+
+            val predictedWeatherStr = sharedPrefs.getString("predictedWeather", "") ?: ""
+            val predictedWeather = if (predictedWeatherStr.isNotEmpty()) {
+                try {
+                    com.example.data.CyberWeather.valueOf(predictedWeatherStr)
+                } catch (e: Exception) {
+                    null
+                }
+            } else null
+
+            val gameState = try {
+                GameState.valueOf(sharedPrefs.getString("gameState", "") ?: "EXPLORATION")
+            } catch (e: Exception) {
+                GameState.EXPLORATION
+            }
+
+            // Restore inventories
+            val invStr = sharedPrefs.getString("inventory", "") ?: ""
+            val inventory = if (invStr.isEmpty()) emptyList() else invStr.split(",")
+
+            val cyberStr = sharedPrefs.getString("installedCyberware", "") ?: ""
+            val installedCyberware = if (cyberStr.isEmpty()) emptyList() else cyberStr.split(",").map { getCyberwareById(it) }
+
+            val progStr = sharedPrefs.getString("installedPrograms", "") ?: ""
+            val installedPrograms = if (progStr.isEmpty()) emptyList() else progStr.split(",").map { getProgramById(it) }
+
+            // Logs
+            val logStr = sharedPrefs.getString("logFeed", "") ?: ""
+            val logFeed = if (logStr.isEmpty()) emptyList() else logStr.split("$$").mapNotNull { line ->
+                val parts = line.split("||")
+                if (parts.size == 3) {
+                    val text = parts[0]
+                    val type = try { LogType.valueOf(parts[1]) } catch(e: Exception) { LogType.INFO }
+                    val ts = parts[2].toLongOrNull() ?: System.currentTimeMillis()
+                    LogMessage(text, type, ts)
+                } else null
+            }
+
+            // Maze and Maps
+            val mazeStr = sharedPrefs.getString("maze", "") ?: ""
+            val maze = deserializeMaze(mazeStr)
+
+            val originalMazeStr = sharedPrefs.getString("originalMaze", "") ?: ""
+            val originalMaze = if (originalMazeStr.isEmpty()) null else deserializeMaze(originalMazeStr)
+
+            val buildingFloorsStr = sharedPrefs.getString("buildingFloors", "") ?: ""
+            val buildingFloors = deserializeFloors(buildingFloorsStr)
+
+            val buildingExploredStr = sharedPrefs.getString("buildingExplored", "") ?: ""
+            val buildingExplored = deserializeExploredMap(buildingExploredStr)
+
+            val collectorsLevelsStr = sharedPrefs.getString("collectorsLevels", "") ?: ""
+            val collectorsLevels = deserializeFloors(collectorsLevelsStr)
+
+            val collectorsExploredStr = sharedPrefs.getString("collectorsExplored", "") ?: ""
+            val collectorsExplored = deserializeExploredMap(collectorsExploredStr)
+
+            val cityDistrictsStr = sharedPrefs.getString("cityDistricts", "") ?: ""
+            val cityDistricts = deserializeFloors(cityDistrictsStr)
+
+            val cityExploredStr = sharedPrefs.getString("cityExplored", "") ?: ""
+            val cityExplored = deserializeExploredMap(cityExploredStr)
+
+            val exploredCellsStr = sharedPrefs.getString("exploredCells", "") ?: ""
+            val exploredCells = deserializeExploredCells(exploredCellsStr)
+
+            _uiState.update {
+                it.copy(
+                    screen = ActiveScreen.EXPLORATION, // Enter game directly!
+                    runnerName = sharedPrefs.getString("runnerName", "") ?: "",
+                    runnerClass = runnerClass,
+                    maxIntegrity = sharedPrefs.getInt("maxIntegrity", 100),
+                    integrity = sharedPrefs.getInt("integrity", 100),
+                    playerMaxShield = sharedPrefs.getInt("playerMaxShield", 50),
+                    playerShield = sharedPrefs.getInt("playerShield", 10),
+                    maxRam = sharedPrefs.getInt("maxRam", 12),
+                    ram = sharedPrefs.getInt("ram", 12),
+                    ramRecoveryRate = sharedPrefs.getInt("ramRecoveryRate", 2),
+                    credits = sharedPrefs.getInt("credits", 100),
+                    damageBonus = sharedPrefs.getInt("damageBonus", 0),
+                    defenseBonus = sharedPrefs.getInt("defenseBonus", 0),
+                    gridX = sharedPrefs.getInt("gridX", 1),
+                    gridY = sharedPrefs.getInt("gridY", 1),
+                    direction = direction,
+                    level = sharedPrefs.getInt("level", 1),
+                    currentZone = currentZone,
+                    buildingFloor = sharedPrefs.getInt("buildingFloor", 1),
+                    collectorsLevel = sharedPrefs.getInt("collectorsLevel", 1),
+                    cityDistrictIndex = sharedPrefs.getInt("cityDistrictIndex", 0),
+                    hasElevatorKeycard = sharedPrefs.getBoolean("hasElevatorKeycard", false),
+                    inventory = inventory,
+                    installedCyberware = installedCyberware,
+                    installedPrograms = installedPrograms,
+                    exploredCells = exploredCells,
+                    activeWeather = activeWeather,
+                    weatherTurnsLeft = sharedPrefs.getInt("weatherTurnsLeft", 0),
+                    stepsSinceLastEvent = sharedPrefs.getInt("stepsSinceLastEvent", 0),
+                    nextEventSteps = sharedPrefs.getInt("nextEventSteps", 30),
+                    predictedWeather = predictedWeather,
+                    nodesHackedCount = sharedPrefs.getInt("nodesHackedCount", 0),
+                    totalCreditsEarned = sharedPrefs.getInt("totalCreditsEarned", 100),
+                    maze = maze,
+                    originalMaze = originalMaze,
+                    buildingFloors = buildingFloors,
+                    buildingExplored = buildingExplored,
+                    collectorsLevels = collectorsLevels,
+                    collectorsExplored = collectorsExplored,
+                    cityDistricts = cityDistricts,
+                    cityExplored = cityExplored,
+                    gameState = gameState,
+                    logFeed = logFeed
+                )
+            }
+
+            addLog("📶 COGNITIVE RESTORE POINT ESTABLISHED.", LogType.SUCCESS)
+            addLog("RE-LINKED AT GRID COORDINATES ($exploredCellsStr).", LogType.INFO)
+            updatePerspective()
+
+        } catch (e: Exception) {
+            addLog("⚠️ RESTORE ERROR: COMPILING CORRUPT SYSTEM CHIP - ${e.localizedMessage}", LogType.ERROR)
+        }
+    }
+
+    private fun getProgramById(id: String): Program {
+        return when(id) {
+            "ping" -> Program("ping", "ping.exe", "Scan enemy process. Deals 10 payload damage.", ramCost = 1, damage = 10)
+            "firewall" -> Program("firewall", "firewall.sh", "Harden defences. Restore 25 shield points.", ramCost = 2, shield = 25)
+            "kill9" -> Program("kill9", "kill-9.bin", "Force shutdown. Deals 35 heavy payload damage.", ramCost = 4, damage = 35)
+            "sandbox" -> Program("sandbox", "sandbox.sys", "Isolate threats. Restore 40 Integrity.", ramCost = 3, heal = 40)
+            "overflow" -> Program("overflow", "exploit.sh", "Pierces defenses, dealing 25 raw damage.", ramCost = 3, damage = 25, piercesDefense = true)
+            "custom_payload" -> Program("custom_payload", "utility.exe", "Unpredictable script. Deals 20 damage, restores 15 Integrity.", ramCost = 2, damage = 20, heal = 15)
+            else -> Program("basic_slash", "Slasher.sys", "Deals baseline security breach damage.", 0, damage = 12)
+        }
+    }
+
+    private fun getCyberwareById(id: String): Cyberware {
+        return when(id) {
+            "cpu_oc" -> Cyberware("cpu_oc", "CPU Overclocker", "+2 RAM Recovery Rate", 200, recoveryBonus = 2)
+            "mem_exp" -> Cyberware("mem_exp", "RAM Rig Extension", "+4 Max RAM Allocation", 250, ramBonus = 4)
+            "armor_plt" -> Cyberware("armor_plt", "Sub-Dermal Firewall", "+30 System Integrity", 180, integrityBonus = 30)
+            "dmg_mod" -> Cyberware("dmg_mod", "Payload Amplifier", "+5 Attack Damage output", 300, damageBonus = 5)
+            "def_mod" -> Cyberware("def_mod", "Defensive Buffer", "+10% Armor Defense", 220, defenseBonus = 2)
+            else -> Cyberware("cpu_oc", "CPU Overclocker", "+2 RAM Recovery Rate", 200, recoveryBonus = 2)
+        }
     }
 }
