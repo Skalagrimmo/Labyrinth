@@ -117,7 +117,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val collectorsLevels: Map<Int, Array<Array<com.example.data.CellType>>> = emptyMap(),
         val collectorsExplored: Map<Int, Set<Pair<Int, Int>>> = emptyMap(),
         val cityDistricts: Map<Int, Array<Array<com.example.data.CellType>>> = emptyMap(),
-        val cityExplored: Map<Int, Set<Pair<Int, Int>>> = emptyMap()
+        val cityExplored: Map<Int, Set<Pair<Int, Int>>> = emptyMap(),
+
+        // Morrowind Style System States
+        val selectedCombatStyle: String = "Slash", // "Slash", "Chop", "Thrust"
+        val equippedWeaponName: String = "Sparksteel Dagger",
+        val weaponSwingProgress: Float = 0f,
+        val weaponSwingType: String = "" // "Slash", "Chop", "Thrust"
     )
 
     enum class ActiveScreen {
@@ -165,6 +171,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             listOf("NanoMed.sys", "RAMBoost.exe")
         }
 
+        val weaponName = when (selectedClass) {
+            NetrunnerClass.CODE_SLASHER -> "Daedric Cyber-Katana"
+            NetrunnerClass.CYBER_SHIELD -> "Aegis Shock-Mace"
+            NetrunnerClass.SCRIPT_KIDDIE -> "Glass Cyber-Dagger"
+            NetrunnerClass.BUFFER_OVERFLOW -> "Ebony Plasma-Staff"
+        }
+
         _uiState.update { state ->
             state.copy(
                 screen = ActiveScreen.EXPLORATION,
@@ -185,6 +198,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 gridY = 1,
                 direction = Direction.EAST,
                 nodesHackedCount = 0,
+                equippedWeaponName = weaponName,
                 logFeed = emptyList() // clear creation logs for clean game view
             )
         }
@@ -1296,6 +1310,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setCombatStyle(style: String) {
+        _uiState.update { it.copy(selectedCombatStyle = style) }
+        addLog("COMBAT STANCE: Switched to $style stance.", LogType.INFO)
+    }
+
     fun combatAttack() {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
@@ -1305,10 +1324,110 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Set baseline attack cooldown: 0.8 seconds (8 ticks)
         _uiState.update { it.copy(attackCooldown = 8) }
 
-        val program = state.installedPrograms.firstOrNull { it.damage > 0 }
-            ?: Program("basic_slash", "Slasher.sys", "Deals baseline security breach damage.", 0, damage = 12)
+        // Start weapon swing animation in UI thread
+        viewModelScope.launch {
+            _uiState.update { it.copy(weaponSwingProgress = 0.2f, weaponSwingType = state.selectedCombatStyle) }
+            delay(60)
+            _uiState.update { it.copy(weaponSwingProgress = 0.7f) }
+            delay(60)
+            _uiState.update { it.copy(weaponSwingProgress = 1.0f) }
+            delay(100)
+            _uiState.update { it.copy(weaponSwingProgress = 0.5f) }
+            delay(60)
+            _uiState.update { it.copy(weaponSwingProgress = 0f) }
+        }
 
-        executeCombatProgramInline(program)
+        viewModelScope.launch {
+            addLog("> Swinging ${state.equippedWeaponName} (${state.selectedCombatStyle.uppercase()})...", LogType.INFO)
+
+            // Hit chance calculation (Morrowind Dice Roll)
+            val baseHitChance = when (state.selectedCombatStyle) {
+                "Slash" -> 70
+                "Chop" -> 55
+                "Thrust" -> 85
+                else -> 70
+            }
+            // Add level bonus & luck/agility-like RAM factor
+            val hitBonus = (state.level * 2) + (state.ram * 1)
+            val finalHitChance = (baseHitChance + hitBonus).coerceIn(20, 95)
+            val roll = Random.nextInt(100)
+
+            if (roll >= finalHitChance) {
+                // MISS!
+                addLog("⚔️ MISS! Your weapon swung wide. [Rolled: $roll vs Chance: $finalHitChance%]", LogType.ALERT)
+                _uiState.update { stateNow ->
+                    stateNow.copy(
+                        enemyDamagePopup = "MISS",
+                        combatFlashEnemy = false
+                    )
+                }
+                delay(400)
+                _uiState.update { it.copy(enemyDamagePopup = null) }
+                return@launch
+            }
+
+            // HIT! Calculate Damage
+            val baseDmg = when (state.selectedCombatStyle) {
+                "Slash" -> 16
+                "Chop" -> 24
+                "Thrust" -> 11
+                else -> 16
+            }
+            val statPower = (state.level * 2) + state.damageBonus
+            var rawPlayerDamage = baseDmg + statPower
+
+            // Balcony Vantage: +25% attack damage bonus
+            val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
+            if (standCell == com.example.data.CellType.ELEVATED_BALCONY) {
+                rawPlayerDamage = (rawPlayerDamage * 1.25f).toInt()
+                addLog("✨ BALCONY VANTAGE ACTIVE: Swing amplified from balcony overlooking!", LogType.SUCCESS)
+            }
+
+            // Crit checks
+            var isCrit = false
+            val critRate = 10 + (state.ram * 2)
+            val finalCritRate = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) critRate + 25 else critRate
+            if (Random.nextInt(100) < finalCritRate) {
+                isCrit = true
+                val critMultiplier = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) 2.0f else 1.5f
+                rawPlayerDamage = (rawPlayerDamage * critMultiplier).toInt()
+            }
+
+            val enemyArmor = enemy.armor
+            val effectiveArmor = if (isCrit) (enemyArmor * 0.5f).toInt() else enemyArmor
+            val finalDmg = maxOf(3, rawPlayerDamage - effectiveArmor)
+
+            val enemyRemShield = maxOf(0, enemy.shield - finalDmg)
+            val shieldDmg = enemy.shield - enemyRemShield
+            val bodyDmg = finalDmg - shieldDmg
+            val enemyRemIntegrity = maxOf(0, enemy.integrity - bodyDmg)
+
+            enemy.shield = enemyRemShield
+            enemy.integrity = enemyRemIntegrity
+
+            if (isCrit) {
+                addLog("💥 CRITICAL HIT! Double damage bypassed ${effectiveArmor} hostile armor!", LogType.SUCCESS)
+            }
+
+            addLog("⚔️ HIT! Dealt ${finalDmg} damage to ${enemy.name} (Shield: -${shieldDmg}, HP: -${bodyDmg}) [Roll: $roll vs Chance: $finalHitChance%]", LogType.SUCCESS)
+
+            _uiState.update { stateNow ->
+                stateNow.copy(
+                    combatFlashEnemy = true,
+                    enemyDamagePopup = "-$finalDmg HP"
+                )
+            }
+
+            delay(400)
+            _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
+
+            if (enemy.integrity <= 0) {
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                delay(1200)
+                handleCombatVictoryInline(enemy)
+                _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+            }
+        }
     }
 
     fun combatDefend() {
@@ -2434,6 +2553,167 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun resumeGame() {
         _uiState.update { it.copy(screen = previousScreenBeforeMenu) }
         updatePerspective()
+    }
+
+    fun runTerminalCommand(commandText: String) {
+        val trimmed = commandText.trim()
+        if (trimmed.isEmpty()) return
+
+        // Print command in the log console
+        addLog("> $trimmed", LogType.INFO)
+
+        val parts = trimmed.split(Regex("\\s+"))
+        val mainCommand = parts[0].lowercase()
+
+        val state = _uiState.value
+
+        when (mainCommand) {
+            "help", "?" -> {
+                addLog("=== CYBER-TERMINAL COMMAND INTERPRETER ===", LogType.SUCCESS)
+                addLog("NAVIGATION: 'forward'/'w'/'n', 'backward'/'s', 'left'/'a', 'right'/'d'", LogType.INFO)
+                addLog("INTERACTION: 'interact'/'use'/'e' (activate console/portal/cache/elevator)", LogType.INFO)
+                addLog("COMBAT ACTIONS: 'attack'/'hit', 'defend'/'block', 'flee'/'run'", LogType.INFO)
+                addLog("COMBAT STANCE: 'style slash'/'chop'/'thrust', or 'stance <style>'", LogType.INFO)
+                addLog("INVENTORY: 'use <item>' (e.g. 'use NanoMed.sys', 'use RAMBoost.exe')", LogType.INFO)
+                addLog("SYSTEM: 'status'/'stats', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
+                addLog("HACKING: 'hack <row> <col>' (e.g. 'hack 2 3')", LogType.INFO)
+            }
+            "w", "n", "north", "up", "forward", "move" -> {
+                if (state.screen == ActiveScreen.EXPLORATION) {
+                    moveForward()
+                } else {
+                    addLog("ERROR: Movement command only valid during active exploration.", LogType.ERROR)
+                }
+            }
+            "s", "south", "back", "backward", "down" -> {
+                if (state.screen == ActiveScreen.EXPLORATION) {
+                    moveBackward()
+                } else {
+                    addLog("ERROR: Movement command only valid during active exploration.", LogType.ERROR)
+                }
+            }
+            "a", "west", "left", "turnleft" -> {
+                if (state.screen == ActiveScreen.EXPLORATION) {
+                    turnLeft()
+                } else {
+                    addLog("ERROR: Turn command only valid during active exploration.", LogType.ERROR)
+                }
+            }
+            "d", "east", "right", "turnright" -> {
+                if (state.screen == ActiveScreen.EXPLORATION) {
+                    turnRight()
+                } else {
+                    addLog("ERROR: Turn command only valid during active exploration.", LogType.ERROR)
+                }
+            }
+            "e", "interact", "activate" -> {
+                if (state.screen == ActiveScreen.EXPLORATION) {
+                    interact()
+                } else {
+                    addLog("ERROR: Interaction command only valid during active exploration.", LogType.ERROR)
+                }
+            }
+            "status", "stats", "info" -> {
+                addLog("--- RUNNER INTEGRITY PROFILE ---", LogType.SUCCESS)
+                addLog("NAME: ${state.runnerName.ifEmpty { "UNNAMED" }} | LEVEL: ${state.level}", LogType.INFO)
+                addLog("INTEGRITY: ${state.integrity}/${state.maxIntegrity} | RAM: ${state.ram}/${state.maxRam}MB", LogType.INFO)
+                addLog("CREDITS: ${state.credits}MB | DAMAGE BONUS: +${state.damageBonus}", LogType.INFO)
+                addLog("WEAPON: ${state.equippedWeaponName} | STANCE: ${state.selectedCombatStyle}", LogType.INFO)
+                addLog("ZONE: ${state.currentZone} | INVENTORY: ${state.inventory.joinToString(", ")}", LogType.INFO)
+            }
+            "attack", "hit", "fight", "swing", "slash", "chop", "thrust" -> {
+                if (state.screen == ActiveScreen.COMBAT) {
+                    val isAction = mainCommand in listOf("slash", "chop", "thrust")
+                    if (isAction) {
+                        val properStyle = mainCommand.replaceFirstChar { it.uppercase() }
+                        setCombatStyle(properStyle)
+                    }
+                    combatAttack()
+                } else {
+                    addLog("ERROR: Combat actions are only valid during active hostile combat.", LogType.ERROR)
+                }
+            }
+            "defend", "block", "shield" -> {
+                if (state.screen == ActiveScreen.COMBAT) {
+                    combatDefend()
+                } else {
+                    addLog("ERROR: Combat actions are only valid during active hostile combat.", LogType.ERROR)
+                }
+            }
+            "flee", "run", "escape" -> {
+                if (state.screen == ActiveScreen.COMBAT) {
+                    fleeCombat()
+                } else {
+                    addLog("ERROR: Combat actions are only valid during active hostile combat.", LogType.ERROR)
+                }
+            }
+            "stance", "style" -> {
+                val style = parts.getOrNull(1)?.lowercase()
+                if (style in listOf("slash", "chop", "thrust")) {
+                    val properStyle = style!!.replaceFirstChar { it.uppercase() }
+                    setCombatStyle(properStyle)
+                } else {
+                    addLog("ERROR: Style must be 'slash', 'chop', or 'thrust'.", LogType.ERROR)
+                }
+            }
+            "use" -> {
+                val itemName = parts.drop(1).joinToString(" ")
+                if (itemName.isEmpty()) {
+                    addLog("ERROR: Specify item name. E.g. 'use NanoMed.sys'.", LogType.ERROR)
+                } else {
+                    val matchingItem = state.inventory.firstOrNull { it.equals(itemName, ignoreCase = true) }
+                    if (matchingItem != null) {
+                        useInventoryItem(matchingItem)
+                    } else {
+                        addLog("ERROR: Item '$itemName' not found in inventory.", LogType.ERROR)
+                    }
+                }
+            }
+            "shop", "store", "buy" -> {
+                if (state.screen == ActiveScreen.EXPLORATION) {
+                    enterShop()
+                } else {
+                    addLog("ERROR: Shop only accessible during exploration.", LogType.ERROR)
+                }
+            }
+            "exit", "close" -> {
+                when (state.screen) {
+                    ActiveScreen.UPGRADE_STORE -> exitShop()
+                    ActiveScreen.LEADERBOARD -> exitLeaderboard()
+                    ActiveScreen.HACKING_MINIGAME -> exitHackingMinigame()
+                    else -> addLog("ERROR: Nothing to exit.", LogType.ERROR)
+                }
+            }
+            "save" -> {
+                saveGame()
+            }
+            "load" -> {
+                loadGame()
+            }
+            "menu" -> {
+                returnToStartMenu()
+            }
+            "hack" -> {
+                if (state.screen == ActiveScreen.HACKING_MINIGAME) {
+                    val r = parts.getOrNull(1)?.toIntOrNull()
+                    val c = parts.getOrNull(2)?.toIntOrNull()
+                    if (r != null && c != null) {
+                        hackCell(r, c)
+                    } else {
+                        addLog("HACK: Please specify cell indices. E.g. 'hack 2 3'", LogType.ALERT)
+                    }
+                } else {
+                    addLog("ERROR: Decryption hacking minigame is not active.", LogType.ERROR)
+                }
+            }
+            "clear" -> {
+                _uiState.update { it.copy(logFeed = emptyList()) }
+                addLog("Log console history cleared.", LogType.INFO)
+            }
+            else -> {
+                addLog("UNKNOWN COMMAND: '$trimmed'. Type 'help' for support.", LogType.ERROR)
+            }
+        }
     }
 
     // ----------------------------------------------------

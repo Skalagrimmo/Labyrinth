@@ -48,6 +48,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
 import androidx.compose.ui.input.key.*
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -133,6 +139,9 @@ fun TerminalScreen(
             focusRequester.requestFocus()
         }
     }
+
+    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
 
     // Base background with modern high-density cyan grid layout and subtle scanlines (highly optimized)
     val gridSpacing = 32.dp
@@ -233,108 +242,231 @@ fun TerminalScreen(
             }
             .padding(6.dp)
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Retro Cyber Terminal Header
-            TerminalHeader(
-                uiState = uiState,
-                onLeaderboardClick = { viewModel.viewLeaderboard() },
-                onMenuClick = { viewModel.returnToStartMenu() }
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Body depending on active screen
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
+        if (isLandscape) {
+            Row(
+                modifier = Modifier.fillMaxSize(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                when (uiState.screen) {
-                    GameViewModel.ActiveScreen.START_MENU -> {
-                        StartMenuView(
-                            viewModel = viewModel,
-                            hasSavedGame = viewModel.hasSavedGame(),
-                            isActiveRun = uiState.runnerName.isNotEmpty() && uiState.integrity > 0,
-                            onStartNewRun = {
-                                runnerNameInput = ""
-                                viewModel.startNewRun()
-                            },
-                            onLoadGame = { viewModel.loadGame() },
-                            onSaveGame = { viewModel.saveGame() },
-                            onResumeGame = { viewModel.resumeGame() },
-                            onLeaderboardClick = { viewModel.viewLeaderboard() }
-                        )
+                // Left main section: Active Screen Viewport (interactive exploration/combat/character/menus)
+                Box(
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .fillMaxHeight()
+                ) {
+                    when (uiState.screen) {
+                        GameViewModel.ActiveScreen.START_MENU -> {
+                            StartMenuView(
+                                viewModel = viewModel,
+                                hasSavedGame = viewModel.hasSavedGame(),
+                                isActiveRun = uiState.runnerName.isNotEmpty() && uiState.integrity > 0,
+                                onStartNewRun = {
+                                    runnerNameInput = ""
+                                    viewModel.startNewRun()
+                                },
+                                onLoadGame = { viewModel.loadGame() },
+                                onSaveGame = { viewModel.saveGame() },
+                                onResumeGame = { viewModel.resumeGame() },
+                                onLeaderboardClick = { viewModel.viewLeaderboard() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.CHARACTER_CREATION -> {
+                            CharacterCreationView(
+                                runnerName = runnerNameInput,
+                                onNameChange = { runnerNameInput = it },
+                                selectedClass = selectedClass,
+                                onClassSelected = { selectedClass = it },
+                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass) }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.EXPLORATION -> {
+                            ExplorationView(
+                                uiState = uiState,
+                                viewModel = viewModel,
+                                onShopClick = { viewModel.enterShop() },
+                                onSafeDisconnect = { viewModel.disconnectRunSuccessfully() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.COMBAT -> {
+                            CombatView(
+                                uiState = uiState,
+                                onExecuteProgram = { viewModel.executeCombatProgram(it) },
+                                onFlee = { viewModel.fleeCombat() },
+                                onAttack = { viewModel.combatAttack() },
+                                onSetCombatStyle = { viewModel.setCombatStyle(it) }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
+                            HackingMinigableView(
+                                uiState = uiState,
+                                onCellSelected = { r, c -> viewModel.hackCell(r, c) },
+                                onCancel = { viewModel.exitHackingMinigame() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.UPGRADE_STORE -> {
+                            UpgradeStoreView(
+                                uiState = uiState,
+                                onBuyCyberware = { viewModel.purchaseCyberware(it) },
+                                onBuyConsumable = { name, cost -> viewModel.purchaseConsumable(name, cost) },
+                                onExit = { viewModel.exitShop() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.LEADERBOARD -> {
+                            LeaderboardView(
+                                scores = highScores,
+                                onClearScores = { viewModel.clearHighScores() },
+                                onExit = { viewModel.exitLeaderboard() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.GAME_OVER -> {
+                            GameOverView(
+                                uiState = uiState,
+                                onRestart = {
+                                    runnerNameInput = ""
+                                    viewModel.restartGame()
+                                }
+                            )
+                        }
                     }
-                    GameViewModel.ActiveScreen.CHARACTER_CREATION -> {
-                        CharacterCreationView(
-                            runnerName = runnerNameInput,
-                            onNameChange = { runnerNameInput = it },
-                            selectedClass = selectedClass,
-                            onClassSelected = { selectedClass = it },
-                            onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass) }
-                        )
-                    }
-                    GameViewModel.ActiveScreen.EXPLORATION -> {
-                        ExplorationView(
+                }
+
+                // Right side column: Header + Telemetry Log Console + High-density Controls
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    TerminalHeader(
+                        uiState = uiState,
+                        onLeaderboardClick = { viewModel.viewLeaderboard() },
+                        onMenuClick = { viewModel.returnToStartMenu() }
+                    )
+
+                    if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
+                        TerminalLogConsole(
                             uiState = uiState,
-                            viewModel = viewModel,
-                            onShopClick = { viewModel.enterShop() },
-                            onSafeDisconnect = { viewModel.disconnectRunSuccessfully() }
+                            onSendCommand = { viewModel.runTerminalCommand(it) },
+                            modifier = Modifier.weight(1f)
                         )
-                    }
-                    GameViewModel.ActiveScreen.COMBAT -> {
-                        CombatView(
-                            uiState = uiState,
-                            onExecuteProgram = { viewModel.executeCombatProgram(it) },
-                            onFlee = { viewModel.fleeCombat() }
+                        HighDensityBottomNavigation(
+                            currentScreen = uiState.screen,
+                            viewModel = viewModel
                         )
-                    }
-                    GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
-                        HackingMinigableView(
-                            uiState = uiState,
-                            onCellSelected = { r, c -> viewModel.hackCell(r, c) },
-                            onCancel = { viewModel.exitHackingMinigame() }
-                        )
-                    }
-                    GameViewModel.ActiveScreen.UPGRADE_STORE -> {
-                        UpgradeStoreView(
-                            uiState = uiState,
-                            onBuyCyberware = { viewModel.purchaseCyberware(it) },
-                            onBuyConsumable = { name, cost -> viewModel.purchaseConsumable(name, cost) },
-                            onExit = { viewModel.exitShop() }
-                        )
-                    }
-                    GameViewModel.ActiveScreen.LEADERBOARD -> {
-                        LeaderboardView(
-                            scores = highScores,
-                            onClearScores = { viewModel.clearHighScores() },
-                            onExit = { viewModel.exitLeaderboard() }
-                        )
-                    }
-                    GameViewModel.ActiveScreen.GAME_OVER -> {
-                        GameOverView(
-                            uiState = uiState,
-                            onRestart = {
-                                runnerNameInput = ""
-                                viewModel.restartGame()
-                            }
-                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            // Always Visible Terminal Log Output (Footer console log)
-            if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
-                TerminalLogConsole(uiState)
-                Spacer(modifier = Modifier.height(4.dp))
-                HighDensityBottomNavigation(
-                    currentScreen = uiState.screen,
-                    viewModel = viewModel
+        } else {
+            Column(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Retro Cyber Terminal Header
+                TerminalHeader(
+                    uiState = uiState,
+                    onLeaderboardClick = { viewModel.viewLeaderboard() },
+                    onMenuClick = { viewModel.returnToStartMenu() }
                 )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Body depending on active screen
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                ) {
+                    when (uiState.screen) {
+                        GameViewModel.ActiveScreen.START_MENU -> {
+                            StartMenuView(
+                                viewModel = viewModel,
+                                hasSavedGame = viewModel.hasSavedGame(),
+                                isActiveRun = uiState.runnerName.isNotEmpty() && uiState.integrity > 0,
+                                onStartNewRun = {
+                                    runnerNameInput = ""
+                                    viewModel.startNewRun()
+                                },
+                                onLoadGame = { viewModel.loadGame() },
+                                onSaveGame = { viewModel.saveGame() },
+                                onResumeGame = { viewModel.resumeGame() },
+                                onLeaderboardClick = { viewModel.viewLeaderboard() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.CHARACTER_CREATION -> {
+                            CharacterCreationView(
+                                runnerName = runnerNameInput,
+                                onNameChange = { runnerNameInput = it },
+                                selectedClass = selectedClass,
+                                onClassSelected = { selectedClass = it },
+                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass) }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.EXPLORATION -> {
+                            ExplorationView(
+                                uiState = uiState,
+                                viewModel = viewModel,
+                                onShopClick = { viewModel.enterShop() },
+                                onSafeDisconnect = { viewModel.disconnectRunSuccessfully() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.COMBAT -> {
+                            CombatView(
+                                uiState = uiState,
+                                onExecuteProgram = { viewModel.executeCombatProgram(it) },
+                                onFlee = { viewModel.fleeCombat() },
+                                onAttack = { viewModel.combatAttack() },
+                                onSetCombatStyle = { viewModel.setCombatStyle(it) }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
+                            HackingMinigableView(
+                                uiState = uiState,
+                                onCellSelected = { r, c -> viewModel.hackCell(r, c) },
+                                onCancel = { viewModel.exitHackingMinigame() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.UPGRADE_STORE -> {
+                            UpgradeStoreView(
+                                uiState = uiState,
+                                onBuyCyberware = { viewModel.purchaseCyberware(it) },
+                                onBuyConsumable = { name, cost -> viewModel.purchaseConsumable(name, cost) },
+                                onExit = { viewModel.exitShop() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.LEADERBOARD -> {
+                            LeaderboardView(
+                                scores = highScores,
+                                onClearScores = { viewModel.clearHighScores() },
+                                onExit = { viewModel.exitLeaderboard() }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.GAME_OVER -> {
+                            GameOverView(
+                                uiState = uiState,
+                                onRestart = {
+                                    runnerNameInput = ""
+                                    viewModel.restartGame()
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Always Visible Terminal Log Output (Footer console log)
+                if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
+                    TerminalLogConsole(
+                        uiState = uiState,
+                        onSendCommand = { viewModel.runTerminalCommand(it) },
+                        modifier = Modifier.height(125.dp)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    HighDensityBottomNavigation(
+                        currentScreen = uiState.screen,
+                        viewModel = viewModel
+                    )
+                }
             }
         }
     }
@@ -400,14 +532,14 @@ fun TerminalHeader(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = 6.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Left: Level & stats summary in a single clean horizontal line
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val locationText = when (uiState.currentZone) {
                     com.example.data.Zone.BUILDING -> {
@@ -435,32 +567,32 @@ fun TerminalHeader(
                     color = CyberAmber,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 10.sp
+                    fontSize = 8.5.sp
                 )
                 Text(
                     text = "|",
                     color = CyberBorder,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp
+                    fontSize = 8.5.sp
                 )
                 Text(
                     text = "CORE: ${uiState.integrity}%",
                     color = CyberCyan,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
+                    fontSize = 8.5.sp,
                     fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = "|",
                     color = CyberBorder,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp
+                    fontSize = 8.5.sp
                 )
                 Text(
                     text = "RAM: ${uiState.ram}MB",
                     color = CyberPink,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 10.sp,
+                    fontSize = 8.5.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -781,7 +913,8 @@ fun ExplorationView(
                             FirstPersonPerspectiveCanvas(
                                 uiState = uiState,
                                 modifier = Modifier.fillMaxSize().testTag("first_person_viewport"),
-                                isCombat = (uiState.gameState != GameState.EXPLORATION)
+                                isCombat = (uiState.gameState != GameState.EXPLORATION),
+                                onInteract = { viewModel.interact() }
                             )
                         }
                     }
@@ -1129,7 +1262,7 @@ fun ExplorationView(
 
             Column(
                 modifier = Modifier
-                    .weight(0.9f)
+                    .weight(0.75f)
                     .fillMaxHeight()
             ) {
                 // Top-Down Mini-map
@@ -1180,13 +1313,13 @@ fun ExplorationView(
                     border = BorderStroke(1.dp, CyberBorder),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
-                        .weight(1.1f)
+                        .weight(0.85f)
                         .fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(6.dp)
+                            .padding(4.dp)
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
@@ -1501,7 +1634,8 @@ private data class PerspectiveData(
 fun FirstPersonPerspectiveCanvas(
     uiState: GameViewModel.GameUiState,
     modifier: Modifier = Modifier,
-    isCombat: Boolean = false
+    isCombat: Boolean = false,
+    onInteract: () -> Unit = {}
 ) {
     val maze = uiState.maze
     if (maze.isEmpty()) {
@@ -1736,6 +1870,7 @@ fun FirstPersonPerspectiveCanvas(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black)
+            .clickable { onInteract() }
     ) {
         Canvas(
             modifier = Modifier
@@ -1838,33 +1973,11 @@ fun FirstPersonPerspectiveCanvas(
 
                 // --- Left wall side segment ---
                 if (leftWallAt[d]) {
-                    wallPath.reset()
-                    val p1 = getPixel(tl_c[d], adjustedTl_r[d])
-                    val p2 = getPixel(tl_c[d+1], adjustedTl_r[d+1])
-                    val p3 = getPixel(bl_c[d+1], adjustedBl_r[d+1])
-                    val p4 = getPixel(bl_c[d], adjustedBl_r[d])
-                    wallPath.moveTo(p1.x, p1.y)
-                    wallPath.lineTo(p2.x, p2.y)
-                    wallPath.lineTo(p3.x, p3.y)
-                    wallPath.lineTo(p4.x, p4.y)
-                    wallPath.close()
-                    drawPath(path = wallPath, color = primaryColor.copy(alpha = alpha))
-
-                    // Frame outlines
-                    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d], adjustedTl_r[d]), end = getPixel(tl_c[d+1], adjustedTl_r[d+1]), strokeWidth = 3f)
-                    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(bl_c[d], adjustedBl_r[d]), end = getPixel(bl_c[d+1], adjustedBl_r[d+1]), strokeWidth = 3f)
-                    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tl_c[d+1], adjustedTl_r[d+1]), end = getPixel(bl_c[d+1], adjustedBl_r[d+1]), strokeWidth = 3f)
-
-                    // High-fidelity vertical and horizontal wiring textures on side walls (2.5D details)
-                    val midLeft1 = Offset(
-                        (getPixel(tl_c[d], adjustedTl_r[d]).x + getPixel(bl_c[d], adjustedBl_r[d]).x) / 2f,
-                        (getPixel(tl_c[d], adjustedTl_r[d]).y + getPixel(bl_c[d], adjustedBl_r[d]).y) / 2f
-                    )
-                    val midLeft2 = Offset(
-                        (getPixel(tl_c[d+1], adjustedTl_r[d+1]).x + getPixel(bl_c[d+1], adjustedBl_r[d+1]).x) / 2f,
-                        (getPixel(tl_c[d+1], adjustedTl_r[d+1]).y + getPixel(bl_c[d+1], adjustedBl_r[d+1]).y) / 2f
-                    )
-                    drawLine(color = primaryColor.copy(alpha = alpha * 1.6f), start = midLeft1, end = midLeft2, strokeWidth = 1.5f)
+                    val w1 = getPixel(tl_c[d], adjustedTl_r[d])
+                    val w2 = getPixel(tl_c[d+1], adjustedTl_r[d+1])
+                    val w3 = getPixel(bl_c[d+1], adjustedBl_r[d+1])
+                    val w4 = getPixel(bl_c[d], adjustedBl_r[d])
+                    draw3DVoxelWallSegment(w1, w2, w3, w4, primaryColor, alpha, isLeft = true, w, adjustedTl_r, adjustedBl_r, adjustedTr_r, adjustedBr_r, d, h)
                 } else {
                     // Open corridor left side boundary
                     drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tl_c[d], adjustedTl_r[d+1]), end = getPixel(tl_c[d+1], adjustedTl_r[d+1]), strokeWidth = 2f)
@@ -1874,33 +1987,11 @@ fun FirstPersonPerspectiveCanvas(
 
                 // --- Right wall side segment ---
                 if (rightWallAt[d]) {
-                    wallPath.reset()
-                    val p1 = getPixel(tr_c[d], adjustedTr_r[d])
-                    val p2 = getPixel(tr_c[d+1], adjustedTr_r[d+1])
-                    val p3 = getPixel(br_c[d+1], adjustedBr_r[d+1])
-                    val p4 = getPixel(br_c[d], adjustedBr_r[d])
-                    wallPath.moveTo(p1.x, p1.y)
-                    wallPath.lineTo(p2.x, p2.y)
-                    wallPath.lineTo(p3.x, p3.y)
-                    wallPath.lineTo(p4.x, p4.y)
-                    wallPath.close()
-                    drawPath(path = wallPath, color = primaryColor.copy(alpha = alpha))
-
-                    // Frame outlines
-                    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d], adjustedTr_r[d]), end = getPixel(tr_c[d+1], adjustedTr_r[d+1]), strokeWidth = 3f)
-                    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(br_c[d], adjustedBr_r[d]), end = getPixel(br_c[d+1], adjustedBr_r[d+1]), strokeWidth = 3f)
-                    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = getPixel(tr_c[d+1], adjustedTr_r[d+1]), end = getPixel(br_c[d+1], adjustedBr_r[d+1]), strokeWidth = 3f)
-
-                    // High-fidelity midline depth stripe on right side
-                    val midRight1 = Offset(
-                        (getPixel(tr_c[d], adjustedTr_r[d]).x + getPixel(br_c[d], adjustedBr_r[d]).x) / 2f,
-                        (getPixel(tr_c[d], adjustedTr_r[d]).y + getPixel(br_c[d], adjustedBr_r[d]).y) / 2f
-                    )
-                    val midRight2 = Offset(
-                        (getPixel(tr_c[d+1], adjustedTr_r[d+1]).x + getPixel(br_c[d+1], adjustedBr_r[d+1]).x) / 2f,
-                        (getPixel(tr_c[d+1], adjustedTr_r[d+1]).y + getPixel(br_c[d+1], adjustedBr_r[d+1]).y) / 2f
-                    )
-                    drawLine(color = primaryColor.copy(alpha = alpha * 1.6f), start = midRight1, end = midRight2, strokeWidth = 1.5f)
+                    val w1 = getPixel(tr_c[d], adjustedTr_r[d])
+                    val w2 = getPixel(tr_c[d+1], adjustedTr_r[d+1])
+                    val w3 = getPixel(br_c[d+1], adjustedBr_r[d+1])
+                    val w4 = getPixel(br_c[d], adjustedBr_r[d])
+                    draw3DVoxelWallSegment(w1, w2, w3, w4, primaryColor, alpha, isLeft = false, w, adjustedTl_r, adjustedBl_r, adjustedTr_r, adjustedBr_r, d, h)
                 } else {
                     // Open corridor right side boundary
                     drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tr_c[d+1], adjustedTr_r[d+1]), end = getPixel(tr_c[d], adjustedTr_r[d+1]), strokeWidth = 2f)
@@ -2030,15 +2121,38 @@ fun FirstPersonPerspectiveCanvas(
 
                 // Portal swirling glow
                 drawCircle(
-                    color = Color(0xFFC084FC).copy(alpha = 0.25f),
-                    radius = sizeRadius * 1.6f,
+                    color = Color(0xFFC084FC).copy(alpha = 0.15f),
+                    radius = sizeRadius * 1.8f,
                     center = center
                 )
 
-                // Nested quantum circles
-                drawCircle(color = Color(0xFFC084FC), radius = sizeRadius, center = center, style = Stroke(width = 6f))
-                drawCircle(color = Color(0xFFC084FC).copy(alpha = 0.6f), radius = sizeRadius * 0.65f, center = center, style = Stroke(width = 4f))
-                drawCircle(color = Color(0xFFC084FC), radius = sizeRadius * 0.3f, center = center)
+                // Render dynamic recursive fractal star inside the Portal
+                fun drawFractalStarLocal(cx: Float, cy: Float, radius: Float, depth: Int) {
+                    if (depth <= 0 || radius < 2f) return
+                    val numPoints = 5
+                    val path = Path()
+                    val rotationPhase = animProgress * 2f * Math.PI.toFloat()
+                    for (i in 0..numPoints * 2) {
+                        val angle = (i * Math.PI / numPoints).toFloat() - (Math.PI / 2).toFloat() + (if (depth % 2 == 0) rotationPhase else -rotationPhase)
+                        val r = if (i % 2 == 0) radius else radius * 0.4f
+                        val x = cx + kotlin.math.cos(angle) * r
+                        val y = cy + kotlin.math.sin(angle) * r
+                        if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                    }
+                    path.close()
+                    drawPath(path = path, color = Color(0xFFC084FC).copy(alpha = 0.12f * depth))
+                    drawPath(path = path, color = Color(0xFFC084FC).copy(alpha = 0.4f + 0.12f * depth), style = Stroke(width = 1.5f + 0.5f * depth))
+
+                    if (depth > 1) {
+                        for (i in 0 until numPoints) {
+                            val angle = (i * 2 * Math.PI / numPoints).toFloat() + rotationPhase
+                            val tipX = cx + kotlin.math.cos(angle) * radius
+                            val tipY = cy + kotlin.math.sin(angle) * radius
+                            drawFractalStarLocal(tipX, tipY, radius * 0.35f, depth - 1)
+                        }
+                    }
+                }
+                drawFractalStarLocal(center.x, center.y, sizeRadius * 1.2f, depth = 3)
             } else if (primaryNode == CellType.SECRET_CACHE) {
                 // Floating 2.5D neon hologram box
                 val center = getPixel(15f, 5f)
@@ -2449,8 +2563,288 @@ fun FirstPersonPerspectiveCanvas(
                 )
             }
 
+            // --- TES Morrowind-Style Crosshair ---
+            val crosshairX = w / 2f
+            val crosshairY = h / 2f
+            val isTargetInteractive = if (isCombat) {
+                true
+            } else {
+                val nextCell = cellTypes[1]
+                nextCell == CellType.DATA_STORE || nextCell == CellType.ENCRYPTED_PORTAL ||
+                nextCell == CellType.VIRUS_NODE || nextCell == CellType.SECRET_CACHE ||
+                nextCell == CellType.STAIRS_UP || nextCell == CellType.STAIRS_DOWN ||
+                nextCell == CellType.ELEVATOR
+            }
+
+            val crosshairColor = if (isTargetInteractive) {
+                if (isCombat) Color(0xFFFB7185) else Color(0xFF00E5FF)
+            } else {
+                Color.White.copy(alpha = 0.4f)
+            }
+
+            // Central dot
+            drawCircle(
+                color = crosshairColor,
+                radius = 3f,
+                center = Offset(crosshairX, crosshairY)
+            )
+
+            // Radial Reticle Lines
+            val reticleOffset = 10f
+            val reticleLength = 8f
+            // Top
+            drawLine(crosshairColor, Offset(crosshairX, crosshairY - reticleOffset), Offset(crosshairX, crosshairY - reticleOffset - reticleLength), strokeWidth = 2f)
+            // Bottom
+            drawLine(crosshairColor, Offset(crosshairX, crosshairY + reticleOffset), Offset(crosshairX, crosshairY + reticleOffset + reticleLength), strokeWidth = 2f)
+            // Left
+            drawLine(crosshairColor, Offset(crosshairX - reticleOffset, crosshairY), Offset(crosshairX - reticleOffset - reticleLength, crosshairY), strokeWidth = 2f)
+            // Right
+            drawLine(crosshairColor, Offset(crosshairX + reticleOffset, crosshairY), Offset(crosshairX + reticleOffset + reticleLength, crosshairY), strokeWidth = 2f)
+
+            if (isTargetInteractive) {
+                // Bracket bounds around center
+                val bSize = 25f
+                val bThick = 2f
+                // Top-Left bracket
+                drawLine(crosshairColor, Offset(crosshairX - bSize, crosshairY - bSize), Offset(crosshairX - bSize + 8f, crosshairY - bSize), strokeWidth = bThick)
+                drawLine(crosshairColor, Offset(crosshairX - bSize, crosshairY - bSize), Offset(crosshairX - bSize, crosshairY - bSize + 8f), strokeWidth = bThick)
+                // Top-Right bracket
+                drawLine(crosshairColor, Offset(crosshairX + bSize, crosshairY - bSize), Offset(crosshairX + bSize - 8f, crosshairY - bSize), strokeWidth = bThick)
+                drawLine(crosshairColor, Offset(crosshairX + bSize, crosshairY - bSize), Offset(crosshairX + bSize, crosshairY - bSize + 8f), strokeWidth = bThick)
+                // Bottom-Left bracket
+                drawLine(crosshairColor, Offset(crosshairX - bSize, crosshairY + bSize), Offset(crosshairX - bSize + 8f, crosshairY + bSize), strokeWidth = bThick)
+                drawLine(crosshairColor, Offset(crosshairX - bSize, crosshairY + bSize), Offset(crosshairX - bSize, crosshairY + bSize - 8f), strokeWidth = bThick)
+                // Bottom-Right bracket
+                drawLine(crosshairColor, Offset(crosshairX + bSize, crosshairY + bSize), Offset(crosshairX + bSize - 8f, crosshairY + bSize), strokeWidth = bThick)
+                drawLine(crosshairColor, Offset(crosshairX + bSize, crosshairY + bSize), Offset(crosshairX + bSize, crosshairY + bSize - 8f), strokeWidth = bThick)
+            }
+
+            // --- Morrowind Weapon Vector Drawing ---
+            val swingProgress = uiState.weaponSwingProgress
+            val swingType = uiState.weaponSwingType
+            
+            // Base offset of weapon resting in bottom right
+            val restingX = w * 0.75f
+            val restingY = h * 0.85f
+            
+            // Calculate dynamic offsets based on swing progress & type
+            val dynamicOffset = when (swingType) {
+                "Slash" -> {
+                    Offset(-w * 0.3f * swingProgress, -h * 0.1f * kotlin.math.sin(swingProgress * kotlin.math.PI.toFloat()))
+                }
+                "Chop" -> {
+                    Offset(-w * 0.1f * swingProgress, h * 0.15f * swingProgress - h * 0.1f * kotlin.math.sin(swingProgress * kotlin.math.PI.toFloat()))
+                }
+                "Thrust" -> {
+                    Offset(-w * 0.25f * swingProgress, -h * 0.25f * swingProgress)
+                }
+                else -> Offset.Zero
+            }
+            
+            val weaponOrigin = Offset(restingX + dynamicOffset.x, restingY + dynamicOffset.y)
+            
+            // Draw different weapon lines based on name
+            val weaponColor = when (uiState.equippedWeaponName) {
+                "Daedric Cyber-Katana" -> Color(0xFFF43F5E) // Red
+                "Aegis Shock-Mace" -> Color(0xFFFBBF24) // Amber / Gold
+                "Glass Cyber-Dagger" -> Color(0xFF10B981) // Poison Green
+                "Ebony Plasma-Staff" -> Color(0xFF8B5CF6) // Purple
+                else -> Color(0xFF00E5FF) // Cyber Cyan
+            }
+            
+            when (uiState.equippedWeaponName) {
+                "Daedric Cyber-Katana" -> {
+                    val tip = Offset(weaponOrigin.x - w * 0.3f, weaponOrigin.y - h * 0.45f)
+                    val guard = Offset(weaponOrigin.x - w * 0.05f, weaponOrigin.y - h * 0.08f)
+                    
+                    // Katana Blade Edge
+                    drawLine(
+                        color = weaponColor,
+                        start = guard,
+                        end = tip,
+                        strokeWidth = 6f
+                    )
+                    // Inner glowing core line
+                    drawLine(
+                        color = Color.White,
+                        start = guard,
+                        end = tip,
+                        strokeWidth = 2f
+                    )
+                    // Hilt/Guard
+                    drawLine(
+                        color = Color.DarkGray,
+                        start = Offset(guard.x - 15f, guard.y + 10f),
+                        end = Offset(guard.x + 15f, guard.y - 10f),
+                        strokeWidth = 5f
+                    )
+                    // Grip
+                    drawLine(
+                        color = Color.Black,
+                        start = guard,
+                        end = weaponOrigin,
+                        strokeWidth = 8f
+                    )
+                }
+                "Glass Cyber-Dagger" -> {
+                    val tip = Offset(weaponOrigin.x - w * 0.15f, weaponOrigin.y - h * 0.25f)
+                    val guard = Offset(weaponOrigin.x - w * 0.03f, weaponOrigin.y - h * 0.05f)
+                    
+                    val bladePath = Path().apply {
+                        moveTo(guard.x - 10f, guard.y)
+                        lineTo(tip.x, tip.y)
+                        lineTo(guard.x + 10f, guard.y)
+                        close()
+                    }
+                    drawPath(
+                        path = bladePath,
+                        color = weaponColor
+                    )
+                    drawPath(
+                        path = bladePath,
+                        color = Color.White,
+                        style = Stroke(width = 2f)
+                    )
+                    // Guard
+                    drawLine(
+                        color = Color.DarkGray,
+                        start = Offset(guard.x - 20f, guard.y),
+                        end = Offset(guard.x + 20f, guard.y),
+                        strokeWidth = 4f
+                    )
+                    // Grip
+                    drawLine(
+                        color = Color.Black,
+                        start = guard,
+                        end = weaponOrigin,
+                        strokeWidth = 6f
+                    )
+                }
+                "Aegis Shock-Mace" -> {
+                    val tip = Offset(weaponOrigin.x - w * 0.2f, weaponOrigin.y - h * 0.3f)
+                    
+                    // Shaft
+                    drawLine(
+                        color = Color.DarkGray,
+                        start = weaponOrigin,
+                        end = tip,
+                        strokeWidth = 10f
+                    )
+                    // Spiked Mace Head Circle
+                    drawCircle(
+                        color = weaponColor,
+                        radius = 28f,
+                        center = tip
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = 12f,
+                        center = tip
+                    )
+                    // Spikes
+                    for (i in 0 until 8) {
+                        val angle = (i * kotlin.math.PI / 4).toFloat()
+                        val spikeEnd = Offset(
+                            tip.x + 45f * kotlin.math.cos(angle),
+                            tip.y + 45f * kotlin.math.sin(angle)
+                        )
+                        drawLine(
+                            color = weaponColor,
+                            start = tip,
+                            end = spikeEnd,
+                            strokeWidth = 4f
+                        )
+                    }
+                }
+                "Ebony Plasma-Staff" -> {
+                    val tip = Offset(weaponOrigin.x - w * 0.22f, weaponOrigin.y - h * 0.38f)
+                    
+                    // Staff Shaft
+                    drawLine(
+                        color = Color(0xFF1E293B),
+                        start = weaponOrigin,
+                        end = tip,
+                        strokeWidth = 8f
+                    )
+                    // Crescent horns guard
+                    val hornLeft = Offset(tip.x - 25f, tip.y - 15f)
+                    val hornRight = Offset(tip.x + 15f, tip.y + 25f)
+                    drawLine(
+                        color = Color.DarkGray,
+                        start = hornLeft,
+                        end = tip,
+                        strokeWidth = 5f
+                    )
+                    drawLine(
+                        color = Color.DarkGray,
+                        start = hornRight,
+                        end = tip,
+                        strokeWidth = 5f
+                    )
+                    
+                    // Floating plasma orb
+                    val orbCenter = Offset(tip.x - 10f, tip.y - 10f)
+                    val glowPulse = 18f + 5f * kotlin.math.sin(frameTime.toFloat() / 100f)
+                    drawCircle(
+                        color = weaponColor.copy(alpha = 0.35f),
+                        radius = glowPulse * 1.5f,
+                        center = orbCenter
+                    )
+                    drawCircle(
+                        color = weaponColor,
+                        radius = glowPulse,
+                        center = orbCenter
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = glowPulse * 0.4f,
+                        center = orbCenter
+                    )
+                }
+                else -> {
+                    // Default generic dagger lines
+                    val tip = Offset(weaponOrigin.x - w * 0.15f, weaponOrigin.y - h * 0.25f)
+                    drawLine(weaponColor, weaponOrigin, tip, strokeWidth = 4f)
+                }
+            }
+
             // Restore shake transform translation
             drawContext.canvas.restore()
+        }
+
+        // --- Morrowind Hover Info Box Overlay ---
+        val targetCell = if (isCombat) CellType.VIRUS_NODE else cellTypes[1]
+        val hoverText = when (targetCell) {
+            CellType.DATA_STORE -> "Data Store\n[CLICK VIEWPORT TO ACTIVATE]"
+            CellType.SECRET_CACHE -> "Crypt-Cache\n[CLICK VIEWPORT TO DECRYPT]"
+            CellType.VIRUS_NODE -> if (isCombat) null else "Active Threat Host\n[CLICK TO INITIATE CONFLICT]"
+            CellType.ELEVATOR -> "Express Elevator Terminal\n[CLICK TO INITIATE FLOORS LIST]"
+            CellType.STAIRS_UP -> "Stairwell: Ascent Link\n[CLICK TO CLIMB FLOORS]"
+            CellType.STAIRS_DOWN -> "Stairwell: Descent Link\n[CLICK TO DESCEND FLOORS]"
+            CellType.ENCRYPTED_PORTAL -> "Sector Decryption Portal\n[CLICK TO UNLOCK SECTOR]"
+            else -> null
+        }
+
+        if (hoverText != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .offset(y = 42.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.85f))
+                    .border(BorderStroke(1.dp, if (isCombat) CyberPink else CyberCyan), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text = hoverText,
+                    color = if (isCombat) CyberPink else CyberCyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 8.sp,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 10.sp
+                )
+            }
         }
 
         // --- Tactical HUD Turn Indicator Badge ---
@@ -3022,7 +3416,9 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
 fun CombatView(
     uiState: GameViewModel.GameUiState,
     onExecuteProgram: (Program) -> Unit,
-    onFlee: () -> Unit
+    onFlee: () -> Unit,
+    onAttack: () -> Unit = {},
+    onSetCombatStyle: (String) -> Unit = {}
 ) {
     val enemy = uiState.activeEnemy ?: return
 
@@ -3083,7 +3479,8 @@ fun CombatView(
                         FirstPersonPerspectiveCanvas(
                             uiState = uiState,
                             modifier = Modifier.fillMaxSize().testTag("first_person_viewport"),
-                            isCombat = true
+                            isCombat = true,
+                            onInteract = onAttack
                         )
                         
                         Text(
@@ -3164,6 +3561,49 @@ fun CombatView(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    // Morrowind Weapon Info & Stance Selector
+                    Text(
+                        text = "EQUIPPED: ${uiState.equippedWeaponName.uppercase()}",
+                        color = CyberAmber,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                    
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        listOf("Slash", "Chop", "Thrust").forEach { style ->
+                            val isSelected = uiState.selectedCombatStyle == style
+                            val borderCol = if (isSelected) CyberCyan else CyberBorder
+                            val bgCol = if (isSelected) CyberMutedGreen else CyberDark
+                            val textCol = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.5f)
+                            
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(bgCol)
+                                    .border(1.dp, borderCol, RoundedCornerShape(6.dp))
+                                    .clickable { onSetCombatStyle(style) }
+                                    .padding(vertical = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = style.uppercase(),
+                                    color = textCol,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 7.5.sp
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = CyberBorder, thickness = 1.dp)
+
                     Text(
                         text = "TACTICAL CODES:",
                         color = CyberCyan,
@@ -4059,10 +4499,10 @@ fun ProgressBarRetro(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(14.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .height(8.dp)
+            .clip(RoundedCornerShape(4.dp))
             .background(CyberDark)
-            .border(1.dp, finalColor.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+            .border(1.dp, finalColor.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
     ) {
         Box(
             modifier = Modifier
@@ -4077,7 +4517,11 @@ fun ProgressBarRetro(
 // Sub-Composable: Terminal Scrolling Logs & Visual Telemetry Dashboard
 // ==========================================
 @Composable
-fun TerminalLogConsole(uiState: GameViewModel.GameUiState) {
+fun TerminalLogConsole(
+    uiState: GameViewModel.GameUiState,
+    onSendCommand: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val logs = uiState.logFeed
     var activeConsoleTab by remember { mutableStateOf(0) } // 0 = TELEMETRY DIAGNOSTICS, 1 = RAW SIGNAL FEED
 
@@ -4096,11 +4540,9 @@ fun TerminalLogConsole(uiState: GameViewModel.GameUiState) {
         colors = CardDefaults.cardColors(containerColor = CyberDark),
         border = BorderStroke(1.dp, CyberBorder),
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(115.dp) // Perfect height for dual-pane diagnostics
+        modifier = modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)) {
+        Column(modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)) {
             // Header row
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
@@ -4225,6 +4667,100 @@ fun TerminalLogConsole(uiState: GameViewModel.GameUiState) {
                             )
                         }
                     }
+                }
+            }
+
+            HorizontalDivider(color = CyberBorder.copy(alpha = 0.3f), thickness = 1.dp, modifier = Modifier.padding(vertical = 2.dp))
+
+            // Command input row with blinking retro cursor
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 1.dp, bottom = 1.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "[runner@cybergrid]$ ",
+                    color = CyberCyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 8.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                var textValue by remember { mutableStateOf("") }
+                val cursorTransition = rememberInfiniteTransition(label = "cursor_blink")
+                val cursorAlpha by cursorTransition.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = 500, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "cursor_alpha"
+                )
+
+                BasicTextField(
+                    value = textValue,
+                    onValueChange = { textValue = it },
+                    textStyle = TextStyle(color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 8.sp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = {
+                        if (textValue.isNotBlank()) {
+                            onSendCommand(textValue)
+                            textValue = ""
+                        }
+                    }),
+                    cursorBrush = SolidColor(CyberCyan),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 2.dp)
+                        .testTag("terminal_command_input"),
+                    decorationBox = @Composable { innerTextField ->
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (textValue.isEmpty()) {
+                                    Text(
+                                        text = "type 'help' for protocols...",
+                                        color = Color.Gray.copy(alpha = 0.5f),
+                                        fontFamily = FontFamily.Monospace,
+                                        fontSize = 8.sp
+                                    )
+                                }
+                                innerTextField()
+                            }
+                            Text(
+                                text = "█",
+                                color = CyberCyan.copy(alpha = cursorAlpha),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                modifier = Modifier.padding(start = 1.dp)
+                            )
+                        }
+                    }
+                )
+
+                // Quick execute button
+                Box(
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(CyberCyan.copy(alpha = 0.15f))
+                        .border(1.dp, CyberCyan.copy(alpha = 0.6f), RoundedCornerShape(4.dp))
+                        .clickable {
+                            if (textValue.isNotBlank()) {
+                                onSendCommand(textValue)
+                                textValue = ""
+                            }
+                        }
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "EXE",
+                        color = CyberCyan,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 7.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -4462,30 +4998,27 @@ fun TelemetryDashboardView(uiState: GameViewModel.GameUiState) {
                 }
             }
 
-            Column(
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color.Black),
+                border = BorderStroke(1.dp, CyberBorder.copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(1f)
-                    .background(Color.Black, RoundedCornerShape(4.dp))
-                    .border(1.dp, CyberBorder.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                    .padding(3.dp),
-                verticalArrangement = Arrangement.spacedBy(1.dp)
+                    .weight(1.3f)
             ) {
-                Text(
-                    text = "MATRIX DATASTREAM //",
-                    color = CyberMutedText,
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 6.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                hexStateList.forEach { line ->
+                Box(modifier = Modifier.fillMaxSize()) {
+                    FractalGeometryCanvas(
+                        modifier = Modifier.fillMaxSize(),
+                        primaryColor = CyberCyan,
+                        animProgress = phaseProgress / (2f * Math.PI.toFloat())
+                    )
                     Text(
-                        text = line,
-                        color = CyberBrightGreen,
+                        text = "FRACTAL LOGIC CORE // ACTV",
+                        color = CyberCyan.copy(alpha = 0.8f),
                         fontFamily = FontFamily.Monospace,
-                        fontSize = 7.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        fontSize = 6.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(3.dp)
                     )
                 }
             }
@@ -5022,6 +5555,155 @@ fun android.content.Context.findActivity(): android.app.Activity? {
         context = context.baseContext
     }
     return null
+}
+
+// 3D Wireframe Voxel Wall Segment Drawer (Advanced Voxel graphics)
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.draw3DVoxelWallSegment(
+    w1: Offset, w2: Offset, w3: Offset, w4: Offset, // Wall corners (back face)
+    primaryColor: Color,
+    alpha: Float,
+    isLeft: Boolean,
+    w: Float, // Viewport width
+    adjustedTl_r: FloatArray,
+    adjustedBl_r: FloatArray,
+    adjustedTr_r: FloatArray,
+    adjustedBr_r: FloatArray,
+    d: Int,
+    h: Float // Viewport height
+) {
+    fun getPixelLocal(col: Float, row: Float): Offset {
+        return Offset((col / 30f) * w, (row / 10f) * h)
+    }
+
+    val shiftScale = 0.15f
+
+    val p1: Offset
+    val p2: Offset
+    val p3: Offset
+    val p4: Offset
+
+    if (isLeft) {
+        p1 = Offset(w1.x + (getPixelLocal(15f, adjustedTl_r[d]).x - w1.x) * shiftScale, w1.y)
+        p2 = Offset(w2.x + (getPixelLocal(15f, adjustedTl_r[d+1]).x - w2.x) * shiftScale, w2.y)
+        p3 = Offset(w3.x + (getPixelLocal(15f, adjustedBl_r[d+1]).x - w3.x) * shiftScale, w3.y)
+        p4 = Offset(w4.x + (getPixelLocal(15f, adjustedBl_r[d]).x - w4.x) * shiftScale, w4.y)
+    } else {
+        p1 = Offset(w1.x + (getPixelLocal(15f, adjustedTr_r[d]).x - w1.x) * shiftScale, w1.y)
+        p2 = Offset(w2.x + (getPixelLocal(15f, adjustedTr_r[d+1]).x - w2.x) * shiftScale, w2.y)
+        p3 = Offset(w3.x + (getPixelLocal(15f, adjustedBr_r[d+1]).x - w3.x) * shiftScale, w3.y)
+        p4 = Offset(w4.x + (getPixelLocal(15f, adjustedBr_r[d]).x - w4.x) * shiftScale, w4.y)
+    }
+
+    val wallPath = Path()
+
+    // 1. Solid back-wall fill
+    wallPath.reset()
+    wallPath.moveTo(w1.x, w1.y)
+    wallPath.lineTo(w2.x, w2.y)
+    wallPath.lineTo(w3.x, w3.y)
+    wallPath.lineTo(w4.x, w4.y)
+    wallPath.close()
+    drawPath(path = wallPath, color = primaryColor.copy(alpha = alpha * 0.3f))
+
+    // Back face outline
+    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w1, end = w2, strokeWidth = 1.5f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w2, end = w3, strokeWidth = 1.5f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w3, end = w4, strokeWidth = 1.5f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w4, end = w1, strokeWidth = 1.5f)
+
+    // 2. Solid front face overlay (hides behind-the-voxel lines)
+    val frontPath = Path()
+    frontPath.moveTo(p1.x, p1.y)
+    frontPath.lineTo(p2.x, p2.y)
+    frontPath.lineTo(p3.x, p3.y)
+    frontPath.lineTo(p4.x, p4.y)
+    frontPath.close()
+    drawPath(path = frontPath, color = Color.Black)
+    drawPath(path = frontPath, color = primaryColor.copy(alpha = alpha * 0.45f))
+
+    // Front face outline (bright vector highlights)
+    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p1, end = p2, strokeWidth = 3f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p2, end = p3, strokeWidth = 3f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p3, end = p4, strokeWidth = 3f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p4, end = p1, strokeWidth = 3f)
+
+    // 3. Connect corners (forming the 3D Voxel block)
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w1, end = p1, strokeWidth = 2f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w2, end = p2, strokeWidth = 2f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w3, end = p3, strokeWidth = 2f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w4, end = p4, strokeWidth = 2f)
+
+    // 4. Voxel Grid detailing (split each block horizontally to form dual-deck voxels)
+    val wMidY_near = (w1.y + w4.y) / 2f
+    val wMidY_far = (w2.y + w3.y) / 2f
+    val pMidY_near = (p1.y + p4.y) / 2f
+    val pMidY_far = (p2.y + p3.y) / 2f
+
+    val wMidL = Offset((w1.x + w4.x) / 2f, wMidY_near)
+    val wMidR = Offset((w2.x + w3.x) / 2f, wMidY_far)
+    val pMidL = Offset((p1.x + p4.x) / 2f, pMidY_near)
+    val pMidR = Offset((p2.x + p3.x) / 2f, pMidY_far)
+
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.1f), start = wMidL, end = wMidR, strokeWidth = 1f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.5f), start = pMidL, end = pMidR, strokeWidth = 1.5f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.1f), start = wMidL, end = pMidL, strokeWidth = 1f)
+    drawLine(color = primaryColor.copy(alpha = alpha * 1.1f), start = wMidR, end = pMidR, strokeWidth = 1f)
+}
+
+// Advanced recursive fractal geometry canvas
+@Composable
+fun FractalGeometryCanvas(
+    modifier: Modifier = Modifier,
+    primaryColor: Color = CyberCyan,
+    animProgress: Float
+) {
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val h = size.height
+
+        val startX = w / 2f
+        val startY = h * 0.92f
+        val initialLength = h * 0.28f
+        val angle = -Math.PI.toFloat() / 2f
+
+        fun drawBranch(x1: Float, y1: Float, length: Float, currentAngle: Float, depth: Int) {
+            if (depth <= 0 || length < 2f) return
+
+            val x2 = x1 + kotlin.math.cos(currentAngle) * length
+            val y2 = y1 + kotlin.math.sin(currentAngle) * length
+
+            val alpha = (depth.toFloat() / 6f).coerceIn(0.2f, 1.0f)
+            val stroke = (depth.toFloat() * 0.5f).coerceIn(1f, 3f)
+            drawLine(
+                color = primaryColor.copy(alpha = alpha),
+                start = Offset(x1, y1),
+                end = Offset(x2, y2),
+                strokeWidth = stroke
+            )
+
+            val branchAngleShift = 0.35f + 0.15f * kotlin.math.sin(animProgress * 2f * Math.PI.toFloat()).toFloat()
+
+            drawBranch(x2, y2, length * 0.72f, currentAngle - branchAngleShift, depth - 1)
+            drawBranch(x2, y2, length * 0.72f, currentAngle + branchAngleShift, depth - 1)
+        }
+
+        drawRect(color = Color(0xFF030406))
+
+        drawCircle(
+            color = primaryColor.copy(alpha = 0.05f),
+            radius = w * 0.4f,
+            center = Offset(w / 2f, h / 2f),
+            style = Stroke(width = 1f)
+        )
+        drawCircle(
+            color = primaryColor.copy(alpha = 0.02f),
+            radius = w * 0.2f,
+            center = Offset(w / 2f, h / 2f),
+            style = Stroke(width = 1f)
+        )
+
+        drawBranch(startX, startY, initialLength, angle, depth = 6)
+    }
 }
 
 
