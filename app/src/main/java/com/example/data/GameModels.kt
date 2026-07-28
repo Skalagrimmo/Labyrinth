@@ -99,9 +99,9 @@ enum class CellType(val symbol: Char, val displayName: String) {
 }
 
 enum class Zone(val displayName: String) {
-    BUILDING("Corporate Building"),
-    COLLECTORS("Collector Tunnels"),
-    CITY("Metropolitan Cyber-City")
+    BUILDING("Meat Space (Corp Tower)"),
+    COLLECTORS("Cyber Space (Sub-Grid Collectors)"),
+    CITY("Cyber Space (The Metro Core)")
 }
 
 enum class CyberWeather(
@@ -159,6 +159,59 @@ data class RunRecord(
     val creditsEarned: Int,
     val timestamp: Long = System.currentTimeMillis(),
     val outcome: String // "DECEASED" or "DISCONNECTED" (won/alive)
+)
+
+@Entity(tableName = "character_profiles")
+data class CharacterProfileEntity(
+    @PrimaryKey val profileId: String = "primary_profile",
+    val runnerName: String,
+    val runnerClass: String,
+    val level: Int = 1,
+    val credits: Int = 0,
+    val totalCreditsEarned: Int = 0,
+    val maxIntegrity: Int = 100,
+    val maxRam: Int = 12,
+    val nodesHackedCount: Int = 0,
+    val createdTimestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "game_save_progress")
+data class GameSaveProgressEntity(
+    @PrimaryKey val saveSlotId: String = "current_save",
+    val runnerName: String,
+    val runnerClass: String,
+    val level: Int,
+    val integrity: Int,
+    val maxIntegrity: Int,
+    val ram: Int,
+    val maxRam: Int,
+    val credits: Int,
+    val gridX: Int,
+    val gridY: Int,
+    val direction: String,
+    val currentZone: String,
+    val buildingFloor: Int,
+    val collectorsLevel: Int,
+    val cityDistrictIndex: Int,
+    val hasElevatorKeycard: Boolean,
+    val activeWeather: String,
+    val nodesHackedCount: Int,
+    val totalCreditsEarned: Int,
+    val inventoryCsv: String,
+    val installedCyberwareCsv: String,
+    val installedProgramsCsv: String,
+    val lastSavedTimestamp: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "inventory_items")
+data class InventoryItemEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val saveSlotId: String = "current_save",
+    val itemName: String,
+    val itemType: String = "UTILITY",
+    val quantity: Int = 1,
+    val description: String = "",
+    val acquiredTimestamp: Long = System.currentTimeMillis()
 )
 
 enum class GameState {

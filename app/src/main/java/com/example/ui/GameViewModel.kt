@@ -25,11 +25,40 @@ enum class CombatTurn {
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val soundManager = com.example.audio.CyberSoundEffectsManager.getInstance(application)
+
     private val database = GameDatabase.getDatabase(application)
-    private val repository = GameRepository(database.runRecordDao())
+    private val repository = GameRepository(
+        database.runRecordDao(),
+        database.characterProfileDao(),
+        database.gameSaveProgressDao(),
+        database.inventoryItemDao()
+    )
 
     // High scores stream
     val runRecords: StateFlow<List<RunRecord>> = repository.allRunRecords
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    // Room Database character profiles, save progress, and inventory streams
+    val characterProfiles: StateFlow<List<CharacterProfileEntity>> = repository.allCharacterProfiles
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
+    val savedGameProgress: StateFlow<GameSaveProgressEntity?> = repository.currentSaveProgress
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = null
+        )
+
+    val roomInventoryItems: StateFlow<List<InventoryItemEntity>> = repository.currentInventoryItems
         .stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
@@ -148,13 +177,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("DECENTRALIZED TERMINAL ESTABLISHED...", LogType.SUCCESS)
         addLog("CYBERSPACE INTRUSION PROTOCOL READY. SELECT PROFILE.", LogType.INFO)
 
-        // Launch real-time periodic update loop for seamless hybrid movement and combat proximity
+        // Periodic real-time update loop disabled to go strictly turn-based and input-driven.
+        /*
         viewModelScope.launch(Dispatchers.Default) {
             while (true) {
                 update()
                 kotlinx.coroutines.delay(100)
             }
         }
+        */
     }
 
     // ----------------------------------------------------
@@ -201,6 +232,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 equippedWeaponName = weaponName,
                 logFeed = emptyList() // clear creation logs for clean game view
             )
+        }
+
+        // Persist new character profile to Room Database
+        val profileEntity = CharacterProfileEntity(
+            profileId = "profile_${cleanName.lowercase().replace(" ", "_")}",
+            runnerName = cleanName,
+            runnerClass = selectedClass.name,
+            level = 1,
+            credits = initialCredits,
+            totalCreditsEarned = initialCredits,
+            maxIntegrity = selectedClass.baseIntegrity,
+            maxRam = selectedClass.baseRam,
+            nodesHackedCount = 0
+        )
+        viewModelScope.launch {
+            repository.saveProfile(profileEntity)
         }
 
         addLog("==========================================", LogType.SUCCESS)
@@ -1318,11 +1365,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun combatAttack() {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
-        if (state.attackCooldown > 0) return
         val enemy = state.activeEnemy ?: return
-
-        // Set baseline attack cooldown: 0.8 seconds (8 ticks)
-        _uiState.update { it.copy(attackCooldown = 8) }
 
         // Start weapon swing animation in UI thread
         viewModelScope.launch {
@@ -1363,6 +1406,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 delay(400)
                 _uiState.update { it.copy(enemyDamagePopup = null) }
+                // Trigger enemy combat turn on player action completion
+                executeEnemyCombatTurnInline()
                 return@launch
             }
 
@@ -1406,7 +1451,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             enemy.integrity = enemyRemIntegrity
 
             if (isCrit) {
+                soundManager.playCombatCritSound()
                 addLog("💥 CRITICAL HIT! Double damage bypassed ${effectiveArmor} hostile armor!", LogType.SUCCESS)
+            } else {
+                soundManager.playCombatHitSound()
             }
 
             addLog("⚔️ HIT! Dealt ${finalDmg} damage to ${enemy.name} (Shield: -${shieldDmg}, HP: -${bodyDmg}) [Roll: $roll vs Chance: $finalHitChance%]", LogType.SUCCESS)
@@ -1426,6 +1474,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+            } else {
+                // Trigger enemy combat turn on player action completion
+                executeEnemyCombatTurnInline()
             }
         }
     }
@@ -1433,23 +1484,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun combatDefend() {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
-        if (state.defendCooldown > 0) return
 
         _uiState.update { stateNow ->
             val shieldHeal = 15 + (stateNow.level * 3)
             val newShield = minOf(stateNow.playerMaxShield, stateNow.playerShield + shieldHeal)
             stateNow.copy(
                 playerShield = newShield,
-                activeFirewallTimeLeft = 15, // 1.5 seconds active
-                defendCooldown = 40,        // 4.0 seconds cooldown
+                activeFirewallTimeLeft = 1, // Firewall active for enemy's upcoming turn
                 showShieldEffect = true
             )
         }
-        addLog("🛡️ ACTIVE FIREWALL INITIATED: Damage incoming in the next 1.5s reduced by 75%!", LogType.SUCCESS)
+        addLog("🛡️ ACTIVE FIREWALL INITIATED: Damage incoming in the next turn reduced by 75%!", LogType.SUCCESS)
 
         viewModelScope.launch {
             kotlinx.coroutines.delay(600)
             _uiState.update { it.copy(showShieldEffect = false) }
+            // Automatically run enemy turn on player action completion
+            executeEnemyCombatTurnInline()
         }
     }
 
@@ -1458,23 +1509,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         val enemy = state.activeEnemy ?: return
 
-        val currentCooldown = state.programCooldowns["combat_hack"] ?: 0
-        if (currentCooldown > 0) {
-            addLog("EXPLOIT PROTOCOL COOLDOWN: Recalibrating exploit parameters.", LogType.ALERT)
-            return
-        }
-
         if (state.ram < 3) {
             addLog("HACK PROTOCOL ABORTED: Needs 3 MB RAM.", LogType.ERROR)
             return
         }
 
-        val updatedCooldowns = state.programCooldowns.toMutableMap()
-        updatedCooldowns["combat_hack"] = 30 // 3.0 seconds cooldown
-
         _uiState.update { it.copy(
-            ram = it.ram - 3,
-            programCooldowns = updatedCooldowns
+            ram = it.ram - 3
         ) }
 
         viewModelScope.launch {
@@ -1494,6 +1535,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 kotlinx.coroutines.delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+            } else {
+                // Automatically run enemy turn on player action completion
+                executeEnemyCombatTurnInline()
             }
         }
     }
@@ -1502,20 +1546,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
         val enemy = state.activeEnemy ?: return
-
-        val currentCooldown = state.programCooldowns["combat_scan"] ?: 0
-        if (currentCooldown > 0) {
-            addLog("SCAN RECALIBRATION: Telemetry scanners are offline.", LogType.ALERT)
-            return
-        }
-
-        val updatedCooldowns = state.programCooldowns.toMutableMap()
-        updatedCooldowns["combat_scan"] = 40 // 4.0 seconds cooldown
-
-        _uiState.update { it.copy(
-            programCooldowns = updatedCooldowns,
-            enemyAttackCharge = 0f // Reset enemy charge bar on scan!
-        ) }
 
         addLog("--- SCANNING TARGET PROCESS DATA ---", LogType.ALERT)
         addLog("NAME: ${enemy.name} | CLASS: Cyber-Entity Layer ${state.level}", LogType.INFO)
@@ -1532,7 +1562,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             kotlinx.coroutines.delay(400)
             _uiState.update { it.copy(combatFlashEnemy = false) }
+
+            // Scanned enemy is weakened (stunned) and then attacks
+            executeEnemyCombatTurnInline(isScanStunned = true)
         }
+    }
+
+    fun endTurn() {
+        if (!_uiState.value.isCombatInputEnabled) return
+        val enemy = _uiState.value.activeEnemy ?: return
+        addLog("PASSING TURN: Player manually terminated their phase.", LogType.INFO)
+        executeEnemyCombatTurnInline()
     }
 
     fun executeCombatProgramInline(program: Program) {
@@ -1540,25 +1580,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         val enemy = state.activeEnemy ?: return
 
-        // Individual program cooldown
-        val currentCooldown = state.programCooldowns[program.id] ?: 0
-        if (currentCooldown > 0) {
-            addLog("SOFTWARE COOLDOWN: ${program.name} is recalibrating.", LogType.ALERT)
-            return
-        }
-
         if (state.ram < program.ramCost) {
             addLog("INSUFFICIENT RAM: Requires ${program.ramCost}MB, but only ${state.ram}MB allocated.", LogType.ERROR)
             return
         }
 
-        val updatedCooldowns = state.programCooldowns.toMutableMap()
-        updatedCooldowns[program.id] = 20 // 2.0 seconds cooldown for tactical programs
-
         _uiState.update { stateNow ->
             stateNow.copy(
-                ram = stateNow.ram - program.ramCost,
-                programCooldowns = updatedCooldowns
+                ram = stateNow.ram - program.ramCost
             )
         }
 
@@ -1643,6 +1672,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 kotlinx.coroutines.delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+            } else {
+                // Automatically run enemy combat turn on program execution completion
+                executeEnemyCombatTurnInline()
             }
         }
     }
@@ -1684,6 +1716,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val integrityDamage = finalEnemyDmg - shieldDamage
             val newPlayerIntegrity = maxOf(0, state.integrity - integrityDamage)
 
+            soundManager.playCombatHitSound()
             _uiState.update { stateNow ->
                 stateNow.copy(
                     integrity = newPlayerIntegrity,
@@ -1726,28 +1759,33 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleCombatVictoryInline(enemy: Enemy) {
+        soundManager.playLootCollectionSound()
         val state = _uiState.value
-        val bounty = enemy.bountyCredits
+        val baseBounty = enemy.bountyCredits
 
         val updatedMaze = state.maze.map { it.clone() }.toTypedArray()
         if (state.targetNodeY in updatedMaze.indices && state.targetNodeX in updatedMaze[0].indices) {
             updatedMaze[state.targetNodeY][state.targetNodeX] = CellType.PATH
         }
 
-        val gotItem = Random.nextInt(100) < 60
-        val rewards = listOf("NanoMed.sys", "RAMBoost.exe", "Decryptor.pkg")
-        val lootItem = if (gotItem) rewards[Random.nextInt(rewards.size)] else null
+        val lootDrop = CombatLootDropSystem.generateLootDrop(
+            enemyName = enemy.name,
+            enemyLevel = state.level,
+            baseBounty = baseBounty
+        )
 
         val updatedInventory = state.inventory.toMutableList()
-        if (lootItem != null) {
-            updatedInventory.add(lootItem)
+        updatedInventory.add(lootDrop.itemName)
+
+        viewModelScope.launch {
+            repository.insertInventoryItem(lootDrop.inventoryEntity)
         }
 
         _uiState.update { stateNow ->
             stateNow.copy(
                 gameState = GameState.EXPLORATION,
-                credits = stateNow.credits + bounty,
-                totalCreditsEarned = stateNow.totalCreditsEarned + bounty,
+                credits = stateNow.credits + lootDrop.totalCreditsEarned,
+                totalCreditsEarned = stateNow.totalCreditsEarned + lootDrop.totalCreditsEarned,
                 inventory = updatedInventory,
                 maze = updatedMaze,
                 activeEnemy = null
@@ -1756,10 +1794,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         updatePerspective()
         addLog("CRITICAL SUCCESS: PROCESS ${enemy.name} TERMINATED.", LogType.SUCCESS)
-        addLog("Bounty extraction: +$bounty MB credits compiled.", LogType.SUCCESS)
-        if (lootItem != null) {
-            addLog("Discovered discarded payload bundle: $lootItem.", LogType.SUCCESS)
-        }
+        addLog("Bounty extraction: +${lootDrop.totalCreditsEarned} MB credits compiled.", LogType.SUCCESS)
+        addLog(lootDrop.logMessage, LogType.SUCCESS)
     }
 
     private fun isValidMove(x: Int, y: Int): Boolean {
@@ -2386,6 +2422,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         addLog(logText, LogType.SUCCESS)
+
+        // If used during combat, automatically conclude player's action and trigger enemy's turn
+        val gs = _uiState.value.gameState
+        if (gs == GameState.PLAYER_TURN || gs == GameState.COMBAT_START) {
+            executeEnemyCombatTurnInline()
+        }
     }
 
     // ----------------------------------------------------
@@ -2807,6 +2849,66 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun saveGame() {
         val state = _uiState.value
         if (state.runnerName.isEmpty()) return
+
+        // 1. Room Database Persistence
+        val profileEntity = CharacterProfileEntity(
+            profileId = "profile_${state.runnerName.lowercase().replace(" ", "_")}",
+            runnerName = state.runnerName,
+            runnerClass = state.runnerClass.name,
+            level = state.level,
+            credits = state.credits,
+            totalCreditsEarned = state.totalCreditsEarned,
+            maxIntegrity = state.maxIntegrity,
+            maxRam = state.maxRam,
+            nodesHackedCount = state.nodesHackedCount
+        )
+
+        val saveProgressEntity = GameSaveProgressEntity(
+            saveSlotId = "current_save",
+            runnerName = state.runnerName,
+            runnerClass = state.runnerClass.name,
+            level = state.level,
+            integrity = state.integrity,
+            maxIntegrity = state.maxIntegrity,
+            ram = state.ram,
+            maxRam = state.maxRam,
+            credits = state.credits,
+            gridX = state.gridX,
+            gridY = state.gridY,
+            direction = state.direction.name,
+            currentZone = state.currentZone.name,
+            buildingFloor = state.buildingFloor,
+            collectorsLevel = state.collectorsLevel,
+            cityDistrictIndex = state.cityDistrictIndex,
+            hasElevatorKeycard = state.hasElevatorKeycard,
+            activeWeather = state.activeWeather.name,
+            nodesHackedCount = state.nodesHackedCount,
+            totalCreditsEarned = state.totalCreditsEarned,
+            inventoryCsv = state.inventory.joinToString(","),
+            installedCyberwareCsv = state.installedCyberware.joinToString(",") { it.id },
+            installedProgramsCsv = state.installedPrograms.joinToString(",") { it.id }
+        )
+
+        val inventoryEntities = state.inventory.map { item ->
+            InventoryItemEntity(
+                saveSlotId = "current_save",
+                itemName = item,
+                itemType = when {
+                    item.endsWith(".pkg") || item.endsWith(".bin") || item.endsWith(".exe") || item.endsWith(".sys") -> "PROGRAM/UTILITY"
+                    item.lowercase().contains("keycard") -> "KEYCARD"
+                    else -> "CONSUMABLE"
+                },
+                quantity = 1,
+                description = "Netrunner Item Payload: $item"
+            )
+        }
+
+        viewModelScope.launch {
+            repository.saveProfile(profileEntity)
+            repository.saveGameProgress(saveProgressEntity, inventoryEntities)
+        }
+
+        // 2. SharedPreferences backup
         val sharedPrefs = getApplication<Application>().getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
         sharedPrefs.edit().apply {
             putBoolean("has_saved_game", true)
@@ -2865,7 +2967,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             apply()
         }
-        addLog("💾 COGNITIVE STATE PERSISTED TO CHIP STORAGE.", LogType.SUCCESS)
+        addLog("💾 COGNITIVE STATE PERSISTED TO ROOM DATABASE & CHIP STORAGE.", LogType.SUCCESS)
     }
 
     fun loadGame() {

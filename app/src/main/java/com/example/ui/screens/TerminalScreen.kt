@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CutCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -43,6 +44,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import com.example.ui.components.CyberToastHost
+import com.example.ui.components.CyberToastType
+import com.example.ui.components.rememberCyberToastHostState
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -127,6 +131,43 @@ fun TerminalScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val highScores by viewModel.runRecords.collectAsStateWithLifecycle()
     val view = LocalView.current
+
+    val toastHostState = rememberCyberToastHostState()
+
+    // Observe latest log message to trigger instant cyber toasts for pickups, access denial, health/RAM regen
+    val latestLog = uiState.logFeed.firstOrNull()
+    LaunchedEffect(latestLog) {
+        latestLog?.let { log ->
+            val text = log.text
+            when {
+                text.contains("OBTAINED", ignoreCase = true) ||
+                text.contains("ACQUIRED", ignoreCase = true) ||
+                text.contains("TRANSFER COMPLETE", ignoreCase = true) ||
+                text.contains("INSTALLED CYBERWARE", ignoreCase = true) ||
+                text.contains("PURCHASED", ignoreCase = true) -> {
+                    toastHostState.showItemPickup(text)
+                }
+                text.contains("ERROR", ignoreCase = true) ||
+                text.contains("DENIED", ignoreCase = true) ||
+                text.contains("LOCKOUT", ignoreCase = true) ||
+                text.contains("INVALID", ignoreCase = true) -> {
+                    toastHostState.showAccessDenied(text)
+                }
+                text.contains("HP", ignoreCase = true) ||
+                text.contains("RESTORED", ignoreCase = true) ||
+                text.contains("REPAIRED", ignoreCase = true) ||
+                text.contains("INTEGRITY", ignoreCase = true) -> {
+                    if (!text.contains("DAMAGE", ignoreCase = true) && !text.contains("DEALT", ignoreCase = true)) {
+                        toastHostState.showHealthRegen(25)
+                    }
+                }
+                text.contains("RAM RECOVERY", ignoreCase = true) ||
+                text.contains("RAM RELEASED", ignoreCase = true) -> {
+                    toastHostState.showRamRegen(4)
+                }
+            }
+        }
+    }
 
     // Interactive name text state for creation screen
     var runnerNameInput by remember { mutableStateOf("") }
@@ -469,6 +510,12 @@ fun TerminalScreen(
                 }
             }
         }
+
+        // Custom Cyberpunk Snackbar/Toast Overlay Host
+        CyberToastHost(
+            hostState = toastHostState,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
     }
 }
 
@@ -1060,7 +1107,7 @@ fun ExplorationView(
                                     // 1. Attack Button
                                     Button(
                                         onClick = { viewModel.combatAttack() },
-                                        enabled = uiState.isCombatInputEnabled && uiState.attackCooldown <= 0,
+                                        enabled = uiState.isCombatInputEnabled,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = CyberPink.copy(alpha = 0.5f),
                                             disabledContainerColor = CyberPink.copy(alpha = 0.25f)
@@ -1073,10 +1120,10 @@ fun ExplorationView(
                                             .testTag("btn_combat_attack")
                                     ) {
                                         Text(
-                                            text = if (uiState.attackCooldown > 0) "ATTACK (${String.format("%.1f", uiState.attackCooldown / 10f)}s)" else "ATTACK",
+                                            text = "ATTACK",
                                             color = Color.White,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 7.sp,
+                                            fontSize = 8.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
@@ -1084,7 +1131,7 @@ fun ExplorationView(
                                     // 2. Defend Button
                                     Button(
                                         onClick = { viewModel.combatDefend() },
-                                        enabled = uiState.isCombatInputEnabled && uiState.defendCooldown <= 0 && uiState.activeFirewallTimeLeft <= 0,
+                                        enabled = uiState.isCombatInputEnabled,
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = CyberDark.copy(alpha = 0.5f),
                                             disabledContainerColor = CyberDark.copy(alpha = 0.25f)
@@ -1098,7 +1145,7 @@ fun ExplorationView(
                                             .testTag("btn_combat_defend")
                                     ) {
                                         Text(
-                                            text = if (uiState.activeFirewallTimeLeft > 0) "ACTIVE (${String.format("%.1f", uiState.activeFirewallTimeLeft / 10f)}s)" else if (uiState.defendCooldown > 0) "SHIELD (${String.format("%.1f", uiState.defendCooldown / 10f)}s)" else "DEFEND",
+                                            text = if (uiState.activeFirewallTimeLeft > 0) "FIREWALL ACTIVE" else "DEFEND",
                                             color = if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberBrightGreen,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 7.sp,
@@ -1142,6 +1189,70 @@ fun ExplorationView(
                                             .testTag("btn_combat_flee")
                                     ) {
                                         Text("FLEE", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(4.dp))
+
+                                // Row 2: Secondary / Tactical Combat Actions (Quick Hack, Scan, End Turn)
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    // 5. Quick Hack Button
+                                    Button(
+                                        onClick = { viewModel.combatHack() },
+                                        enabled = uiState.isCombatInputEnabled && uiState.ram >= 3,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CyberDark.copy(alpha = 0.5f),
+                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                        ),
+                                        border = BorderStroke(1.dp, if (uiState.ram >= 3) CyberPink.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                        modifier = Modifier
+                                            .weight(1.3f)
+                                            .height(26.dp)
+                                            .testTag("btn_combat_hack")
+                                    ) {
+                                        Text("QUICK HACK", color = if (uiState.ram >= 3) CyberPink else Color.Gray, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    // 6. Scan Target Button
+                                    Button(
+                                        onClick = { viewModel.combatScan() },
+                                        enabled = uiState.isCombatInputEnabled,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CyberDark.copy(alpha = 0.5f),
+                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                        ),
+                                        border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                        modifier = Modifier
+                                            .weight(1.3f)
+                                            .height(26.dp)
+                                            .testTag("btn_combat_scan")
+                                    ) {
+                                        Text("SCAN TARGET", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    // 7. End Turn Button
+                                    Button(
+                                        onClick = { viewModel.endTurn() },
+                                        enabled = uiState.isCombatInputEnabled,
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = CyberBrightGreen.copy(alpha = 0.5f),
+                                            disabledContainerColor = CyberBrightGreen.copy(alpha = 0.25f)
+                                        ),
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(26.dp)
+                                            .testTag("btn_combat_end_turn")
+                                    ) {
+                                        Text("END TURN", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
@@ -1248,17 +1359,8 @@ fun ExplorationView(
             }
 
             // Right HUD Panel (2D Top down map and stats)
-            val isCombatActiveForRadar = uiState.gameState != GameState.EXPLORATION
-            val minimapAlpha by animateFloatAsState(
-                targetValue = if (isCombatActiveForRadar) 0f else 1f,
-                animationSpec = tween(durationMillis = 500, easing = LinearEasing),
-                label = "MinimapAlpha"
-            )
-            val minimapScale by animateFloatAsState(
-                targetValue = if (isCombatActiveForRadar) 0.8f else 1.0f,
-                animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
-                label = "MinimapScale"
-            )
+            val minimapAlpha = 1f
+            val minimapScale = 1f
 
             Column(
                 modifier = Modifier
@@ -3776,18 +3878,69 @@ fun HackingMinigableView(
     val puzzle = uiState.activePuzzle ?: return
     val view = LocalView.current
 
+    var hackModeTab by remember { mutableStateOf(0) } // 0 = MATRIX COMMAND TERMINAL, 1 = BREACH PROTOCOL GRID
+
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        Text(
-            text = "--- BREACH PROTOCOL ACCESS INTERRUPT ---",
-            color = CyberAmber,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 12.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Box(
+                    modifier = Modifier
+                        .clip(CutCornerShape(4.dp))
+                        .background(if (hackModeTab == 0) CyberGreen else CyberDark)
+                        .border(BorderStroke(1.dp, CyberGreen), CutCornerShape(4.dp))
+                        .clickable { hackModeTab = 0 }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "COMMAND TERMINAL",
+                        color = if (hackModeTab == 0) CyberDark else CyberGreen,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CutCornerShape(4.dp))
+                        .background(if (hackModeTab == 1) CyberAmber else CyberDark)
+                        .border(BorderStroke(1.dp, CyberAmber), CutCornerShape(4.dp))
+                        .clickable { hackModeTab = 1 }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "BREACH GRID",
+                        color = if (hackModeTab == 1) CyberDark else CyberAmber,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+            }
+
+            Text(
+                text = "--- BREACH PROTOCOL ACCESS ---",
+                color = CyberAmber,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.Bold,
+                fontSize = 11.sp
+            )
+        }
+
+        if (hackModeTab == 0) {
+            MatrixHackingTerminalScreen(
+                onExit = onCancel,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
 
         Row(
             modifier = Modifier
@@ -3984,6 +4137,8 @@ fun HackingMinigableView(
             }
         }
     }
+}
+
 }
 
 // ==========================================
