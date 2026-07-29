@@ -162,7 +162,7 @@ fun PatternMatchingHackingMiniGame(
 
     fun addLog(msg: String) {
         hackLogs.add(0, msg)
-        if (hackLogs.size > 8) hackLogs.removeLast()
+        if (hackLogs.size > 8) hackLogs.removeAt(hackLogs.size - 1)
     }
 
     // Timer coroutine during active BREACHING phase

@@ -188,7 +188,7 @@ abstract class GameDatabase : RoomDatabase() {
                     "netcrawler_database"
                 )
                 .addMigrations(MIGRATION_1_2)
-                .fallbackToDestructiveMigration()
+                .fallbackToDestructiveMigration(true)
                 .build()
                 INSTANCE = instance
                 instance

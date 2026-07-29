@@ -387,7 +387,7 @@ fun TerminalScreen(
                         TerminalLogConsole(
                             uiState = uiState,
                             onSendCommand = { viewModel.runTerminalCommand(it) },
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(0.45f)
                         )
                         HighDensityBottomNavigation(
                             currentScreen = uiState.screen,
@@ -500,7 +500,7 @@ fun TerminalScreen(
                     TerminalLogConsole(
                         uiState = uiState,
                         onSendCommand = { viewModel.runTerminalCommand(it) },
-                        modifier = Modifier.height(125.dp)
+                        modifier = Modifier.height(60.dp)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     HighDensityBottomNavigation(
@@ -1109,21 +1109,21 @@ fun ExplorationView(
                                         onClick = { viewModel.combatAttack() },
                                         enabled = uiState.isCombatInputEnabled,
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberPink.copy(alpha = 0.5f),
-                                            disabledContainerColor = CyberPink.copy(alpha = 0.25f)
+                                            containerColor = Color(0xFFE11D48),
+                                            disabledContainerColor = Color(0xFFE11D48).copy(alpha = 0.35f)
                                         ),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1.3f)
-                                            .height(26.dp)
+                                            .height(36.dp)
                                             .testTag("btn_combat_attack")
                                     ) {
                                         Text(
                                             text = "ATTACK",
                                             color = Color.White,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.sp,
+                                            fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
@@ -1133,22 +1133,22 @@ fun ExplorationView(
                                         onClick = { viewModel.combatDefend() },
                                         enabled = uiState.isCombatInputEnabled,
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberDark.copy(alpha = 0.5f),
-                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                            containerColor = Color(0xFF0F172A),
+                                            disabledContainerColor = Color(0xFF0F172A).copy(alpha = 0.5f)
                                         ),
-                                        border = BorderStroke(1.dp, if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberBrightGreen.copy(alpha = 0.5f)),
+                                        border = BorderStroke(1.5.dp, if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberBrightGreen),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1.3f)
-                                            .height(26.dp)
+                                            .height(36.dp)
                                             .testTag("btn_combat_defend")
                                     ) {
                                         Text(
                                             text = if (uiState.activeFirewallTimeLeft > 0) "FIREWALL ACTIVE" else "DEFEND",
-                                            color = if (uiState.activeFirewallTimeLeft > 0) Color(0xFF10B981) else CyberBrightGreen,
+                                            color = if (uiState.activeFirewallTimeLeft > 0) Color(0xFF34D399) else CyberBrightGreen,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 7.sp,
+                                            fontSize = 8.5.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
@@ -1158,18 +1158,18 @@ fun ExplorationView(
                                         onClick = { showItemMenu = !showItemMenu },
                                         enabled = uiState.isCombatInputEnabled && uiState.inventory.isNotEmpty(),
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberDark.copy(alpha = 0.5f),
-                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                            containerColor = Color(0xFF0F172A),
+                                            disabledContainerColor = Color(0xFF0F172A).copy(alpha = 0.5f)
                                         ),
-                                        border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
+                                        border = BorderStroke(1.5.dp, CyberCyan),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(26.dp)
+                                            .height(36.dp)
                                             .testTag("btn_combat_item")
                                     ) {
-                                        Text("ITEM", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text("ITEM", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                     }
 
                                     // 4. Flee Button
@@ -1177,18 +1177,18 @@ fun ExplorationView(
                                         onClick = { viewModel.fleeCombat() },
                                         enabled = uiState.isCombatInputEnabled,
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberDark.copy(alpha = 0.5f),
-                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                            containerColor = Color(0xFF0F172A),
+                                            disabledContainerColor = Color(0xFF0F172A).copy(alpha = 0.5f)
                                         ),
-                                        border = BorderStroke(1.dp, CyberAmber.copy(alpha = 0.5f)),
+                                        border = BorderStroke(1.5.dp, CyberAmber),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(26.dp)
+                                            .height(36.dp)
                                             .testTag("btn_combat_flee")
                                     ) {
-                                        Text("FLEE", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text("FLEE", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
@@ -1204,18 +1204,18 @@ fun ExplorationView(
                                         onClick = { viewModel.combatHack() },
                                         enabled = uiState.isCombatInputEnabled && uiState.ram >= 3,
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberDark.copy(alpha = 0.5f),
-                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                            containerColor = if (uiState.ram >= 3) Color(0xFF4C1D95) else Color(0xFF0F172A),
+                                            disabledContainerColor = Color(0xFF0F172A).copy(alpha = 0.5f)
                                         ),
-                                        border = BorderStroke(1.dp, if (uiState.ram >= 3) CyberPink.copy(alpha = 0.5f) else Color.Gray.copy(alpha = 0.5f)),
+                                        border = BorderStroke(1.5.dp, if (uiState.ram >= 3) CyberPink else Color.Gray),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1.3f)
-                                            .height(26.dp)
+                                            .height(36.dp)
                                             .testTag("btn_combat_hack")
                                     ) {
-                                        Text("QUICK HACK", color = if (uiState.ram >= 3) CyberPink else Color.Gray, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text("QUICK HACK", color = if (uiState.ram >= 3) Color.White else Color.Gray, fontFamily = FontFamily.Monospace, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                                     }
 
                                     // 6. Scan Target Button
@@ -1223,18 +1223,18 @@ fun ExplorationView(
                                         onClick = { viewModel.combatScan() },
                                         enabled = uiState.isCombatInputEnabled,
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberDark.copy(alpha = 0.5f),
-                                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                                            containerColor = Color(0xFF0F172A),
+                                            disabledContainerColor = Color(0xFF0F172A).copy(alpha = 0.5f)
                                         ),
-                                        border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
+                                        border = BorderStroke(1.5.dp, CyberCyan),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1.3f)
-                                            .height(26.dp)
+                                            .height(36.dp)
                                             .testTag("btn_combat_scan")
                                     ) {
-                                        Text("SCAN TARGET", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text("SCAN TARGET", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 8.5.sp, fontWeight = FontWeight.Bold)
                                     }
 
                                     // 7. End Turn Button
@@ -1242,17 +1242,17 @@ fun ExplorationView(
                                         onClick = { viewModel.endTurn() },
                                         enabled = uiState.isCombatInputEnabled,
                                         colors = ButtonDefaults.buttonColors(
-                                            containerColor = CyberBrightGreen.copy(alpha = 0.5f),
-                                            disabledContainerColor = CyberBrightGreen.copy(alpha = 0.25f)
+                                            containerColor = Color(0xFF059669),
+                                            disabledContainerColor = Color(0xFF059669).copy(alpha = 0.35f)
                                         ),
                                         shape = RoundedCornerShape(6.dp),
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(26.dp)
+                                            .height(36.dp)
                                             .testTag("btn_combat_end_turn")
                                     ) {
-                                        Text("END TURN", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                                        Text("END TURN", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
                                     }
                                 }
 
@@ -1364,7 +1364,7 @@ fun ExplorationView(
 
             Column(
                 modifier = Modifier
-                    .weight(0.75f)
+                    .weight(1.05f)
                     .fillMaxHeight()
             ) {
                 // Top-Down Mini-map
@@ -1373,7 +1373,7 @@ fun ExplorationView(
                     border = BorderStroke(1.dp, CyberBorder.copy(alpha = minimapAlpha)),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1.45f)
                         .fillMaxWidth()
                         .graphicsLayer(
                             alpha = minimapAlpha,
@@ -1415,7 +1415,7 @@ fun ExplorationView(
                     border = BorderStroke(1.dp, CyberBorder),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
-                        .weight(0.85f)
+                        .weight(0.65f)
                         .fillMaxWidth()
                 ) {
                     Column(
@@ -3823,21 +3823,21 @@ fun CombatView(
                     Button(
                         onClick = onFlee,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = CyberDark.copy(alpha = 0.5f),
-                            disabledContainerColor = CyberDark.copy(alpha = 0.25f)
+                            containerColor = Color(0xFF0F172A),
+                            disabledContainerColor = Color(0xFF0F172A).copy(alpha = 0.5f)
                         ),
-                        border = BorderStroke(1.dp, CyberPink.copy(alpha = 0.5f)),
+                        border = BorderStroke(1.5.dp, CyberPink),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(26.dp)
+                            .height(36.dp)
                             .testTag("btn_flee_combat")
                     ) {
                         Text(
                             text = "EMERGENCY RETREAT ROUTE",
                             color = CyberPink,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
+                            fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
