@@ -22,6 +22,7 @@ data class LootDropResult(
     val description: String,
     val rarity: LootRarity,
     val totalCreditsEarned: Int,
+    val xpEarned: Int,
     val inventoryEntity: InventoryItemEntity,
     val logMessage: String
 )
@@ -98,6 +99,7 @@ object CombatLootDropSystem {
         }
 
         val bonusCredits = (baseBounty * selectedItem.creditBonusMultiplier * (1f + enemyLevel * 0.15f)).toInt()
+        val xpReward = 45 + (enemyLevel * 25) + Random.nextInt(5, 15)
 
         val entity = InventoryItemEntity(
             saveSlotId = saveSlotId,
@@ -116,6 +118,7 @@ object CombatLootDropSystem {
             description = selectedItem.description,
             rarity = selectedItem.rarity,
             totalCreditsEarned = bonusCredits,
+            xpEarned = xpReward,
             inventoryEntity = entity,
             logMessage = logMsg
         )

@@ -81,6 +81,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val damageBonus: Int = 0,
         val defenseBonus: Int = 0, // In percentage shield reduction
 
+        val characterLevel: Int = 1,
+        val characterXp: Int = 0,
+        val xpToNextLevel: Int = 100,
+
         val gridX: Int = 1,
         val gridY: Int = 1,
         val direction: Direction = Direction.EAST,
@@ -153,8 +157,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Morrowind Style System States
         val selectedCombatStyle: String = "Slash", // "Slash", "Chop", "Thrust"
         val equippedWeaponName: String = "Sparksteel Dagger",
+        val equippedArmorName: String = "Basic Firewall Mesh",
+        val equippedUtilityName: String = "None",
+        val equippedWeaponItem: com.example.data.GameItem? = null,
+        val equippedArmorItem: com.example.data.GameItem? = null,
+        val equippedUtilityItem: com.example.data.GameItem? = null,
+        val selectedInventoryCategoryFilter: com.example.data.InventoryCategory? = null,
+        val inventorySortOption: com.example.data.InventorySortOption = com.example.data.InventorySortOption.CATEGORY,
         val weaponSwingProgress: Float = 0f,
-        val weaponSwingType: String = "" // "Slash", "Chop", "Thrust"
+        val weaponSwingType: String = "", // "Slash", "Chop", "Thrust"
+
+        // Cybernetic Implants System
+        val selectedStartingImplant: com.example.data.CyberwareImplant = com.example.data.CyberwareImplantRegistry.STARTER_IMPLANTS[0],
+        val installedImplants: Map<com.example.data.ImplantBodySlot, com.example.data.CyberwareImplant?> = emptyMap(),
+        val hasUsedEmergencyRebootThisRun: Boolean = false,
+        val kineticShieldActiveThisCombat: Boolean = true,
+        val naniteStepCounter: Int = 0
     )
 
     enum class ActiveScreen {
@@ -165,7 +183,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         HACKING_MINIGAME,
         UPGRADE_STORE,
         LEADERBOARD,
-        GAME_OVER
+        GAME_OVER,
+        CYBERWARE_CLINIC
     }
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -191,10 +210,96 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ----------------------------------------------------
+    // Cybernetic Implants & Surgery System
+    // ----------------------------------------------------
+
+    fun selectStartingImplant(implant: com.example.data.CyberwareImplant) {
+        _uiState.update { it.copy(selectedStartingImplant = implant) }
+    }
+
+    fun openCyberwareClinic() {
+        _uiState.update { it.copy(screen = ActiveScreen.CYBERWARE_CLINIC) }
+    }
+
+    fun closeCyberwareClinic() {
+        _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
+    }
+
+    fun installImplant(implant: com.example.data.CyberwareImplant): Boolean {
+        val state = _uiState.value
+        val currentSlotImplant = state.installedImplants[implant.slot]
+
+        val newMaxHp = (state.maxIntegrity - (currentSlotImplant?.integrityBonus ?: 0) + implant.integrityBonus).coerceAtLeast(10)
+        val newHp = (state.integrity + implant.integrityBonus).coerceIn(1, newMaxHp)
+        val newMaxRam = (state.maxRam - (currentSlotImplant?.ramBonus ?: 0) + implant.ramBonus).coerceAtLeast(2)
+        val newRam = (state.ram + implant.ramBonus).coerceIn(1, newMaxRam)
+        val newRecovery = (state.ramRecoveryRate - (currentSlotImplant?.recoveryBonus ?: 0) + implant.recoveryBonus).coerceAtLeast(1)
+        val newDmg = (state.damageBonus - (currentSlotImplant?.damageBonus ?: 0) + implant.damageBonus).coerceAtLeast(0)
+        val newDef = (state.defenseBonus - (currentSlotImplant?.defenseBonus ?: 0) + implant.defenseBonus).coerceAtLeast(0)
+
+        val updatedImplants = state.installedImplants.toMutableMap()
+        updatedImplants[implant.slot] = implant
+
+        _uiState.update {
+            it.copy(
+                installedImplants = updatedImplants,
+                maxIntegrity = newMaxHp,
+                integrity = newHp,
+                maxRam = newMaxRam,
+                ram = newRam,
+                ramRecoveryRate = newRecovery,
+                damageBonus = newDmg,
+                defenseBonus = newDef
+            )
+        }
+
+        addLog("${implant.icon} IMPLANT SURGERY SUCCESS: Installed ${implant.name} into [${implant.slot.displayName.uppercase()}].", LogType.SUCCESS)
+        if (implant.passiveAbility != null) {
+            addLog("  └ PASSIVE ABILITY ACTIVATED: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}", LogType.INFO)
+        }
+        soundManager.playLootCollectionSound()
+        saveGame()
+        return true
+    }
+
+    fun uninstallImplant(slot: com.example.data.ImplantBodySlot): Boolean {
+        val state = _uiState.value
+        val implant = state.installedImplants[slot] ?: return false
+
+        val newMaxHp = (state.maxIntegrity - implant.integrityBonus).coerceAtLeast(10)
+        val newHp = state.integrity.coerceAtMost(newMaxHp)
+        val newMaxRam = (state.maxRam - implant.ramBonus).coerceAtLeast(2)
+        val newRam = state.ram.coerceAtMost(newMaxRam)
+        val newRecovery = (state.ramRecoveryRate - implant.recoveryBonus).coerceAtLeast(1)
+        val newDmg = (state.damageBonus - implant.damageBonus).coerceAtLeast(0)
+        val newDef = (state.defenseBonus - implant.defenseBonus).coerceAtLeast(0)
+
+        val updatedImplants = state.installedImplants.toMutableMap()
+        updatedImplants.remove(slot)
+
+        _uiState.update {
+            it.copy(
+                installedImplants = updatedImplants,
+                maxIntegrity = newMaxHp,
+                integrity = newHp,
+                maxRam = newMaxRam,
+                ram = newRam,
+                ramRecoveryRate = newRecovery,
+                damageBonus = newDmg,
+                defenseBonus = newDef
+            )
+        }
+
+        addLog("🔌 CYBERWARE REMOVED: Uninstalled ${implant.name} from [${slot.displayName.uppercase()}].", LogType.ALERT)
+        saveGame()
+        return true
+    }
+
+    // ----------------------------------------------------
     // State Modification & Character Creation
     // ----------------------------------------------------
 
-    fun createCharacter(name: String, selectedClass: NetrunnerClass) {
+    fun createCharacter(name: String, selectedClass: NetrunnerClass, startingImplant: com.example.data.CyberwareImplant? = null) {
         val cleanName = name.ifBlank { "Runner_${Random.nextInt(1000, 9999)}" }
         val baseProg = GameEngine.getStartingPrograms(selectedClass)
         val initialCredits = if (selectedClass == NetrunnerClass.SCRIPT_KIDDIE) 350 else 100
@@ -211,17 +316,31 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             NetrunnerClass.BUFFER_OVERFLOW -> "Ebony Plasma-Staff"
         }
 
+        val chosenImplant = startingImplant ?: _uiState.value.selectedStartingImplant
+        val initialImplantsMap = mapOf(chosenImplant.slot to chosenImplant)
+
+        val initMaxHp = selectedClass.baseIntegrity + chosenImplant.integrityBonus
+        val initMaxRam = selectedClass.baseRam + chosenImplant.ramBonus
+        val initRecovery = 2 + chosenImplant.recoveryBonus
+        val initDamage = chosenImplant.damageBonus
+        val initDefense = chosenImplant.defenseBonus
+
         _uiState.update { state ->
             state.copy(
                 screen = ActiveScreen.EXPLORATION,
                 runnerName = cleanName,
                 runnerClass = selectedClass,
-                maxIntegrity = selectedClass.baseIntegrity,
-                integrity = selectedClass.baseIntegrity,
+                selectedStartingImplant = chosenImplant,
+                installedImplants = initialImplantsMap,
+                maxIntegrity = initMaxHp,
+                integrity = initMaxHp,
                 playerMaxShield = if (selectedClass == NetrunnerClass.CYBER_SHIELD) 75 else 50,
                 playerShield = if (selectedClass == NetrunnerClass.CYBER_SHIELD) 25 else 10,
-                maxRam = selectedClass.baseRam,
-                ram = selectedClass.baseRam,
+                maxRam = initMaxRam,
+                ram = initMaxRam,
+                ramRecoveryRate = initRecovery,
+                damageBonus = initDamage,
+                defenseBonus = initDefense,
                 credits = initialCredits,
                 totalCreditsEarned = initialCredits,
                 installedPrograms = baseProg,
@@ -232,6 +351,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 direction = Direction.EAST,
                 nodesHackedCount = 0,
                 equippedWeaponName = weaponName,
+                hasUsedEmergencyRebootThisRun = false,
+                kineticShieldActiveThisCombat = true,
                 logFeed = emptyList() // clear creation logs for clean game view
             )
         }
@@ -244,8 +365,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             level = 1,
             credits = initialCredits,
             totalCreditsEarned = initialCredits,
-            maxIntegrity = selectedClass.baseIntegrity,
-            maxRam = selectedClass.baseRam,
+            maxIntegrity = initMaxHp,
+            maxRam = initMaxRam,
             nodesHackedCount = 0
         )
         viewModelScope.launch {
@@ -255,6 +376,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("==========================================", LogType.SUCCESS)
         addLog("PROFILE SYNCHRONIZED: $cleanName [${selectedClass.title}]", LogType.SUCCESS)
         addLog("SPECIALIZATION: ${selectedClass.passiveDesc}", LogType.INFO)
+        addLog("🔌 STARTER IMPLANT INJECTED: ${chosenImplant.name} [${chosenImplant.slot.displayName.uppercase()}]", LogType.SUCCESS)
+        if (chosenImplant.passiveAbility != null) {
+            addLog("  └ IMPLANT PASSIVE: ${chosenImplant.passiveAbility.title} - ${chosenImplant.passiveAbility.description}", LogType.INFO)
+        }
         addLog("INITIALIZING CYBER-SECTOR GRID...", LogType.ALERT)
 
         loadOrCreateLevel(com.example.data.Zone.BUILDING, 1, 1, 1)
@@ -1516,6 +1641,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("🌀 GLITCHED: Attack output reduced by 50%!", LogType.ALERT)
             }
 
+            // Implant passive abilities
+            val hasSynapticOverclock = state.installedImplants.values.any { it?.passiveAbility == com.example.data.ImplantAbility.SYNAPTIC_OVERCLOCK }
+            if (hasSynapticOverclock && state.ram < 3) {
+                rawPlayerDamage = (rawPlayerDamage * 1.25f).toInt()
+                addLog("🔥 SYNAPTIC OVERCLOCK IMPLANT: +25% payload damage boosted by low RAM threshold!", LogType.SUCCESS)
+            }
+
             // Balcony Vantage: +25% attack damage bonus
             val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
             if (standCell == com.example.data.CellType.ELEVATED_BALCONY) {
@@ -1526,7 +1658,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             // Crit checks
             var isCrit = false
             val critRate = 10 + (state.ram * 2)
-            val finalCritRate = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) critRate + 25 else critRate
+            val hasCritTargeting = state.installedImplants.values.any { it?.passiveAbility == com.example.data.ImplantAbility.CRIT_TARGETING }
+            val implantCritBonus = if (hasCritTargeting) 20 else 0
+            val finalCritRate = (if (state.runnerClass == NetrunnerClass.CODE_SLASHER) critRate + 25 else critRate) + implantCritBonus
             if (Random.nextInt(100) < finalCritRate) {
                 isCrit = true
                 val critMultiplier = if (state.runnerClass == NetrunnerClass.CODE_SLASHER) 2.0f else 1.5f
@@ -1942,8 +2076,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("✨ GRAVITY EVASION: Magnetic slope rapid momentum absorbed 30% of incoming packet force!", LogType.SUCCESS)
             }
 
-            val defenseModifier = state.defenseBonus
-            val finalEnemyDmg = maxOf(1, baseEnemyDmg - defenseModifier)
+            var finalEnemyDmg = maxOf(1, baseEnemyDmg - state.defenseBonus)
+            if (state.kineticShieldActiveThisCombat) {
+                finalEnemyDmg = 0
+                _uiState.update { it.copy(kineticShieldActiveThisCombat = false) }
+                addLog("🛡️ KINETIC SHIELD IMPLANT: Subdermal kinetic barrier completely absorbed incoming attack!", LogType.SUCCESS)
+            }
 
             val actions = listOf(
                 "Trojan injection stream",
@@ -1967,7 +2105,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     enemyCombatAction = "${enemy.name} ran $selectedAction: Dealt $finalEnemyDmg damage. (Shield absorbed: $shieldDamage, Core hit: $integrityDamage)",
                     combatFlashPlayer = true,
                     combatScreenShake = true,
-                    playerDamagePopup = "-$finalEnemyDmg HP"
+                    playerDamagePopup = if (finalEnemyDmg > 0) "-$finalEnemyDmg HP" else "ABSORBED"
                 )
             }
 
@@ -2001,6 +2139,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             if (newPlayerIntegrity <= 0) {
+                val hasEmergencyReboot = state.installedImplants.values.any { it?.passiveAbility == com.example.data.ImplantAbility.EMERGENCY_REBOOT }
+                if (hasEmergencyReboot && !state.hasUsedEmergencyRebootThisRun) {
+                    val revivedHp = (state.maxIntegrity * 0.25f).toInt().coerceAtLeast(15)
+                    _uiState.update {
+                        it.copy(
+                            integrity = revivedHp,
+                            hasUsedEmergencyRebootThisRun = true,
+                            combatTurn = CombatTurn.PLAYER,
+                            isCombatInputEnabled = true,
+                            gameState = GameState.PLAYER_TURN,
+                            showCombatBanner = "⚡ EMERGENCY REBOOT"
+                        )
+                    }
+                    addLog("⚡ EMERGENCY REBOOT ACTIVATED! Synthetic Heart Nanites restarted runner core at $revivedHp HP!", LogType.SUCCESS)
+                    soundManager.playLootCollectionSound()
+                    kotlinx.coroutines.delay(1000)
+                    _uiState.update { it.copy(showCombatBanner = null) }
+                    return@launch
+                }
+
                 _uiState.update { it.copy(showCombatBanner = "💀 DEFEAT") }
                 kotlinx.coroutines.delay(1200)
                 handleGameOver("Destroyed by security process ${enemy.name}")
@@ -2016,6 +2174,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         soundManager.playLootCollectionSound()
         val state = _uiState.value
         val baseBounty = enemy.bountyCredits
+
+        val hasRamRecycler = state.installedImplants.values.any { it?.passiveAbility == com.example.data.ImplantAbility.RAM_RECYCLER }
+        if (hasRamRecycler) {
+            val recycledRam = (state.ram + 1).coerceAtMost(state.maxRam)
+            _uiState.update { it.copy(ram = recycledRam) }
+            addLog("🔋 RAM RECYCLER IMPLANT: Neutralized hostile process recycled +1 RAM.", LogType.SUCCESS)
+        }
 
         val updatedMaze = state.maze.map { it.clone() }.toTypedArray()
         if (state.targetNodeY in updatedMaze.indices && state.targetNodeX in updatedMaze[0].indices) {
@@ -2050,6 +2215,60 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("CRITICAL SUCCESS: PROCESS ${enemy.name} TERMINATED.", LogType.SUCCESS)
         addLog("Bounty extraction: +${lootDrop.totalCreditsEarned} MB credits compiled.", LogType.SUCCESS)
         addLog(lootDrop.logMessage, LogType.SUCCESS)
+        addExperience(lootDrop.xpEarned)
+    }
+
+    // ----------------------------------------------------
+    // Character Leveling & XP System
+    // ----------------------------------------------------
+    fun addExperience(amount: Int) {
+        if (amount <= 0) return
+        var currentXp = _uiState.value.characterXp + amount
+        var currentLvl = _uiState.value.characterLevel
+        var reqXp = _uiState.value.xpToNextLevel
+        var levelsGained = 0
+
+        while (currentXp >= reqXp) {
+            currentXp -= reqXp
+            currentLvl += 1
+            levelsGained += 1
+            reqXp = 100 + (currentLvl - 1) * 75
+        }
+
+        if (levelsGained > 0) {
+            val newMaxHp = _uiState.value.maxIntegrity + (15 * levelsGained)
+            val newMaxShield = _uiState.value.playerMaxShield + (10 * levelsGained)
+            val newDmgBonus = _uiState.value.damageBonus + (2 * levelsGained)
+            val ramGain = levelsGained / 2 + (if (currentLvl % 2 == 0) 1 else 0)
+            val newMaxRam = _uiState.value.maxRam + maxOf(0, ramGain)
+
+            _uiState.update { stateNow ->
+                stateNow.copy(
+                    characterLevel = currentLvl,
+                    characterXp = currentXp,
+                    xpToNextLevel = reqXp,
+                    maxIntegrity = newMaxHp,
+                    integrity = newMaxHp,
+                    playerMaxShield = newMaxShield,
+                    playerShield = newMaxShield,
+                    damageBonus = newDmgBonus,
+                    maxRam = newMaxRam,
+                    ram = newMaxRam
+                )
+            }
+            soundManager.playLootCollectionSound()
+            addLog("🎉 LEVEL UP! RECOGNIZED AS LEVEL $currentLvl NETRUNNER (+${levelsGained} LVL)!", LogType.SUCCESS)
+            addLog("⚡ SYSTEM UPGRADE: Max Integrity: $newMaxHp HP | Shield Capacity: $newMaxShield | Attack Bonus: +$newDmgBonus | Max RAM: $newMaxRam MB", LogType.SUCCESS)
+            addLog("✨ Full integrity, shields, and memory buffers restored to capacity!", LogType.SUCCESS)
+        } else {
+            _uiState.update { stateNow ->
+                stateNow.copy(
+                    characterXp = currentXp,
+                    xpToNextLevel = reqXp
+                )
+            }
+        }
+        addLog("✨ GAINED +$amount SYSTEM EXPERIENCE POINTS! (XP: $currentXp / $reqXp)", LogType.INFO)
     }
 
     private fun isValidMove(x: Int, y: Int): Boolean {
@@ -2569,6 +2788,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (lootItem != null) {
             addLog("Discovered discarded payload bundle: $lootItem.", LogType.SUCCESS)
         }
+        addExperience(50 + (state.level * 25))
     }
 
     fun fleeCombat() {
@@ -2598,112 +2818,332 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ----------------------------------------------------
-    // Inventory and Healing
+    // Inventory Architecture & Equipment System
     // ----------------------------------------------------
+
+    fun getStructuredInventorySlots(): List<com.example.data.InventorySlot> {
+        val state = _uiState.value
+        val itemsMap = state.inventory.groupingBy { it }.eachCount()
+
+        var slots = itemsMap.map { (name, count) ->
+            val gameItem = com.example.data.GameItemRegistry.getItemByName(name)
+            val isEquipped = when (gameItem.equipmentSlot) {
+                com.example.data.EquipmentSlot.WEAPON -> state.equippedWeaponItem?.name == name || state.equippedWeaponName == name
+                com.example.data.EquipmentSlot.ARMOR -> state.equippedArmorItem?.name == name || state.equippedArmorName == name
+                com.example.data.EquipmentSlot.UTILITY, com.example.data.EquipmentSlot.CYBERWARE -> state.equippedUtilityItem?.name == name || state.equippedUtilityName == name
+                null -> false
+            }
+            com.example.data.InventorySlot(
+                item = gameItem,
+                quantity = count,
+                isEquipped = isEquipped
+            )
+        }
+
+        // Apply Category Filter if set
+        val categoryFilter = state.selectedInventoryCategoryFilter
+        if (categoryFilter != null) {
+            slots = slots.filter { it.item.category == categoryFilter }
+        }
+
+        // Apply Sorting
+        return when (state.inventorySortOption) {
+            com.example.data.InventorySortOption.NAME -> slots.sortedBy { it.item.name }
+            com.example.data.InventorySortOption.CATEGORY -> slots.sortedWith(compareBy({ it.item.category.ordinal }, { it.item.name }))
+            com.example.data.InventorySortOption.RARITY -> slots.sortedWith(compareByDescending<com.example.data.InventorySlot> { it.item.rarity.ordinal }.thenBy { it.item.name })
+            com.example.data.InventorySortOption.QUANTITY -> slots.sortedByDescending { it.quantity }
+        }
+    }
+
+    fun addItemToInventory(itemName: String, quantity: Int = 1): Boolean {
+        if (quantity <= 0 || itemName.isBlank()) return false
+        val state = _uiState.value
+        val newItems = List(quantity) { itemName }
+        val updatedInventory = state.inventory + newItems
+
+        val itemData = com.example.data.GameItemRegistry.getItemByName(itemName)
+
+        _uiState.update { stateNow ->
+            stateNow.copy(inventory = updatedInventory)
+        }
+
+        soundManager.playLootCollectionSound()
+        addLog("${itemData.icon} ACQUIRED [${itemData.rarity.displayName.uppercase()}]: $itemName x$quantity (${itemData.category.displayName}) - ${itemData.description}", LogType.SUCCESS)
+
+        viewModelScope.launch(Dispatchers.IO) {
+            val entity = com.example.data.InventoryItemEntity(
+                saveSlotId = "current_save",
+                itemName = itemName,
+                itemType = itemData.category.name,
+                quantity = quantity,
+                description = itemData.description
+            )
+            repository.insertInventoryItem(entity)
+        }
+
+        saveGame()
+        return true
+    }
+
+    fun removeItemFromInventory(itemName: String, quantity: Int = 1): Boolean {
+        val state = _uiState.value
+        val currentCount = state.inventory.count { it.equals(itemName, ignoreCase = true) }
+        if (currentCount < quantity) return false
+
+        val updatedInventory = state.inventory.toMutableList()
+        var removed = 0
+        val iterator = updatedInventory.iterator()
+        while (iterator.hasNext() && removed < quantity) {
+            if (iterator.next().equals(itemName, ignoreCase = true)) {
+                iterator.remove()
+                removed++
+            }
+        }
+
+        _uiState.update { it.copy(inventory = updatedInventory) }
+        saveGame()
+        return true
+    }
+
+    fun hasItemInInventory(itemName: String, quantity: Int = 1): Boolean {
+        val count = _uiState.value.inventory.count { it.equals(itemName, ignoreCase = true) }
+        return count >= quantity
+    }
+
+    fun equipItem(itemName: String): Boolean {
+        val state = _uiState.value
+        val actualItemName = state.inventory.firstOrNull { it.equals(itemName, ignoreCase = true) }
+        if (actualItemName == null) {
+            addLog("EQUIP FAILED: Item '$itemName' not found in inventory core.", LogType.ERROR)
+            return false
+        }
+
+        val gameItem = com.example.data.GameItemRegistry.getItemByName(actualItemName)
+        if (!gameItem.isEquippable || gameItem.equipmentSlot == null) {
+            addLog("EQUIP FAILED: '$actualItemName' is not an equippable weapon or armor module.", LogType.ERROR)
+            return false
+        }
+
+        when (gameItem.equipmentSlot) {
+            com.example.data.EquipmentSlot.WEAPON -> {
+                val oldWeapon = state.equippedWeaponItem
+                var dmgBonusAcc = state.damageBonus + gameItem.damageBonus
+                if (oldWeapon != null) {
+                    dmgBonusAcc -= oldWeapon.damageBonus
+                }
+                _uiState.update { stateNow ->
+                    stateNow.copy(
+                        equippedWeaponItem = gameItem,
+                        equippedWeaponName = gameItem.name,
+                        damageBonus = maxOf(0, dmgBonusAcc)
+                    )
+                }
+                addLog("⚔️ WEAPON EQUIPPED: ${gameItem.name} (+${gameItem.damageBonus} Attack Bonus).", LogType.SUCCESS)
+            }
+            com.example.data.EquipmentSlot.ARMOR -> {
+                val oldArmor = state.equippedArmorItem
+                var defBonusAcc = state.defenseBonus + gameItem.defenseBonus
+                var hpBonusAcc = state.maxIntegrity + gameItem.integrityBonus
+                if (oldArmor != null) {
+                    defBonusAcc -= oldArmor.defenseBonus
+                    hpBonusAcc -= oldArmor.integrityBonus
+                }
+                _uiState.update { stateNow ->
+                    stateNow.copy(
+                        equippedArmorItem = gameItem,
+                        equippedArmorName = gameItem.name,
+                        defenseBonus = maxOf(0, defBonusAcc),
+                        maxIntegrity = maxOf(50, hpBonusAcc),
+                        integrity = minOf(stateNow.integrity, maxOf(50, hpBonusAcc))
+                    )
+                }
+                addLog("🛡️ ARMOR EQUIPPED: ${gameItem.name} (+${gameItem.defenseBonus} Defense, +${gameItem.integrityBonus} Integrity).", LogType.SUCCESS)
+            }
+            com.example.data.EquipmentSlot.UTILITY, com.example.data.EquipmentSlot.CYBERWARE -> {
+                val oldUtil = state.equippedUtilityItem
+                var ramBonusAcc = state.maxRam + gameItem.ramBonus
+                var dmgBonusAcc = state.damageBonus + gameItem.damageBonus
+                if (oldUtil != null) {
+                    ramBonusAcc -= oldUtil.ramBonus
+                    dmgBonusAcc -= oldUtil.damageBonus
+                }
+                _uiState.update { stateNow ->
+                    stateNow.copy(
+                        equippedUtilityItem = gameItem,
+                        equippedUtilityName = gameItem.name,
+                        maxRam = maxOf(4, ramBonusAcc),
+                        damageBonus = maxOf(0, dmgBonusAcc)
+                    )
+                }
+                addLog("🔌 UTILITY MODULE MOUNTED: ${gameItem.name} (+${gameItem.ramBonus} RAM, +${gameItem.damageBonus} Dmg).", LogType.SUCCESS)
+            }
+        }
+        return true
+    }
+
+    fun unequipItemSlot(slot: com.example.data.EquipmentSlot): Boolean {
+        val state = _uiState.value
+        when (slot) {
+            com.example.data.EquipmentSlot.WEAPON -> {
+                val weapon = state.equippedWeaponItem ?: return false
+                val newDmg = maxOf(0, state.damageBonus - weapon.damageBonus)
+                _uiState.update { it.copy(equippedWeaponItem = null, equippedWeaponName = "Sparksteel Dagger", damageBonus = newDmg) }
+                addLog("⚔️ UNEQUIPPED WEAPON: ${weapon.name}.", LogType.INFO)
+            }
+            com.example.data.EquipmentSlot.ARMOR -> {
+                val armor = state.equippedArmorItem ?: return false
+                val newDef = maxOf(0, state.defenseBonus - armor.defenseBonus)
+                val newHp = maxOf(50, state.maxIntegrity - armor.integrityBonus)
+                _uiState.update { it.copy(equippedArmorItem = null, equippedArmorName = "Basic Firewall Mesh", defenseBonus = newDef, maxIntegrity = newHp, integrity = minOf(it.integrity, newHp)) }
+                addLog("🛡️ UNEQUIPPED ARMOR: ${armor.name}.", LogType.INFO)
+            }
+            com.example.data.EquipmentSlot.UTILITY, com.example.data.EquipmentSlot.CYBERWARE -> {
+                val util = state.equippedUtilityItem ?: return false
+                val newRam = maxOf(4, state.maxRam - util.ramBonus)
+                val newDmg = maxOf(0, state.damageBonus - util.damageBonus)
+                _uiState.update { it.copy(equippedUtilityItem = null, equippedUtilityName = "None", maxRam = newRam, damageBonus = newDmg) }
+                addLog("🔌 UNEQUIPPED UTILITY MODULE: ${util.name}.", LogType.INFO)
+            }
+        }
+        return true
+    }
+
+    fun scavengeCurrentCell() {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) {
+            addLog("SCAVENGE ERROR: Must be exploring grid sector to search cache.", LogType.ERROR)
+            return
+        }
+
+        val dropItem = com.example.data.GameItemRegistry.getRandomExplorationDrop(state.level)
+        val bonusCredits = (kotlin.random.Random.nextInt(20, 80) * (1f + state.level * 0.2f)).toInt()
+
+        _uiState.update { stateNow ->
+            stateNow.copy(
+                credits = stateNow.credits + bonusCredits,
+                totalCreditsEarned = stateNow.totalCreditsEarned + bonusCredits
+            )
+        }
+        addItemToInventory(dropItem.name)
+        addExperience(25 + state.level * 10)
+        addLog("🔎 SCAVENGE SUCCESSFUL: Extracted +$bonusCredits Credits & found ${dropItem.icon} ${dropItem.name}!", LogType.SUCCESS)
+    }
+
+    fun setInventoryCategoryFilter(category: com.example.data.InventoryCategory?) {
+        _uiState.update { it.copy(selectedInventoryCategoryFilter = category) }
+        val catName = category?.displayName ?: "All Categories"
+        addLog("FILTER APPLIED: Inventory viewing [$catName].", LogType.INFO)
+    }
+
+    fun setInventorySortOption(option: com.example.data.InventorySortOption) {
+        _uiState.update { it.copy(inventorySortOption = option) }
+        addLog("SORT APPLIED: Inventory ordered by [${option.displayName}].", LogType.INFO)
+    }
+
+    fun discardInventoryItem(itemName: String) {
+        if (removeItemFromInventory(itemName, 1)) {
+            addLog("🗑️ DISCARDED: 1x $itemName purged from memory bank.", LogType.INFO)
+        } else {
+            addLog("DISCARD FAILED: Item '$itemName' not found in inventory.", LogType.ERROR)
+        }
+    }
 
     fun useInventoryItem(itemName: String) {
         val state = _uiState.value
-        if (!state.inventory.contains(itemName)) return
+        val actualItemName = state.inventory.firstOrNull { it.equals(itemName, ignoreCase = true) }
+        if (actualItemName == null) return
+
+        val gameItem = com.example.data.GameItemRegistry.getItemByName(actualItemName)
+
+        // If item is equipment, redirect to equip
+        if (gameItem.isEquippable) {
+            equipItem(actualItemName)
+            return
+        }
 
         val updatedInventory = state.inventory.toMutableList()
-        updatedInventory.remove(itemName)
+        updatedInventory.remove(actualItemName)
 
         var logText = ""
 
         _uiState.update { stateNow ->
-            when (itemName) {
-                "NanoMed.sys" -> {
-                    val healed = minOf(stateNow.maxIntegrity - stateNow.integrity, 40)
-                    logText = "COMPILED NanoMed.sys: Restored $healed% Integrity."
-                    stateNow.copy(
-                        integrity = stateNow.integrity + healed,
-                        inventory = updatedInventory
-                    )
-                }
-                "RAMBoost.exe" -> {
-                    val boosted = minOf(stateNow.maxRam - stateNow.ram, 6)
-                    logText = "COMPILED RAMBoost.exe: Allocated $boosted MB RAM immediately."
-                    stateNow.copy(
-                        ram = stateNow.ram + boosted,
-                        inventory = updatedInventory
-                    )
-                }
-                "Decryptor.pkg" -> {
-                    // Gain massive credits or temporary stats
-                    val gained = 150
-                    logText = "EXTRACTED Decryptor.pkg: Discovered $gained encrypted credits."
-                    stateNow.copy(
-                        credits = stateNow.credits + gained,
-                        totalCreditsEarned = stateNow.totalCreditsEarned + gained,
-                        inventory = updatedInventory
-                    )
-                }
-                "ChipsetMod.pkg" -> {
-                    logText = "CRACKED ChipsetMod.pkg: Acquired standard overclock (+1 attack power)."
-                    stateNow.copy(
-                        damageBonus = stateNow.damageBonus + 1,
-                        inventory = updatedInventory
-                    )
-                }
-                "AntiShield.bin" -> {
-                    logText = "COMPILED AntiShield.bin: Weaponized virus deals damage in future engagements."
-                    stateNow.copy(
-                        damageBonus = stateNow.damageBonus + 2,
-                        inventory = updatedInventory
-                    )
-                }
-                "FirewallBuffer.pkg" -> {
-                    logText = "COMPILED FirewallBuffer.pkg: Increased passive shield protection (+2 defense bonus)."
-                    stateNow.copy(
-                        defenseBonus = stateNow.defenseBonus + 2,
-                        inventory = updatedInventory
-                    )
-                }
+            var newIntegrity = stateNow.integrity
+            var newRam = stateNow.ram
+            var newCredits = stateNow.credits
+            var newTotCredits = stateNow.totalCreditsEarned
+            var newDmg = stateNow.damageBonus
+            var newDef = stateNow.defenseBonus
+            var newPredWeather = stateNow.predictedWeather
+
+            if (gameItem.healIntegrity > 0) {
+                val healed = minOf(stateNow.maxIntegrity - stateNow.integrity, gameItem.healIntegrity)
+                newIntegrity += healed
+                logText += "Restored $healed HP Integrity. "
+            }
+            if (gameItem.restoreRam > 0) {
+                val boosted = minOf(stateNow.maxRam - stateNow.ram, gameItem.restoreRam)
+                newRam += boosted
+                logText += "Allocated $boosted MB RAM. "
+            }
+            if (gameItem.grantCredits > 0) {
+                newCredits += gameItem.grantCredits
+                newTotCredits += gameItem.grantCredits
+                logText += "Extracted +${gameItem.grantCredits} MB Credits. "
+            }
+            if (gameItem.damageBonus > 0) {
+                newDmg += gameItem.damageBonus
+                logText += "Overclocked Attack (+${gameItem.damageBonus} Dmg). "
+            }
+            if (gameItem.defenseBonus > 0) {
+                newDef += gameItem.defenseBonus
+                logText += "Fortified Defense (+${gameItem.defenseBonus} Def). "
+            }
+
+            when (actualItemName) {
                 "GibsonForecast.sys" -> {
                     val stepsRemaining = (stateNow.nextEventSteps - stateNow.stepsSinceLastEvent).coerceAtLeast(1)
                     val nextWeather = stateNow.predictedWeather ?: com.example.data.CyberWeather.VALUES.filter { it != com.example.data.CyberWeather.CLEAR }.random()
-                    logText = "COMPILED GibsonForecast.sys: Next sub-grid atmospheric event predicted: [${nextWeather.title}] in $stepsRemaining steps."
-                    stateNow.copy(
-                        predictedWeather = nextWeather,
-                        inventory = updatedInventory
-                    )
-                }
-                "CorrosiveAcid.sh" -> {
-                    logText = "WEAPONIZED CorrosiveAcid.sh: Target enemy corrodes for 3 turns (10 DPS)."
-                    stateNow.copy(inventory = updatedInventory)
-                }
-                "StunPulse.dll" -> {
-                    logText = "DEPLOYED StunPulse.dll: Discharged EMP charge! Target enemy stunned for 2 turns."
-                    stateNow.copy(inventory = updatedInventory)
-                }
-                "OverclockJuice.exe" -> {
-                    logText = "INJECTED OverclockJuice.exe: System core overclocked (+50% damage for 3 turns)."
-                    stateNow.copy(inventory = updatedInventory)
+                    newPredWeather = nextWeather
+                    logText += "Next weather [${nextWeather.title}] in $stepsRemaining steps. "
                 }
                 "AntiVirus.sys" -> {
-                    logText = "EXECUTED AntiVirus.sys: Purged all system debuffs & fortified firewalls (-50% damage taken for 2 turns)."
-                    stateNow.copy(
-                        playerStatusEffects = stateNow.playerStatusEffects.filter { !it.type.isDebuff },
-                        inventory = updatedInventory
-                    )
-                }
-                else -> {
-                    logText = "RUNNING Generic cyber utility: No system changes."
-                    stateNow.copy(inventory = updatedInventory)
+                    logText += "Purged all debuffs. "
                 }
             }
+
+            stateNow.copy(
+                integrity = newIntegrity,
+                ram = newRam,
+                credits = newCredits,
+                totalCreditsEarned = newTotCredits,
+                damageBonus = newDmg,
+                defenseBonus = newDef,
+                predictedWeather = newPredWeather,
+                inventory = updatedInventory,
+                playerStatusEffects = if (actualItemName == "AntiVirus.sys") stateNow.playerStatusEffects.filter { !it.type.isDebuff } else stateNow.playerStatusEffects
+            )
+        }
+
+        if (gameItem.grantXp > 0) {
+            addExperience(gameItem.grantXp)
+        }
+
+        if (logText.isEmpty()) {
+            logText = "COMPILED $actualItemName utility."
+        } else {
+            logText = "COMPILED $actualItemName: " + logText.trim()
         }
 
         addLog(logText, LogType.SUCCESS)
 
-        when (itemName) {
-            "CorrosiveAcid.sh" -> applyStatusEffectToEnemy(com.example.data.StatusEffectType.POISONED, turns = 3, magnitude = 10, source = "CorrosiveAcid.sh")
-            "StunPulse.dll" -> applyStatusEffectToEnemy(com.example.data.StatusEffectType.STUNNED, turns = 2, source = "StunPulse.dll")
-            "OverclockJuice.exe" -> applyStatusEffectToPlayer(com.example.data.StatusEffectType.BUFFED, turns = 3, source = "OverclockJuice.exe")
-            "AntiVirus.sys" -> applyStatusEffectToPlayer(com.example.data.StatusEffectType.FORTIFIED, turns = 2, source = "AntiVirus.sys")
+        if (gameItem.statusEffectToApply != null) {
+            if (gameItem.targetSelf) {
+                applyStatusEffectToPlayer(gameItem.statusEffectToApply, turns = gameItem.statusEffectTurns, source = actualItemName)
+            } else {
+                applyStatusEffectToEnemy(gameItem.statusEffectToApply, turns = gameItem.statusEffectTurns, magnitude = 10, source = actualItemName)
+            }
         }
 
-        // If used during combat, automatically conclude player's action and trigger enemy's turn
         val gs = _uiState.value.gameState
         if (gs == GameState.PLAYER_TURN || gs == GameState.COMBAT_START) {
             executeEnemyCombatTurnInline()
@@ -2896,7 +3336,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("INTERACTION: 'interact'/'use'/'e' (activate console/portal/cache/elevator)", LogType.INFO)
                 addLog("COMBAT ACTIONS: 'attack'/'hit', 'defend'/'block', 'flee'/'run'", LogType.INFO)
                 addLog("COMBAT STANCE: 'style slash'/'chop'/'thrust', or 'stance <style>'", LogType.INFO)
-                addLog("INVENTORY: 'use <item>' (e.g. 'use NanoMed.sys', 'use RAMBoost.exe')", LogType.INFO)
+                addLog("INVENTORY: 'inventory'/'items', 'use <item>', 'equip <item>', 'unequip <slot>'", LogType.INFO)
+                addLog("EXPLORATION ARCHITECTURE: 'scavenge'/'search', 'drop <item>', 'sort <option>', 'category <type>'", LogType.INFO)
                 addLog("SYSTEM: 'status'/'stats', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>' (e.g. 'hack 2 3')", LogType.INFO)
             }
@@ -2935,10 +3376,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     addLog("ERROR: Interaction command only valid during active exploration.", LogType.ERROR)
                 }
             }
-            "status", "stats", "info" -> {
+            "status", "stats", "info", "xp", "level", "lvl" -> {
                 addLog("--- RUNNER INTEGRITY PROFILE ---", LogType.SUCCESS)
-                addLog("NAME: ${state.runnerName.ifEmpty { "UNNAMED" }} | LEVEL: ${state.level}", LogType.INFO)
-                addLog("INTEGRITY: ${state.integrity}/${state.maxIntegrity} | RAM: ${state.ram}/${state.maxRam}MB", LogType.INFO)
+                addLog("NAME: ${state.runnerName.ifEmpty { "UNNAMED" }} | NETRUNNER LEVEL: ${state.characterLevel} (ICE DEPTH: ${state.level})", LogType.INFO)
+                addLog("EXPERIENCE: ${state.characterXp} / ${state.xpToNextLevel} XP (${((state.characterXp.toFloat() / state.xpToNextLevel.coerceAtLeast(1)) * 100).toInt()}% to Next Level)", LogType.SUCCESS)
+                addLog("INTEGRITY: ${state.integrity}/${state.maxIntegrity} | RAM: ${state.ram}/${state.maxRam}MB | SHIELD: ${state.playerShield}/${state.playerMaxShield}", LogType.INFO)
                 addLog("CREDITS: ${state.credits}MB | DAMAGE BONUS: +${state.damageBonus}", LogType.INFO)
                 addLog("WEAPON: ${state.equippedWeaponName} | STANCE: ${state.selectedCombatStyle}", LogType.INFO)
                 addLog("ZONE: ${state.currentZone} | INVENTORY: ${state.inventory.joinToString(", ")}", LogType.INFO)
@@ -2990,6 +3432,118 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         addLog("ERROR: Item '$itemName' not found in inventory.", LogType.ERROR)
                     }
                 }
+            }
+            "implants", "clinic", "cyberware", "cybernetics" -> {
+                openCyberwareClinic()
+                addLog("--- CYBERNETIC SURGERY CLINIC & IMPLANT MATRIX OPENED ---", LogType.SUCCESS)
+                addLog("Type 'install <implantName>' or 'uninstall <slot>' or click UI surgery cards.", LogType.INFO)
+            }
+            "install", "implant" -> {
+                val query = parts.drop(1).joinToString(" ")
+                if (query.isEmpty()) {
+                    addLog("ERROR: Specify implant name. E.g. 'install Subdermal Weave v1'.", LogType.ERROR)
+                } else {
+                    val matching = com.example.data.CyberwareImplantRegistry.ALL_IMPLANTS.firstOrNull { 
+                        it.name.equals(query, ignoreCase = true) || it.name.contains(query, ignoreCase = true) 
+                    }
+                    if (matching != null) {
+                        installImplant(matching)
+                    } else {
+                        addLog("ERROR: Implant '$query' not found in Cyberware Registry.", LogType.ERROR)
+                    }
+                }
+            }
+            "uninstall" -> {
+                val slotArg = parts.getOrNull(1)?.lowercase()
+                val slot = when (slotArg) {
+                    "neural", "head", "cortex" -> com.example.data.ImplantBodySlot.NEURAL_CORTEX
+                    "ocular", "eye", "eyes" -> com.example.data.ImplantBodySlot.OCULAR_ARRAY
+                    "subdermal", "skin", "armor", "chassis" -> com.example.data.ImplantBodySlot.SUBDERMAL_CHASSIS
+                    "heart", "bio", "pump" -> com.example.data.ImplantBodySlot.SYNTH_HEART
+                    "limbs", "legs", "arms", "actuators" -> com.example.data.ImplantBodySlot.CYBER_ACTUATORS
+                    else -> null
+                }
+                if (slot != null) {
+                    uninstallImplant(slot)
+                } else {
+                    addLog("ERROR: Specify slot: 'neural', 'ocular', 'subdermal', 'heart', or 'limbs'.", LogType.ERROR)
+                }
+            }
+            "inventory", "inv", "items" -> {
+                addLog("=== RUNNER VIRTUAL STORAGE MANIFEST ===", LogType.SUCCESS)
+                addLog("EQUIPPED WEAPON: ${state.equippedWeaponName} (+${state.equippedWeaponItem?.damageBonus ?: 0} Dmg)", LogType.INFO)
+                addLog("EQUIPPED ARMOR: ${state.equippedArmorName} (+${state.equippedArmorItem?.defenseBonus ?: 0} Def)", LogType.INFO)
+                addLog("EQUIPPED UTILITY: ${state.equippedUtilityName}", LogType.INFO)
+                val slots = getStructuredInventorySlots()
+                if (slots.isEmpty()) {
+                    addLog("VIRTUAL STORAGE CORE IS EMPTY.", LogType.ALERT)
+                } else {
+                    slots.forEach { slot ->
+                        val eqLabel = if (slot.isEquipped) " [EQUIPPED]" else ""
+                        addLog("${slot.item.icon} ${slot.item.name} x${slot.quantity} [${slot.item.rarity.displayName.uppercase()}] (${slot.item.category.displayName})$eqLabel - ${slot.item.description}", LogType.INFO)
+                    }
+                }
+            }
+            "equip" -> {
+                val itemName = parts.drop(1).joinToString(" ")
+                if (itemName.isEmpty()) {
+                    addLog("ERROR: Specify equipment name. E.g. 'equip CyberBlade.exe'.", LogType.ERROR)
+                } else {
+                    equipItem(itemName)
+                }
+            }
+            "unequip" -> {
+                val slotArg = parts.getOrNull(1)?.lowercase()
+                val slot = when (slotArg) {
+                    "weapon", "wpn" -> com.example.data.EquipmentSlot.WEAPON
+                    "armor", "arm" -> com.example.data.EquipmentSlot.ARMOR
+                    "utility", "util", "cyberware" -> com.example.data.EquipmentSlot.UTILITY
+                    else -> null
+                }
+                if (slot != null) {
+                    unequipItemSlot(slot)
+                } else {
+                    addLog("ERROR: Specify equipment slot to unequip: 'weapon', 'armor', or 'utility'.", LogType.ERROR)
+                }
+            }
+            "scavenge", "search" -> {
+                scavengeCurrentCell()
+            }
+            "drop", "discard" -> {
+                val itemName = parts.drop(1).joinToString(" ")
+                if (itemName.isEmpty()) {
+                    addLog("ERROR: Specify item to discard. E.g. 'drop NanoMed.sys'.", LogType.ERROR)
+                } else {
+                    discardInventoryItem(itemName)
+                }
+            }
+            "sort" -> {
+                val sortArg = parts.getOrNull(1)?.lowercase()
+                val option = when (sortArg) {
+                    "name" -> com.example.data.InventorySortOption.NAME
+                    "category", "cat" -> com.example.data.InventorySortOption.CATEGORY
+                    "rarity", "rare" -> com.example.data.InventorySortOption.RARITY
+                    "quantity", "qty", "count" -> com.example.data.InventorySortOption.QUANTITY
+                    else -> null
+                }
+                if (option != null) {
+                    setInventorySortOption(option)
+                } else {
+                    addLog("ERROR: Sort option must be 'name', 'category', 'rarity', or 'quantity'.", LogType.ERROR)
+                }
+            }
+            "category" -> {
+                val catArg = parts.getOrNull(1)?.lowercase()
+                val category = when (catArg) {
+                    "consumable", "med", "sys" -> com.example.data.InventoryCategory.CONSUMABLE
+                    "equipment", "eq", "wpn", "arm" -> com.example.data.InventoryCategory.EQUIPMENT
+                    "program", "prog" -> com.example.data.InventoryCategory.PROGRAM
+                    "key", "keyitem" -> com.example.data.InventoryCategory.KEY_ITEM
+                    "resource", "salvage" -> com.example.data.InventoryCategory.RESOURCE
+                    "all", "clear", "reset" -> null
+                    else -> null
+                }
+                setInventoryCategoryFilter(category)
             }
             "shop", "store", "buy" -> {
                 if (state.screen == ActiveScreen.EXPLORATION) {
@@ -3204,6 +3758,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             putInt("credits", state.credits)
             putInt("damageBonus", state.damageBonus)
             putInt("defenseBonus", state.defenseBonus)
+            putInt("characterLevel", state.characterLevel)
+            putInt("characterXp", state.characterXp)
+            putInt("xpToNextLevel", state.xpToNextLevel)
             putInt("gridX", state.gridX)
             putInt("gridY", state.gridY)
             putString("direction", state.direction.name)
@@ -3218,6 +3775,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             putString("inventory", state.inventory.joinToString(","))
             putString("installedCyberware", state.installedCyberware.joinToString(",") { it.id })
             putString("installedPrograms", state.installedPrograms.joinToString(",") { it.id })
+            putString("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
             putString("exploredCells", serializeExploredCells(state.exploredCells))
             
             // Weather
@@ -3307,6 +3865,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val progStr = sharedPrefs.getString("installedPrograms", "") ?: ""
             val installedPrograms = if (progStr.isEmpty()) emptyList() else progStr.split(",").map { getProgramById(it) }
 
+            val implantsStr = sharedPrefs.getString("installedImplantsCsv", "") ?: ""
+            val installedImplantsMap = mutableMapOf<com.example.data.ImplantBodySlot, com.example.data.CyberwareImplant?>()
+            if (implantsStr.isNotEmpty()) {
+                implantsStr.split(",").forEach { entry ->
+                    val parts = entry.split(":")
+                    if (parts.size == 2) {
+                        try {
+                            val slot = com.example.data.ImplantBodySlot.valueOf(parts[0])
+                            val implant = com.example.data.CyberwareImplantRegistry.getImplantById(parts[1])
+                            if (implant != null) {
+                                installedImplantsMap[slot] = implant
+                            }
+                        } catch (e: Exception) {}
+                    }
+                }
+            }
+
             // Logs
             val logStr = sharedPrefs.getString("logFeed", "") ?: ""
             val logFeed = if (logStr.isEmpty()) emptyList() else logStr.split("$$").mapNotNull { line ->
@@ -3362,6 +3937,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     credits = sharedPrefs.getInt("credits", 100),
                     damageBonus = sharedPrefs.getInt("damageBonus", 0),
                     defenseBonus = sharedPrefs.getInt("defenseBonus", 0),
+                    characterLevel = sharedPrefs.getInt("characterLevel", 1),
+                    characterXp = sharedPrefs.getInt("characterXp", 0),
+                    xpToNextLevel = sharedPrefs.getInt("xpToNextLevel", 100),
                     gridX = sharedPrefs.getInt("gridX", 1),
                     gridY = sharedPrefs.getInt("gridY", 1),
                     direction = direction,
@@ -3374,6 +3952,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     inventory = inventory,
                     installedCyberware = installedCyberware,
                     installedPrograms = installedPrograms,
+                    installedImplants = installedImplantsMap,
                     exploredCells = exploredCells,
                     activeWeather = activeWeather,
                     weatherTurnsLeft = sharedPrefs.getInt("weatherTurnsLeft", 0),

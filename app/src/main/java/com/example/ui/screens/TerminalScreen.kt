@@ -316,7 +316,16 @@ fun TerminalScreen(
                                 onNameChange = { runnerNameInput = it },
                                 selectedClass = selectedClass,
                                 onClassSelected = { selectedClass = it },
-                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass) }
+                                selectedImplant = uiState.selectedStartingImplant,
+                                onImplantSelected = { viewModel.selectStartingImplant(it) },
+                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass, uiState.selectedStartingImplant) }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.CYBERWARE_CLINIC -> {
+                            CyberneticsClinicView(
+                                uiState = uiState,
+                                viewModel = viewModel,
+                                onCloseClinic = { viewModel.closeCyberwareClinic() }
                             )
                         }
                         GameViewModel.ActiveScreen.EXPLORATION -> {
@@ -444,7 +453,16 @@ fun TerminalScreen(
                                 onNameChange = { runnerNameInput = it },
                                 selectedClass = selectedClass,
                                 onClassSelected = { selectedClass = it },
-                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass) }
+                                selectedImplant = uiState.selectedStartingImplant,
+                                onImplantSelected = { viewModel.selectStartingImplant(it) },
+                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass, uiState.selectedStartingImplant) }
+                            )
+                        }
+                        GameViewModel.ActiveScreen.CYBERWARE_CLINIC -> {
+                            CyberneticsClinicView(
+                                uiState = uiState,
+                                viewModel = viewModel,
+                                onCloseClinic = { viewModel.closeCyberwareClinic() }
                             )
                         }
                         GameViewModel.ActiveScreen.EXPLORATION -> {
@@ -717,6 +735,8 @@ fun CharacterCreationView(
     onNameChange: (String) -> Unit,
     selectedClass: NetrunnerClass,
     onClassSelected: (NetrunnerClass) -> Unit,
+    selectedImplant: CyberwareImplant,
+    onImplantSelected: (CyberwareImplant) -> Unit,
     onStartGame: () -> Unit
 ) {
     Column(
@@ -849,6 +869,81 @@ fun CharacterCreationView(
             }
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "SELECT STARTER CYBERNETIC IMPLANT:",
+            color = CyberCyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.Start).padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CyberwareImplantRegistry.STARTER_IMPLANTS.forEach { implant ->
+                val isSelected = implant.id == selectedImplant.id
+                Card(
+                    onClick = { onImplantSelected(implant) },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) CyberMutedGreen else CyberCardBg
+                    ),
+                    border = BorderStroke(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) CyberCyan else CyberBorder
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("implant_card_${implant.id}")
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${implant.icon} ${implant.name}",
+                                color = if (isSelected) CyberCyan else CyberBrightGreen,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = "[${implant.slot.displayName.uppercase()}]",
+                                color = CyberPink,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = implant.description,
+                            color = CyberBrightGreen,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp
+                        )
+                        if (implant.passiveAbility != null) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "⚡ PASSIVE: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}",
+                                color = CyberAmber,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Compile Button
@@ -869,6 +964,255 @@ fun CharacterCreationView(
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp
             )
+        }
+    }
+}
+
+// ==========================================
+// Sub-Composable: Cybernetics Clinic Screen
+// ==========================================
+@Composable
+fun CyberneticsClinicView(
+    uiState: GameViewModel.GameUiState,
+    viewModel: GameViewModel,
+    onCloseClinic: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(CyberDark)
+            .padding(12.dp)
+            .verticalScroll(rememberScrollState()),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Title banner
+        Text(
+            text = "--- CYBERNETIC SURGERY & IMPLANT MATRIX ---",
+            color = CyberCyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 4.dp)
+        )
+        Text(
+            text = "ANATOMICAL CHASSIS OVERCLOCK // NEURAL & BIOMETRIC MODIFICATIONS",
+            color = CyberMutedText,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 9.sp,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+
+        // Overclock Stats Summary Card
+        val totalHp = uiState.installedImplants.values.sumOf { it?.integrityBonus ?: 0 }
+        val totalRam = uiState.installedImplants.values.sumOf { it?.ramBonus ?: 0 }
+        val totalRec = uiState.installedImplants.values.sumOf { it?.recoveryBonus ?: 0 }
+        val totalDmg = uiState.installedImplants.values.sumOf { it?.damageBonus ?: 0 }
+        val totalDef = uiState.installedImplants.values.sumOf { it?.defenseBonus ?: 0 }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCardBg),
+            border = BorderStroke(1.dp, CyberCyan),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = "ACTIVE IMPLANT OVERCLOCK BONUSES",
+                    color = CyberGreen,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("💖 HP +$totalHp", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("⚡ RAM +$totalRam", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("🔋 REC +$totalRec/t", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("🗡️ DMG +$totalDmg", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text("🛡️ DEF +$totalDef%", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+
+        Text(
+            text = "ANATOMICAL BODY SLOTS:",
+            color = CyberCyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp)
+        )
+
+        // 5 Anatomical Slots Grid/List
+        ImplantBodySlot.values().forEach { slot ->
+            val installed = uiState.installedImplants[slot]
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCardBg),
+                border = BorderStroke(1.dp, if (installed != null) CyberCyan else CyberBorder),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .testTag("clinic_slot_${slot.name}")
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "${slot.icon} ${slot.displayName.uppercase()}",
+                            color = CyberGreen,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        if (installed != null) {
+                            Text(
+                                text = installed.rarity.displayName.uppercase(),
+                                color = when(installed.rarity) {
+                                    ItemRarity.COMMON -> CyberBrightGreen
+                                    ItemRarity.UNCOMMON -> CyberCyan
+                                    ItemRarity.RARE -> CyberPink
+                                    ItemRarity.EPIC -> CyberAmber
+                                    ItemRarity.LEGENDARY -> CyberPink
+                                },
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Text("VACANT SLOT", color = CyberMutedText, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    if (installed != null) {
+                        Text(
+                            text = installed.name,
+                            color = CyberCyan,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = installed.description,
+                            color = CyberBrightGreen,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp,
+                            lineHeight = 11.sp
+                        )
+                        if (installed.passiveAbility != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "⚡ PASSIVE: ${installed.passiveAbility.title} - ${installed.passiveAbility.description}",
+                                color = CyberAmber,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = { viewModel.uninstallImplant(slot) },
+                            colors = ButtonDefaults.buttonColors(containerColor = CyberPink),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.align(Alignment.End).height(32.dp).testTag("btn_uninstall_${slot.name}")
+                        ) {
+                            Text("UNINSTALL IMPLANT", color = Color.White, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Text(
+                            text = "No cyberware unit currently fitted into this chassis socket.",
+                            color = CyberMutedText,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            text = "CYBERNETICS CATALOG (AVAILABLE IMPLANTS):",
+            color = CyberCyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp)
+        )
+
+        CyberwareImplantRegistry.ALL_IMPLANTS.forEach { implant ->
+            val isAlreadyInstalled = uiState.installedImplants[implant.slot]?.id == implant.id
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CyberCardBg),
+                border = BorderStroke(1.dp, CyberBorder),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .testTag("catalog_implant_${implant.id}")
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "${implant.icon} ${implant.name} [${implant.slot.displayName.uppercase()}]",
+                            color = CyberCyan,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+                        Text(
+                            text = implant.description,
+                            color = CyberBrightGreen,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp
+                        )
+                        if (implant.passiveAbility != null) {
+                            Text(
+                                text = "⚡ ${implant.passiveAbility.title}",
+                                color = CyberAmber,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { viewModel.installImplant(implant) },
+                        enabled = !isAlreadyInstalled,
+                        colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.height(32.dp).padding(start = 8.dp).testTag("btn_install_${implant.id}")
+                    ) {
+                        Text(if (isAlreadyInstalled) "INSTALLED" else "INSTALL", color = Color.Black, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = onCloseClinic,
+            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier.fillMaxWidth().height(44.dp).testTag("btn_exit_clinic")
+        ) {
+            Text("RETURN TO MAINFRAME", color = Color.Black, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
     }
 }
@@ -1435,12 +1779,38 @@ fun ExplorationView(
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "STATUS // ${uiState.runnerName.uppercase()}",
+                                color = CyberCyan,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "LVL ${uiState.characterLevel}",
+                                color = CyberAmber,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp
+                            )
+                        }
+
+                        // XP Progress Bar
                         Text(
-                            text = "STATUS // ${uiState.runnerName.uppercase()}",
-                            color = CyberCyan,
+                            text = "XP: ${uiState.characterXp}/${uiState.xpToNextLevel}",
+                            color = CyberAmber,
                             fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 10.sp
+                            fontSize = 9.sp
+                        )
+                        ProgressBarRetro(
+                            current = uiState.characterXp,
+                            max = uiState.xpToNextLevel,
+                            color = CyberAmber
                         )
 
                         // HP Bar
@@ -1697,6 +2067,19 @@ fun ExplorationView(
                     .testTag("btn_shop_console")
             ) {
                 Text("SHOP SOURCE", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+            }
+
+            Button(
+                onClick = { viewModel.openCyberwareClinic() },
+                colors = ButtonDefaults.buttonColors(containerColor = CyberMutedGreen),
+                border = BorderStroke(1.dp, CyberCyan),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(34.dp)
+                    .testTag("btn_cyberware_clinic")
+            ) {
+                Text("🔌 CYBERWARE", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
 
             Button(
@@ -3082,6 +3465,16 @@ fun FirstPersonPerspectiveCanvas(
                 }
             }
         }
+
+        // --- Post-Processing Glitch & Scanline Overlay Shader (intensity increases as health/stability drops) ---
+        FirstPersonGlitchShaderOverlay(
+            integrity = uiState.integrity,
+            maxIntegrity = uiState.maxIntegrity,
+            isCombat = isCombat,
+            isPlayerHit = uiState.combatFlashPlayer,
+            frameTime = frameTime,
+            modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -3609,8 +4002,8 @@ fun CombatView(
                 }
 
                 Text(
-                    text = "ICE LEVEL ${uiState.level}",
-                    color = CyberCyan,
+                    text = "ICE ${uiState.level} | LVL ${uiState.characterLevel} [${uiState.characterXp}/${uiState.xpToNextLevel} XP]",
+                    color = CyberAmber,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
                     fontSize = 9.sp
@@ -5932,6 +6325,165 @@ fun DigitalSparks(color: Color, modifier: Modifier = Modifier) {
                 topLeft = Offset(x, y),
                 size = Size(sizePx, sizePx)
             )
+        }
+    }
+}
+
+// Post-processing Glitch & Scanline Overlay Shader for First-Person Cyberspace Viewport
+@Composable
+fun FirstPersonGlitchShaderOverlay(
+    integrity: Int,
+    maxIntegrity: Int,
+    isCombat: Boolean,
+    isPlayerHit: Boolean = false,
+    frameTime: Long,
+    modifier: Modifier = Modifier
+) {
+    val healthRatio = (integrity.toFloat() / maxIntegrity.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+    val missingRatio = (1f - healthRatio).coerceIn(0f, 1f)
+    val hitBoost = if (isPlayerHit) 0.35f else 0f
+    val targetIntensity = (missingRatio + hitBoost).coerceIn(0f, 1f)
+
+    val animatedIntensity by animateFloatAsState(
+        targetValue = targetIntensity,
+        animationSpec = tween(durationMillis = 150, easing = LinearOutSlowInEasing),
+        label = "GlitchIntensity"
+    )
+
+    if (animatedIntensity <= 0.02f && !isCombat) return
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+            val timeSec = frameTime / 1000f
+
+            // 1. Dynamic CRT Scanlines (Increases density & opacity with instability)
+            val effectiveIntensity = if (animatedIntensity < 0.05f && isCombat) 0.08f else animatedIntensity
+            val numScanlines = (22 + (effectiveIntensity * 60).toInt()).coerceIn(20, 100)
+            val scanlineOpacity = 0.04f + (effectiveIntensity * 0.22f)
+            val scrollOffset = (timeSec * 75f) % (h / numScanlines)
+
+            for (i in 0 until numScanlines) {
+                val lineY = (h / numScanlines) * i + scrollOffset
+                val finalY = lineY % h
+                drawLine(
+                    color = Color.Black.copy(alpha = scanlineOpacity),
+                    start = Offset(0f, finalY),
+                    end = Offset(w, finalY),
+                    strokeWidth = 1.5f + (effectiveIntensity * 2.5f)
+                )
+            }
+
+            if (effectiveIntensity > 0.05f) {
+                val frameSeed = (frameTime / 45L) + (effectiveIntensity * 1000).toLong()
+                val random = java.util.Random(frameSeed)
+
+                // 2. Horizontal Screen Displacement / CRT Line Glitch Slices
+                val numSlices = (effectiveIntensity * 16).toInt()
+                for (i in 0 until numSlices) {
+                    val sliceY = random.nextFloat() * h
+                    val sliceH = 2f + random.nextFloat() * (14f * effectiveIntensity)
+                    val shiftX = (random.nextFloat() - 0.5f) * (45f * effectiveIntensity)
+                    val sliceAlpha = 0.12f + random.nextFloat() * (0.45f * effectiveIntensity)
+
+                    val sliceColor = if (random.nextBoolean()) Color(0xFF00E5FF) else Color(0xFFFB7185)
+                    drawRect(
+                        color = sliceColor.copy(alpha = sliceAlpha),
+                        topLeft = Offset(shiftX.coerceAtLeast(0f), sliceY),
+                        size = Size(w, sliceH)
+                    )
+                }
+
+                // 3. Digital Micro-Block Noise Corruption Glitches (Pixel Blocks)
+                val blockCount = (effectiveIntensity * 20).toInt()
+                for (b in 0 until blockCount) {
+                    val blockW = 12f + random.nextFloat() * (70f * effectiveIntensity)
+                    val blockH = 6f + random.nextFloat() * (35f * effectiveIntensity)
+                    val blockX = random.nextFloat() * (w - blockW)
+                    val blockY = random.nextFloat() * (h - blockH)
+
+                    val blockType = random.nextInt(3)
+                    val blockColor = when (blockType) {
+                        0 -> Color(0xFF00E5FF) // Cyber Cyan static
+                        1 -> Color(0xFFFB7185) // Cyber Pink static
+                        else -> Color.White   // Static white noise
+                    }
+
+                    drawRect(
+                        color = blockColor.copy(alpha = 0.15f + random.nextFloat() * 0.45f * effectiveIntensity),
+                        topLeft = Offset(blockX, blockY),
+                        size = Size(blockW, blockH)
+                    )
+
+                    if (random.nextBoolean()) {
+                        drawLine(
+                            color = Color.Black.copy(alpha = 0.7f),
+                            start = Offset(blockX, blockY + blockH / 2f),
+                            end = Offset(blockX + blockW, blockY + blockH / 2f),
+                            strokeWidth = 1.5f
+                        )
+                    }
+                }
+
+                // 4. Chromatic Aberration Edge Fringe (RGB Split at extreme instability)
+                if (effectiveIntensity > 0.35f) {
+                    val fringeShift = (effectiveIntensity - 0.35f) * 18f
+                    val fringeAlpha = ((effectiveIntensity - 0.35f) * 0.65f).coerceIn(0f, 0.45f)
+
+                    drawRect(
+                        color = Color(0xFFFB7185).copy(alpha = fringeAlpha),
+                        topLeft = Offset(0f, 0f),
+                        size = Size(fringeShift, h)
+                    )
+                    drawRect(
+                        color = Color(0xFF00E5FF).copy(alpha = fringeAlpha),
+                        topLeft = Offset(w - fringeShift, 0f),
+                        size = Size(fringeShift, h)
+                    )
+                }
+
+                // 5. Critical Stability Warning Vignette Pulse (When health < 35%)
+                if (healthRatio < 0.35f) {
+                    val critPulse = 0.3f + 0.30f * kotlin.math.sin(timeSec * 14f)
+                    val critColor = Color(0xFFEF4444)
+
+                    val vignetteGradient = Brush.radialGradient(
+                        colors = listOf(Color.Transparent, critColor.copy(alpha = critPulse * (1f - healthRatio * 2f).coerceIn(0.2f, 0.85f))),
+                        center = Offset(w / 2f, h / 2f),
+                        radius = w * 0.65f
+                    )
+                    drawRect(
+                        brush = vignetteGradient,
+                        topLeft = Offset(0f, 0f),
+                        size = size
+                    )
+                }
+            }
+        }
+
+        // 6. HUD Critical Glitch Alert Overlay Text
+        if (healthRatio < 0.30f) {
+            val alertFlicker = kotlin.math.sin((frameTime / 100f).toDouble()) > 0.0
+            if (alertFlicker) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 36.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color.Red.copy(alpha = 0.85f))
+                        .border(BorderStroke(1.dp, Color.White), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text(
+                        text = "⚠️ CRITICAL STABILITY // INTEGRITY ${(healthRatio * 100).toInt()}%",
+                        color = Color.White,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp
+                    )
+                }
+            }
         }
     }
 }
