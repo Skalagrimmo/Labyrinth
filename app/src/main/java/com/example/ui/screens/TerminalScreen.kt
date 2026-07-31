@@ -333,7 +333,12 @@ fun TerminalScreen(
                                 onExecuteProgram = { viewModel.executeCombatProgram(it) },
                                 onFlee = { viewModel.fleeCombat() },
                                 onAttack = { viewModel.combatAttack() },
-                                onSetCombatStyle = { viewModel.setCombatStyle(it) }
+                                onSetCombatStyle = { viewModel.setCombatStyle(it) },
+                                onDefend = { viewModel.combatDefend() },
+                                onHack = { viewModel.combatHack() },
+                                onScan = { viewModel.combatScan() },
+                                onUseItem = { viewModel.useInventoryItem(it) },
+                                onEndTurn = { viewModel.endTurn() }
                             )
                         }
                         GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
@@ -456,7 +461,12 @@ fun TerminalScreen(
                                 onExecuteProgram = { viewModel.executeCombatProgram(it) },
                                 onFlee = { viewModel.fleeCombat() },
                                 onAttack = { viewModel.combatAttack() },
-                                onSetCombatStyle = { viewModel.setCombatStyle(it) }
+                                onSetCombatStyle = { viewModel.setCombatStyle(it) },
+                                onDefend = { viewModel.combatDefend() },
+                                onHack = { viewModel.combatHack() },
+                                onScan = { viewModel.combatScan() },
+                                onUseItem = { viewModel.useInventoryItem(it) },
+                                onEndTurn = { viewModel.endTurn() }
                             )
                         }
                         GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
@@ -3512,7 +3522,29 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
 }
 
 // ==========================================
-// Sub-Composable: Combat Mode Screen
+// Sub-Composable: Status Effect Badge
+// ==========================================
+@Composable
+fun StatusEffectBadge(effect: com.example.data.ActiveStatusEffect) {
+    val badgeColor = Color(effect.type.colorHex)
+    Box(
+        modifier = Modifier
+            .background(badgeColor.copy(alpha = 0.25f), RoundedCornerShape(4.dp))
+            .border(1.dp, badgeColor, RoundedCornerShape(4.dp))
+            .padding(horizontal = 4.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = "${effect.type.icon} ${effect.type.displayName.uppercase()} (${effect.turnsRemaining}t)",
+            color = badgeColor,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 8.sp,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+// ==========================================
+// Sub-Composable: Combat Mode Screen (Wizardry 1st Person Turn-Based Combat)
 // ==========================================
 @Composable
 fun CombatView(
@@ -3520,345 +3552,779 @@ fun CombatView(
     onExecuteProgram: (Program) -> Unit,
     onFlee: () -> Unit,
     onAttack: () -> Unit = {},
-    onSetCombatStyle: (String) -> Unit = {}
+    onSetCombatStyle: (String) -> Unit = {},
+    onDefend: () -> Unit = {},
+    onHack: () -> Unit = {},
+    onScan: () -> Unit = {},
+    onUseItem: (String) -> Unit = {},
+    onEndTurn: () -> Unit = {}
 ) {
     val enemy = uiState.activeEnemy ?: return
+    var activeSubMenu by remember { mutableStateOf("COMMANDS") } // "COMMANDS", "DAEMONS", "ITEMS"
 
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF030712))
+            .padding(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        Text(
-            text = "--- HARDWARE CONFLICT IMMINENT ---",
-            color = CyberPink,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 10.sp,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp)
-        )
-
-        // Split: Enemy visual representation + Player Tactical Programs
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1.4f),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        // --- 1. TOP HEADER: ENCOUNTER & TURN PHASE BANNER ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+            border = BorderStroke(1.dp, CyberPink),
+            shape = RoundedCornerShape(8.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Left Panel: Enemy details & ASCII Art
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CyberDark),
-                border = BorderStroke(1.dp, CyberBorder),
-                shape = RoundedCornerShape(12.dp),
+            Row(
                 modifier = Modifier
-                    .weight(0.9f)
-                    .fillMaxHeight()
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.SpaceBetween
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (uiState.isCombatInputEnabled) CyberBrightGreen else CyberPink)
+                    )
                     Text(
-                        text = enemy.name.uppercase(),
-                        color = CyberPink,
+                        text = if (uiState.showCombatBanner != null) {
+                            uiState.showCombatBanner!!
+                        } else if (uiState.isCombatInputEnabled) {
+                            "⚔️ PLAYER COMMAND PHASE"
+                        } else {
+                            "⚡ HOSTILE COMPUTING..."
+                        },
+                        color = if (uiState.showCombatBanner != null) CyberAmber else if (uiState.isCombatInputEnabled) CyberBrightGreen else CyberPink,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
                         fontSize = 11.sp
                     )
+                }
 
-                    // First-Person 3D Tactical Viewport (Integrating 1st person perspective directly into combat)
+                Text(
+                    text = "ICE LEVEL ${uiState.level}",
+                    color = CyberCyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 9.sp
+                )
+            }
+        }
+
+        // --- 2. FIRST-PERSON VIEWPORT & HOSTILE OVERLAY (Wizardry 3D Viewport) ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.Black),
+            border = BorderStroke(1.5.dp, CyberPink.copy(alpha = 0.8f)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1.3f)
+        ) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // Background 3D Cyber Vector Canvas Viewport
+                FirstPersonPerspectiveCanvas(
+                    uiState = uiState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("first_person_viewport"),
+                    isCombat = true,
+                    onInteract = onAttack
+                )
+
+                // Flash overlay on damage/hit
+                if (uiState.combatFlashEnemy) {
                     Box(
                         modifier = Modifier
-                            .weight(1.2f)
-                            .fillMaxWidth()
-                            .background(Color.Black)
-                            .border(1.dp, Color(0xFFFB7185).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                            .padding(2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        FirstPersonPerspectiveCanvas(
-                            uiState = uiState,
-                            modifier = Modifier.fillMaxSize().testTag("first_person_viewport"),
-                            isCombat = true,
-                            onInteract = onAttack
+                            .fillMaxSize()
+                            .background(Color.White.copy(alpha = 0.35f))
+                    )
+                }
+                if (uiState.combatFlashPlayer) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(CyberPink.copy(alpha = 0.4f))
+                    )
+                }
+
+                // Top Target Lock HUD & Enemy Vitals
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.TopCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Black.copy(alpha = 0.85f), Color.Transparent)
+                            )
                         )
-                        
+                        .padding(6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Text(
-                            text = "TARGET LCK",
-                            color = CyberPink.copy(alpha = 0.6f),
+                            text = "[ TARGET: ${enemy.name.uppercase()} ]",
+                            color = CyberPink,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 7.sp,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(2.dp)
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = "TARGET LOCK 100%",
+                            color = CyberBrightGreen,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
-                    // Enemy stats
-                    Column(
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    // Hostile Integrity (HP) Bar
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Text(
-                            text = "HOSTILE CORE: ${enemy.integrity}/${enemy.maxIntegrity}",
+                            text = "CORE INTEGRITY: ${enemy.integrity}/${enemy.maxIntegrity}",
                             color = CyberPink,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 9.sp
                         )
-                        ProgressBarRetro(
-                            current = enemy.integrity,
-                            max = enemy.maxIntegrity,
-                            color = CyberPink
-                        )
-
                         Text(
-                            text = "HOSTILE SHIELD: ${enemy.shield}/${enemy.maxShield}",
-                            color = CyberCyan,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 9.sp
-                        )
-                        ProgressBarRetro(
-                            current = enemy.shield,
-                            max = enemy.maxShield,
-                            color = CyberCyan
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "ATTACK: ${enemy.damage}",
-                                color = CyberAmber,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp
-                            )
-                            Text(
-                                text = "SHIELDING: ${enemy.armor}",
-                                color = CyberBrightGreen,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Right Panel: Program compilations available
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CyberCardBg),
-                border = BorderStroke(1.dp, CyberBorder),
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier
-                    .weight(1.1f)
-                    .fillMaxHeight()
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(4.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    // Morrowind Weapon Info & Stance Selector
-                    Text(
-                        text = "EQUIPPED: ${uiState.equippedWeaponName.uppercase()}",
-                        color = CyberAmber,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 9.sp,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 2.dp),
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        listOf("Slash", "Chop", "Thrust").forEach { style ->
-                            val isSelected = uiState.selectedCombatStyle == style
-                            val borderCol = if (isSelected) CyberCyan else CyberBorder
-                            val bgCol = if (isSelected) CyberMutedGreen else CyberDark
-                            val textCol = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.5f)
-                            
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(bgCol)
-                                    .border(1.dp, borderCol, RoundedCornerShape(6.dp))
-                                    .clickable { onSetCombatStyle(style) }
-                                    .padding(vertical = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = style.uppercase(),
-                                    color = textCol,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 7.5.sp
-                                )
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(color = CyberBorder, thickness = 1.dp)
-
-                    Text(
-                        text = "TACTICAL CODES:",
-                        color = CyberCyan,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
-                    )
-
-                    // Display runner stats with retro style progress bars
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "SYSTEM CORE: ${uiState.integrity}/${uiState.maxIntegrity}",
-                                color = CyberCyan,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp
-                            )
-                        }
-                        ProgressBarRetro(
-                            current = uiState.integrity,
-                            max = uiState.maxIntegrity,
-                            color = CyberCyan
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "FIREWALL: ${uiState.playerShield}/${uiState.playerMaxShield}",
-                                color = CyberBrightGreen,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp
-                            )
-                        }
-                        ProgressBarRetro(
-                            current = uiState.playerShield,
-                            max = uiState.playerMaxShield,
-                            color = CyberBrightGreen
-                        )
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "ALLOCATED RAM: ${uiState.ram}/${uiState.maxRam}MB",
-                                color = CyberPink,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp
-                            )
-                        }
-                        ProgressBarRetro(
-                            current = uiState.ram,
-                            max = uiState.maxRam,
-                            color = CyberPink
-                        )
-                    }
-
-                    HorizontalDivider(color = CyberBorder, thickness = 1.dp)
-
-                    // Render installed programs
-                    uiState.installedPrograms.forEach { prog ->
-                        Card(
-                            onClick = { onExecuteProgram(prog) },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (uiState.ram >= prog.ramCost) CyberMutedGreen else CyberDark
-                            ),
-                            border = BorderStroke(1.dp, if (uiState.ram >= prog.ramCost) CyberCyan else CyberBorder),
-                            shape = RoundedCornerShape(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("program_btn_${prog.id}")
-                        ) {
-                            Column(modifier = Modifier.padding(4.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Text(
-                                        text = prog.name,
-                                        color = if (uiState.ram >= prog.ramCost) CyberCyan else CyberBrightGreen.copy(alpha = 0.5f),
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 10.sp
-                                    )
-                                    Text(
-                                        text = "${prog.ramCost}MB",
-                                        color = CyberPink,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Text(
-                                    text = prog.description,
-                                    color = CyberBrightGreen,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontSize = 8.sp,
-                                    lineHeight = 10.sp
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // Flee combat
-                    Button(
-                        onClick = onFlee,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF0F172A),
-                            disabledContainerColor = Color(0xFF0F172A).copy(alpha = 0.5f)
-                        ),
-                        border = BorderStroke(1.5.dp, CyberPink),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(36.dp)
-                            .testTag("btn_flee_combat")
-                    ) {
-                        Text(
-                            text = "EMERGENCY RETREAT ROUTE",
+                            text = "${((enemy.integrity.toFloat() / enemy.maxIntegrity.coerceAtLeast(1)) * 100).toInt()}%",
                             color = CyberPink,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
+                    ProgressBarRetro(
+                        current = enemy.integrity,
+                        max = enemy.maxIntegrity,
+                        color = CyberPink
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    // Hostile Firewall Shield Bar
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "FIREWALL SHIELD: ${enemy.shield}/${enemy.maxShield}",
+                            color = CyberCyan,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.5.sp
+                        )
+                        Text(
+                            text = "ARMOR: ${enemy.armor} | ATK: ${enemy.damage}",
+                            color = CyberAmber,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.5.sp
+                        )
+                    }
+                    ProgressBarRetro(
+                        current = enemy.shield,
+                        max = enemy.maxShield,
+                        color = CyberCyan
+                    )
+
+                    // Hostile Active Status Effects Badges
+                    if (uiState.enemyStatusEffects.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            uiState.enemyStatusEffects.forEach { effect ->
+                                StatusEffectBadge(effect = effect)
+                            }
+                        }
+                    }
+                }
+
+                // Center Damage Float Popup
+                if (uiState.enemyDamagePopup != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(8.dp))
+                            .border(1.5.dp, CyberPink, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = uiState.enemyDamagePopup!!,
+                            color = CyberPink,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp
+                        )
+                    }
+                }
+
+                // Player Damage Popup
+                if (uiState.playerDamagePopup != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 20.dp)
+                            .background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(8.dp))
+                            .border(1.5.dp, Color.Red, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "DAMAGE TAKEN: ${uiState.playerDamagePopup!!}",
+                            color = Color.Red,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 14.sp
+                        )
+                    }
+                }
+
+                // Active Combat Badges & Player Status Effects at Viewport Bottom
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    uiState.playerStatusEffects.forEach { effect ->
+                        StatusEffectBadge(effect = effect)
+                    }
+
+                    if (uiState.activeFirewallTimeLeft > 0) {
+                        Box(
+                            modifier = Modifier
+                                .background(CyberBrightGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                .border(1.dp, CyberBrightGreen, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("🛡️ FIREWALL ACTIVE (-75%)", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    val standCell = uiState.maze.getOrNull(uiState.gridY)?.getOrNull(uiState.gridX)
+                    if (standCell == com.example.data.CellType.ELEVATED_BALCONY) {
+                        Box(
+                            modifier = Modifier
+                                .background(CyberAmber.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                .border(1.dp, CyberAmber, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("✨ BALCONY (+25% ATK)", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                    } else if (standCell == com.example.data.CellType.GRAVITY_SLOPE) {
+                        Box(
+                            modifier = Modifier
+                                .background(CyberCyan.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                .border(1.dp, CyberCyan, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text("✨ GRAVITY (+30% EVA)", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
         }
 
-        // Output banner showing current actions
+        // --- 3. WIZARDRY TACTICAL COMMAND MENU & DECK ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+            border = BorderStroke(1.dp, CyberBorder),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1.1f)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Stance Selector Row (Slash / Chop / Thrust)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "STANCE:",
+                        color = CyberAmber,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 8.5.sp
+                    )
+
+                    listOf("Slash", "Chop", "Thrust").forEach { style ->
+                        val isSelected = uiState.selectedCombatStyle == style
+                        val borderCol = if (isSelected) CyberCyan else CyberBorder
+                        val bgCol = if (isSelected) CyberMutedGreen else CyberDark
+                        val textCol = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.6f)
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(bgCol)
+                                .border(1.dp, borderCol, RoundedCornerShape(6.dp))
+                                .clickable { onSetCombatStyle(style) }
+                                .padding(vertical = 4.dp)
+                                .testTag("btn_combat_stance_${style.lowercase()}"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = style.uppercase(),
+                                color = textCol,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 8.sp
+                            )
+                        }
+                    }
+                }
+
+                // Sub-Deck Toggle Bar (COMMANDS vs DAEMONS vs ITEMS)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    listOf(
+                        "COMMANDS" to "⚔️ TACTICS",
+                        "DAEMONS" to "💻 DAEMONS (${uiState.installedPrograms.size})",
+                        "ITEMS" to "💊 ITEMS (${uiState.inventory.size})"
+                    ).forEach { (key, label) ->
+                        val isSelected = activeSubMenu == key
+                        Button(
+                            onClick = { activeSubMenu = key },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSelected) CyberCyan.copy(alpha = 0.2f) else CyberDark,
+                                contentColor = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.6f)
+                            ),
+                            border = BorderStroke(1.dp, if (isSelected) CyberCyan else CyberBorder),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(32.dp)
+                                .testTag("btn_combat_deck_${key.lowercase()}")
+                        ) {
+                            Text(
+                                text = label,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 8.5.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+
+                HorizontalDivider(color = CyberBorder, thickness = 1.dp)
+
+                // Sub-Menu Content Switcher
+                when (activeSubMenu) {
+                    "DAEMONS" -> {
+                        // Daemons/Programs sub-menu
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (uiState.installedPrograms.isEmpty()) {
+                                Text(
+                                    text = "NO TACTICAL DAEMONS INSTALLED.",
+                                    color = CyberBrightGreen.copy(alpha = 0.5f),
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                            uiState.installedPrograms.forEach { prog ->
+                                val canAfford = uiState.ram >= prog.ramCost && uiState.isCombatInputEnabled
+                                Card(
+                                    onClick = { if (canAfford) onExecuteProgram(prog) },
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (canAfford) Color(0xFF0F172A) else CyberDark
+                                    ),
+                                    border = BorderStroke(1.dp, if (canAfford) CyberCyan else CyberBorder),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("btn_combat_program_${prog.id}")
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = prog.name,
+                                                color = if (canAfford) CyberCyan else CyberBrightGreen.copy(alpha = 0.4f),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 9.5.sp
+                                            )
+                                            Text(
+                                                text = prog.description,
+                                                color = CyberBrightGreen.copy(alpha = 0.7f),
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 7.5.sp
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { onExecuteProgram(prog) },
+                                            enabled = canAfford,
+                                            colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
+                                            shape = RoundedCornerShape(4.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Text(
+                                                text = "${prog.ramCost} MB",
+                                                color = Color.Black,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 8.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "ITEMS" -> {
+                        // Consumable Items sub-menu
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            if (uiState.inventory.isEmpty()) {
+                                Text(
+                                    text = "NO COMBAT CONSUMABLES AVAILABLE.",
+                                    color = CyberBrightGreen.copy(alpha = 0.5f),
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 9.sp,
+                                    modifier = Modifier.padding(8.dp)
+                                )
+                            }
+                            uiState.inventory.distinct().forEach { item ->
+                                val count = uiState.inventory.count { it == item }
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                                    border = BorderStroke(1.dp, CyberAmber),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("btn_combat_item_${item}")
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "$item x$count",
+                                            color = CyberAmber,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 9.5.sp
+                                        )
+                                        Button(
+                                            onClick = { onUseItem(item) },
+                                            enabled = uiState.isCombatInputEnabled,
+                                            colors = ButtonDefaults.buttonColors(containerColor = CyberAmber),
+                                            shape = RoundedCornerShape(4.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Text(
+                                                text = "COMPILE",
+                                                color = Color.Black,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 8.sp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else -> {
+                        // Primary Wizardry Tactician Grid Commands
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            // Row 1: Attack & Quick Hack
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Button(
+                                    onClick = onAttack,
+                                    enabled = uiState.isCombatInputEnabled,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF0F172A),
+                                        disabledContainerColor = CyberDark
+                                    ),
+                                    border = BorderStroke(1.5.dp, CyberPink),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("btn_combat_attack")
+                                ) {
+                                    Text(
+                                        text = "⚔️ STRIKE (${uiState.selectedCombatStyle.uppercase()})",
+                                        color = CyberPink,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.5.sp
+                                    )
+                                }
+
+                                Button(
+                                    onClick = onHack,
+                                    enabled = uiState.isCombatInputEnabled && uiState.ram >= 3,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF0F172A),
+                                        disabledContainerColor = CyberDark
+                                    ),
+                                    border = BorderStroke(1.5.dp, CyberCyan),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("btn_combat_hack")
+                                ) {
+                                    Text(
+                                        text = "⚡ QUICK HACK (3MB)",
+                                        color = CyberCyan,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.5.sp
+                                    )
+                                }
+                            }
+
+                            // Row 2: Defend & Scan Target
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Button(
+                                    onClick = onDefend,
+                                    enabled = uiState.isCombatInputEnabled,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF0F172A),
+                                        disabledContainerColor = CyberDark
+                                    ),
+                                    border = BorderStroke(1.5.dp, CyberBrightGreen),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("btn_combat_defend")
+                                ) {
+                                    Text(
+                                        text = "🛡️ FORTIFY FIREWALL",
+                                        color = CyberBrightGreen,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.5.sp
+                                    )
+                                }
+
+                                Button(
+                                    onClick = onScan,
+                                    enabled = uiState.isCombatInputEnabled,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF0F172A),
+                                        disabledContainerColor = CyberDark
+                                    ),
+                                    border = BorderStroke(1.5.dp, CyberAmber),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("btn_combat_scan")
+                                ) {
+                                    Text(
+                                        text = "🔍 SCAN TELEMETRY",
+                                        color = CyberAmber,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.5.sp
+                                    )
+                                }
+                            }
+
+                            // Row 3: Pass Turn & Emergency Flee
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Button(
+                                    onClick = onEndTurn,
+                                    enabled = uiState.isCombatInputEnabled,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF0F172A),
+                                        disabledContainerColor = CyberDark
+                                    ),
+                                    border = BorderStroke(1.dp, CyberBorder),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .testTag("btn_combat_end_turn")
+                                ) {
+                                    Text(
+                                        text = "⏭️ END TURN",
+                                        color = CyberBrightGreen.copy(alpha = 0.8f),
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.sp
+                                    )
+                                }
+
+                                Button(
+                                    onClick = onFlee,
+                                    enabled = uiState.isCombatInputEnabled,
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF0F172A),
+                                        disabledContainerColor = CyberDark
+                                    ),
+                                    border = BorderStroke(1.5.dp, CyberPink),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp)
+                                        .testTag("btn_combat_flee")
+                                ) {
+                                    Text(
+                                        text = "🏃 DISCONNECT",
+                                        color = CyberPink,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 9.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 4. WIZARDRY PARTY HUD / RUNNER VITALS PANEL ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+            border = BorderStroke(1.dp, CyberBorder),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(6.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                // Runner Info Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "RUNNER: ${uiState.runnerName.ifEmpty { "OPERATIVE" }.uppercase()} [${uiState.runnerClass.name}]",
+                        color = CyberCyan,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.sp
+                    )
+                    Text(
+                        text = "WEAPON: ${uiState.equippedWeaponName.uppercase()}",
+                        color = CyberAmber,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 8.5.sp
+                    )
+                }
+
+                // Vitals Progress Bars
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // System Core HP
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("CORE (HP)", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
+                            Text("${uiState.integrity}/${uiState.maxIntegrity}", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp)
+                        }
+                        ProgressBarRetro(current = uiState.integrity, max = uiState.maxIntegrity, color = CyberCyan)
+                    }
+
+                    // Firewall Shield
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("SHIELD", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
+                            Text("${uiState.playerShield}/${uiState.playerMaxShield}", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp)
+                        }
+                        ProgressBarRetro(current = uiState.playerShield, max = uiState.playerMaxShield, color = CyberBrightGreen)
+                    }
+
+                    // Memory RAM
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("RAM", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
+                            Text("${uiState.ram}/${uiState.maxRam}MB", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp)
+                        }
+                        ProgressBarRetro(current = uiState.ram, max = uiState.maxRam, color = CyberPink)
+                    }
+                }
+            }
+        }
+
+        // --- 5. COMBAT TELEMETRY LOG BANNER ---
         if (uiState.enemyCombatAction.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(2.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberDark),
-                border = BorderStroke(1.dp, CyberBorder),
-                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, CyberPink.copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(6.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     text = uiState.enemyCombatAction,
                     color = CyberPink,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontSize = 8.5.sp,
                     modifier = Modifier.padding(4.dp)
                 )
             }

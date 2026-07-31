@@ -26,13 +26,6 @@ enum class CombatWinner {
 /**
  * Status effects applied during turn-based combat engine calculations.
  */
-enum class StatusEffectType {
-    SYSTEM_VIRUS_DOT,   // Damage Over Time
-    RAM_RECHARGE_BUFF,  // Extra RAM per turn
-    FIREWALL_SHIELD_BUFF, // Reduces incoming damage
-    CYBER_STUN          // Skips enemy turn
-}
-
 data class CombatStatusEffect(
     val id: String = Random.nextInt(10000, 99999).toString(),
     val name: String,

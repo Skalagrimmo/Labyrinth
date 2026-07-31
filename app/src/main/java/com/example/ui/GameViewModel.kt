@@ -130,6 +130,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val isCombatInputEnabled: Boolean = true,
         val enemyAttackCharge: Float = 0f,
         val activeFirewallTimeLeft: Int = 0,
+        val playerStatusEffects: List<com.example.data.ActiveStatusEffect> = emptyList(),
+        val enemyStatusEffects: List<com.example.data.ActiveStatusEffect> = emptyList(),
         val defendCooldown: Int = 0,
         val attackCooldown: Int = 0,
         val programCooldowns: Map<String, Int> = emptyMap(),
@@ -1336,6 +1338,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 showShieldEffect = false,
                 enemyAttackCharge = 0f,
                 activeFirewallTimeLeft = 0,
+                playerStatusEffects = emptyList(),
+                enemyStatusEffects = enemy.statusEffects.toList(),
                 defendCooldown = 0,
                 attackCooldown = 0,
                 programCooldowns = emptyMap()
@@ -1357,6 +1361,78 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ----------------------------------------------------
+    // Status Effect System
+    // ----------------------------------------------------
+
+    fun applyStatusEffectToPlayer(type: com.example.data.StatusEffectType, turns: Int, magnitude: Int = 0, source: String = "") {
+        val newEffect = com.example.data.ActiveStatusEffect(
+            type = type,
+            turnsRemaining = turns,
+            magnitude = magnitude,
+            sourceName = source
+        )
+        _uiState.update { state ->
+            val updated = state.playerStatusEffects.filter { it.type != type }.toMutableList()
+            updated.add(newEffect)
+            state.copy(playerStatusEffects = updated)
+        }
+        addLog("${type.icon} STATUS EFFECT INFLICTED ON PLAYER: ${type.displayName} (${turns}t)! ${type.description}", LogType.ALERT)
+    }
+
+    fun applyStatusEffectToEnemy(type: com.example.data.StatusEffectType, turns: Int, magnitude: Int = 0, source: String = "") {
+        val enemy = _uiState.value.activeEnemy ?: return
+        val newEffect = com.example.data.ActiveStatusEffect(
+            type = type,
+            turnsRemaining = turns,
+            magnitude = magnitude,
+            sourceName = source
+        )
+        val updatedEffects = enemy.statusEffects.filter { it.type != type }.toMutableList()
+        updatedEffects.add(newEffect)
+        enemy.statusEffects = updatedEffects
+
+        _uiState.update { state ->
+            state.copy(enemyStatusEffects = updatedEffects.toList())
+        }
+        addLog("${type.icon} STATUS EFFECT APPLIED TO ${enemy.name.uppercase()}: ${type.displayName} (${turns}t)! ${type.description}", LogType.SUCCESS)
+    }
+
+    private fun processPlayerTurnStatusEffects(): Boolean {
+        val state = _uiState.value
+        val activeEffects = state.playerStatusEffects
+        if (activeEffects.isEmpty()) return false
+
+        var isPlayerStunned = false
+        val remainingEffects = mutableListOf<com.example.data.ActiveStatusEffect>()
+
+        for (effect in activeEffects) {
+            when (effect.type) {
+                com.example.data.StatusEffectType.POISONED -> {
+                    val dotDamage = if (effect.magnitude > 0) effect.magnitude else 8
+                    val newIntegrity = maxOf(0, state.integrity - dotDamage)
+                    _uiState.update { it.copy(integrity = newIntegrity, playerDamagePopup = "-$dotDamage HP (Corroded)") }
+                    addLog("🧪 CORROSION TICK: System integrity damaged by $dotDamage points!", LogType.ERROR)
+                }
+                com.example.data.StatusEffectType.STUNNED -> {
+                    isPlayerStunned = true
+                    addLog("⚡ SYSTEM STUNNED: Circuit overload paralyzes action controls!", LogType.ALERT)
+                }
+                else -> {}
+            }
+
+            val nextTurns = effect.turnsRemaining - 1
+            if (nextTurns > 0) {
+                remainingEffects.add(effect.copy(turnsRemaining = nextTurns))
+            } else {
+                addLog("✨ EXPIRED STATUS: ${effect.type.displayName} effect on player faded.", LogType.INFO)
+            }
+        }
+
+        _uiState.update { it.copy(playerStatusEffects = remainingEffects) }
+        return isPlayerStunned
+    }
+
     fun setCombatStyle(style: String) {
         _uiState.update { it.copy(selectedCombatStyle = style) }
         addLog("COMBAT STANCE: Switched to $style stance.", LogType.INFO)
@@ -1366,6 +1442,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
         val enemy = state.activeEnemy ?: return
+
+        // Check if player is stunned
+        if (processPlayerTurnStatusEffects()) {
+            addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
+            executeEnemyCombatTurnInline()
+            return
+        }
 
         // Start weapon swing animation in UI thread
         viewModelScope.launch {
@@ -1421,6 +1504,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val statPower = (state.level * 2) + state.damageBonus
             var rawPlayerDamage = baseDmg + statPower
 
+            // Apply Status Effect multipliers on Player
+            val isOverclocked = state.playerStatusEffects.any { it.type == com.example.data.StatusEffectType.BUFFED }
+            val isGlitched = state.playerStatusEffects.any { it.type == com.example.data.StatusEffectType.WEAKENED }
+            if (isOverclocked) {
+                rawPlayerDamage = (rawPlayerDamage * 1.5f).toInt()
+                addLog("🔥 OVERCLOCKED: Attack payload amplified by 50%!", LogType.SUCCESS)
+            }
+            if (isGlitched) {
+                rawPlayerDamage = (rawPlayerDamage * 0.5f).toInt()
+                addLog("🌀 GLITCHED: Attack output reduced by 50%!", LogType.ALERT)
+            }
+
             // Balcony Vantage: +25% attack damage bonus
             val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
             if (standCell == com.example.data.CellType.ELEVATED_BALCONY) {
@@ -1440,7 +1535,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             val enemyArmor = enemy.armor
             val effectiveArmor = if (isCrit) (enemyArmor * 0.5f).toInt() else enemyArmor
-            val finalDmg = maxOf(3, rawPlayerDamage - effectiveArmor)
+            var finalDmg = maxOf(3, rawPlayerDamage - effectiveArmor)
+
+            // Enemy Fortified status check
+            val isEnemyFortified = enemy.statusEffects.any { it.type == com.example.data.StatusEffectType.FORTIFIED }
+            if (isEnemyFortified) {
+                finalDmg = (finalDmg * 0.5f).toInt().coerceAtLeast(1)
+                addLog("🛡️ HOSTILE FORTIFIED: Damage absorbed by enemy defense grid (-50%).", LogType.ALERT)
+            }
 
             val enemyRemShield = maxOf(0, enemy.shield - finalDmg)
             val shieldDmg = enemy.shield - enemyRemShield
@@ -1485,6 +1587,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
 
+        if (processPlayerTurnStatusEffects()) {
+            addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
+            executeEnemyCombatTurnInline()
+            return
+        }
+
         _uiState.update { stateNow ->
             val shieldHeal = 15 + (stateNow.level * 3)
             val newShield = minOf(stateNow.playerMaxShield, stateNow.playerShield + shieldHeal)
@@ -1494,6 +1602,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 showShieldEffect = true
             )
         }
+        applyStatusEffectToPlayer(com.example.data.StatusEffectType.FORTIFIED, turns = 1, source = "Defensive Firewall")
         addLog("🛡️ ACTIVE FIREWALL INITIATED: Damage incoming in the next turn reduced by 75%!", LogType.SUCCESS)
 
         viewModelScope.launch {
@@ -1508,6 +1617,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
         val enemy = state.activeEnemy ?: return
+
+        if (processPlayerTurnStatusEffects()) {
+            addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
+            executeEnemyCombatTurnInline()
+            return
+        }
 
         if (state.ram < 3) {
             addLog("HACK PROTOCOL ABORTED: Needs 3 MB RAM.", LogType.ERROR)
@@ -1526,6 +1641,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(combatFlashEnemy = true, enemyDamagePopup = "-$hackDmg HP") }
             addLog("DIRECT SYSTEM EXPLOIT COMPILED: Bypassed firewall entirely!", LogType.SUCCESS)
             addLog("Dealt $hackDmg system-penetrating damage to ${enemy.name}.", LogType.SUCCESS)
+
+            // Inflict Stunned status effect on enemy!
+            applyStatusEffectToEnemy(com.example.data.StatusEffectType.STUNNED, turns = 1, source = "Direct Exploit")
 
             kotlinx.coroutines.delay(400)
             _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
@@ -1551,7 +1669,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("NAME: ${enemy.name} | CLASS: Cyber-Entity Layer ${state.level}", LogType.INFO)
         addLog("FIREWALL SHELL: ${enemy.shield}/${enemy.maxShield} (Armor Rating: ${enemy.armor})", LogType.INFO)
         addLog("CORE DATA: ${enemy.integrity}/${enemy.maxIntegrity} | ATK MODULE: ${enemy.damage}", LogType.INFO)
-        addLog("ANALYSIS COMPLETE: Signal feedback scrambled enemy telemetry! Hostile decryption progress reset.", LogType.SUCCESS)
+        addLog("ANALYSIS COMPLETE: Signal feedback scrambled enemy telemetry! Target Glitched.", LogType.SUCCESS)
+
+        applyStatusEffectToEnemy(com.example.data.StatusEffectType.WEAKENED, turns = 2, source = "Deep Telemetry Scan")
 
         viewModelScope.launch {
             _uiState.update { stateNow ->
@@ -1563,7 +1683,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             kotlinx.coroutines.delay(400)
             _uiState.update { it.copy(combatFlashEnemy = false) }
 
-            // Scanned enemy is weakened (stunned) and then attacks
+            // Scanned enemy is weakened and then attacks
             executeEnemyCombatTurnInline(isScanStunned = true)
         }
     }
@@ -1579,6 +1699,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
         val enemy = state.activeEnemy ?: return
+
+        if (processPlayerTurnStatusEffects()) {
+            addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
+            executeEnemyCombatTurnInline()
+            return
+        }
 
         if (state.ram < program.ramCost) {
             addLog("INSUFFICIENT RAM: Requires ${program.ramCost}MB, but only ${state.ram}MB allocated.", LogType.ERROR)
@@ -1597,6 +1723,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val baseDmg = program.damage
             val statPower = (state.level * 2) + state.damageBonus
             var rawPlayerDamage = baseDmg + statPower
+
+            // Apply Status Effect multipliers on Player
+            val isOverclocked = state.playerStatusEffects.any { it.type == com.example.data.StatusEffectType.BUFFED }
+            val isGlitched = state.playerStatusEffects.any { it.type == com.example.data.StatusEffectType.WEAKENED }
+            if (isOverclocked) {
+                rawPlayerDamage = (rawPlayerDamage * 1.5f).toInt()
+                addLog("🔥 OVERCLOCKED: Program damage amplified by 50%!", LogType.SUCCESS)
+            }
+            if (isGlitched) {
+                rawPlayerDamage = (rawPlayerDamage * 0.5f).toInt()
+                addLog("🌀 GLITCHED: Program payload reduced by 50%!", LogType.ALERT)
+            }
 
             // Balcony Vantage: +25% attack damage bonus
             val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
@@ -1622,10 +1760,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             val enemyArmor = enemy.armor
             val effectiveArmor = if (isCrit) (enemyArmor * 0.5f).toInt() else enemyArmor
-            val finalDmg = if (program.piercesDefense) {
+            var finalDmg = if (program.piercesDefense) {
                 rawPlayerDamage
             } else {
                 maxOf(2, rawPlayerDamage - effectiveArmor)
+            }
+
+            // Enemy Fortified check
+            val isEnemyFortified = enemy.statusEffects.any { it.type == com.example.data.StatusEffectType.FORTIFIED }
+            if (isEnemyFortified) {
+                finalDmg = (finalDmg * 0.5f).toInt().coerceAtLeast(1)
+                addLog("🛡️ HOSTILE FORTIFIED: Damage absorbed by enemy defense grid (-50%).", LogType.ALERT)
             }
 
             val enemyRemShield = maxOf(0, enemy.shield - finalDmg)
@@ -1640,7 +1785,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (isCrit) {
                 addLog("CRITICAL HIT! [x${if (state.runnerClass == NetrunnerClass.CODE_SLASHER) "2.0" else "1.5"}] Armor bypassed: ${effectiveArmor}/${enemyArmor}", LogType.SUCCESS)
             }
-            addLog("Dealt ${finalDmg} damage to ${enemy.name} (Shield: -${shieldDmg}, Core: -${bodyDmg}) [Hostile Armor: ${enemyArmor}]", LogType.SUCCESS)
+            if (finalDmg > 0) {
+                addLog("Dealt ${finalDmg} damage to ${enemy.name} (Shield: -${shieldDmg}, Core: -${bodyDmg}) [Hostile Armor: ${enemyArmor}]", LogType.SUCCESS)
+            }
 
             if (program.heal > 0) {
                 val healed = minOf(state.maxIntegrity - state.integrity, program.heal)
@@ -1652,6 +1799,26 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 val shieldHealed = minOf(state.playerMaxShield - state.playerShield, program.shield)
                 _uiState.update { it.copy(playerShield = it.playerShield + shieldHealed) }
                 addLog("Temporary firewalls reinforced: +$shieldHealed Shield Barrier.", LogType.SUCCESS)
+            }
+
+            // Apply Program Status Effect
+            if (program.statusEffectToApply != null) {
+                val turns = if (program.statusEffectTurns > 0) program.statusEffectTurns else 2
+                if (program.statusEffectTargetSelf) {
+                    applyStatusEffectToPlayer(
+                        type = program.statusEffectToApply,
+                        turns = turns,
+                        magnitude = program.statusEffectMagnitude,
+                        source = program.name
+                    )
+                } else {
+                    applyStatusEffectToEnemy(
+                        type = program.statusEffectToApply,
+                        turns = turns,
+                        magnitude = program.statusEffectMagnitude,
+                        source = program.name
+                    )
+                }
             }
 
             val hasDmg = finalDmg > 0
@@ -1685,15 +1852,88 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val state = _uiState.value
             val enemy = state.activeEnemy ?: return@launch
 
-            val actions = listOf(
-                "Trojan injection stream",
-                "Rootkit port scan exploit",
-                "Distributed Denial-of-Service packets",
-                "Logic logicbomb payload"
-            )
-            val selectedAction = actions[Random.nextInt(actions.size)]
+            // 1. Process Enemy Status Effects
+            val activeEffects = enemy.statusEffects
+            var isEnemyStunned = isScanStunned
+            val remainingEnemyEffects = mutableListOf<com.example.data.ActiveStatusEffect>()
+
+            for (effect in activeEffects) {
+                when (effect.type) {
+                    com.example.data.StatusEffectType.POISONED -> {
+                        val dotDamage = if (effect.magnitude > 0) effect.magnitude else 8
+                        val enemyRemIntegrity = maxOf(0, enemy.integrity - dotDamage)
+                        enemy.integrity = enemyRemIntegrity
+                        _uiState.update { stateNow ->
+                            stateNow.copy(
+                                enemyDamagePopup = "-$dotDamage HP (Corroded)",
+                                combatFlashEnemy = true,
+                                enemyStatusEffects = enemy.statusEffects.toList()
+                            )
+                        }
+                        addLog("🧪 CORROSION TICK: ${enemy.name} took $dotDamage corrosion damage!", LogType.SUCCESS)
+                        delay(300)
+                        _uiState.update { it.copy(enemyDamagePopup = null, combatFlashEnemy = false) }
+
+                        if (enemy.integrity <= 0) {
+                            _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                            delay(1000)
+                            handleCombatVictoryInline(enemy)
+                            _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+                            return@launch
+                        }
+                    }
+                    com.example.data.StatusEffectType.STUNNED -> {
+                        isEnemyStunned = true
+                        addLog("⚡ HOSTILE STUNNED: ${enemy.name} circuit frozen by electrical charge!", LogType.SUCCESS)
+                    }
+                    else -> {}
+                }
+
+                val nextTurns = effect.turnsRemaining - 1
+                if (nextTurns > 0) {
+                    remainingEnemyEffects.add(effect.copy(turnsRemaining = nextTurns))
+                } else {
+                    addLog("✨ EXPIRED STATUS: ${effect.type.displayName} effect on ${enemy.name} faded.", LogType.INFO)
+                }
+            }
+
+            enemy.statusEffects = remainingEnemyEffects
+            _uiState.update { it.copy(enemyStatusEffects = remainingEnemyEffects.toList()) }
+
+            if (isEnemyStunned) {
+                addLog("⚡ ENEMY TURN SKIPPED: ${enemy.name} is paralyzed by STUN status!", LogType.SUCCESS)
+                delay(600)
+                _uiState.update { stateNow ->
+                    stateNow.copy(
+                        ram = minOf(stateNow.maxRam, stateNow.ram + stateNow.ramRecoveryRate),
+                        combatTurn = CombatTurn.PLAYER,
+                        isCombatInputEnabled = true,
+                        gameState = GameState.PLAYER_TURN
+                    )
+                }
+                return@launch
+            }
+
+            // Calculate base enemy damage
             var baseEnemyDmg = enemy.damage + Random.nextInt(-2, 3)
             if (baseEnemyDmg < 2) baseEnemyDmg = 2
+
+            val isEnemyBuffed = activeEffects.any { it.type == com.example.data.StatusEffectType.BUFFED }
+            val isEnemyWeakened = activeEffects.any { it.type == com.example.data.StatusEffectType.WEAKENED }
+            val isPlayerFortified = state.playerStatusEffects.any { it.type == com.example.data.StatusEffectType.FORTIFIED }
+
+            if (isEnemyBuffed) {
+                baseEnemyDmg = (baseEnemyDmg * 1.5f).toInt()
+                addLog("🔥 HOSTILE OVERCLOCKED: Enemy damage boosted by 50%!", LogType.ERROR)
+            }
+            if (isEnemyWeakened) {
+                baseEnemyDmg = (baseEnemyDmg * 0.5f).toInt().coerceAtLeast(1)
+                addLog("🌀 HOSTILE GLITCHED: Enemy damage reduced by 50%!", LogType.SUCCESS)
+            }
+            if (isPlayerFortified) {
+                baseEnemyDmg = (baseEnemyDmg * 0.5f).toInt().coerceAtLeast(1)
+                addLog("🛡️ PLAYER FORTIFIED: Incoming attack damage halved by active barrier!", LogType.SUCCESS)
+            }
 
             // Gravity Slope check (Evasion boost reduces enemy hit intensity by 30%)
             val standCell = state.maze.getOrNull(state.gridY)?.getOrNull(state.gridX)
@@ -1702,13 +1942,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("✨ GRAVITY EVASION: Magnetic slope rapid momentum absorbed 30% of incoming packet force!", LogType.SUCCESS)
             }
 
-            if (isScanStunned) {
-                baseEnemyDmg = (baseEnemyDmg * 0.4f).toInt().coerceAtLeast(1)
-                addLog("SCANNED ANOMALY: Enemy damage reduced by 60% due to packet interference.", LogType.ALERT)
-            }
-
             val defenseModifier = state.defenseBonus
             val finalEnemyDmg = maxOf(1, baseEnemyDmg - defenseModifier)
+
+            val actions = listOf(
+                "Trojan injection stream",
+                "Rootkit port scan exploit",
+                "Distributed Denial-of-Service packets",
+                "Logic logicbomb payload"
+            )
+            val selectedAction = actions[Random.nextInt(actions.size)]
 
             val currentShield = state.playerShield
             val shieldDamage = minOf(currentShield, finalEnemyDmg)
@@ -1734,6 +1977,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             if (integrityDamage > 0) {
                 addLog("System Integrity degraded by $integrityDamage%.", LogType.ERROR)
+            }
+
+            // 25% chance for enemy attack to inflict status effect on player
+            if (Random.nextInt(100) < 25) {
+                val debuff = listOf(
+                    com.example.data.StatusEffectType.POISONED,
+                    com.example.data.StatusEffectType.WEAKENED,
+                    com.example.data.StatusEffectType.STUNNED
+                ).random()
+                val turns = if (debuff == com.example.data.StatusEffectType.STUNNED) 1 else 2
+                applyStatusEffectToPlayer(debuff, turns = turns, magnitude = 8, source = enemy.name)
             }
 
             kotlinx.coroutines.delay(600)
@@ -2414,6 +2668,25 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         inventory = updatedInventory
                     )
                 }
+                "CorrosiveAcid.sh" -> {
+                    logText = "WEAPONIZED CorrosiveAcid.sh: Target enemy corrodes for 3 turns (10 DPS)."
+                    stateNow.copy(inventory = updatedInventory)
+                }
+                "StunPulse.dll" -> {
+                    logText = "DEPLOYED StunPulse.dll: Discharged EMP charge! Target enemy stunned for 2 turns."
+                    stateNow.copy(inventory = updatedInventory)
+                }
+                "OverclockJuice.exe" -> {
+                    logText = "INJECTED OverclockJuice.exe: System core overclocked (+50% damage for 3 turns)."
+                    stateNow.copy(inventory = updatedInventory)
+                }
+                "AntiVirus.sys" -> {
+                    logText = "EXECUTED AntiVirus.sys: Purged all system debuffs & fortified firewalls (-50% damage taken for 2 turns)."
+                    stateNow.copy(
+                        playerStatusEffects = stateNow.playerStatusEffects.filter { !it.type.isDebuff },
+                        inventory = updatedInventory
+                    )
+                }
                 else -> {
                     logText = "RUNNING Generic cyber utility: No system changes."
                     stateNow.copy(inventory = updatedInventory)
@@ -2422,6 +2695,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         addLog(logText, LogType.SUCCESS)
+
+        when (itemName) {
+            "CorrosiveAcid.sh" -> applyStatusEffectToEnemy(com.example.data.StatusEffectType.POISONED, turns = 3, magnitude = 10, source = "CorrosiveAcid.sh")
+            "StunPulse.dll" -> applyStatusEffectToEnemy(com.example.data.StatusEffectType.STUNNED, turns = 2, source = "StunPulse.dll")
+            "OverclockJuice.exe" -> applyStatusEffectToPlayer(com.example.data.StatusEffectType.BUFFED, turns = 3, source = "OverclockJuice.exe")
+            "AntiVirus.sys" -> applyStatusEffectToPlayer(com.example.data.StatusEffectType.FORTIFIED, turns = 2, source = "AntiVirus.sys")
+        }
 
         // If used during combat, automatically conclude player's action and trigger enemy's turn
         val gs = _uiState.value.gameState

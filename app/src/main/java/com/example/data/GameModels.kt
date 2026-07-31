@@ -52,6 +52,28 @@ data class Cyberware(
     val defenseBonus: Int = 0
 )
 
+enum class StatusEffectType(
+    val displayName: String,
+    val icon: String,
+    val isDebuff: Boolean,
+    val colorHex: Long,
+    val description: String
+) {
+    STUNNED("Stunned", "⚡", true, 0xFFF59E0B, "Unit cannot act for the turn duration"),
+    POISONED("Corroded", "🧪", true, 0xFF10B981, "Takes digital damage over time each turn"),
+    BUFFED("Overclocked", "🔥", false, 0xFF3B82F6, "Deals +50% amplified attack damage"),
+    WEAKENED("Glitched", "🌀", true, 0xFFEC4899, "Deals -50% reduced attack damage"),
+    FORTIFIED("Fortified", "🛡️", false, 0xFF06B6D4, "Reduces all incoming damage by 50%")
+}
+
+data class ActiveStatusEffect(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val type: StatusEffectType,
+    val turnsRemaining: Int,
+    val magnitude: Int = 0,
+    val sourceName: String = ""
+)
+
 data class Program(
     val id: String,
     val name: String,
@@ -61,7 +83,11 @@ data class Program(
     val damage: Int = 0,
     val shield: Int = 0,
     val heal: Int = 0,
-    val piercesDefense: Boolean = false
+    val piercesDefense: Boolean = false,
+    val statusEffectToApply: StatusEffectType? = null,
+    val statusEffectTurns: Int = 0,
+    val statusEffectTargetSelf: Boolean = false,
+    val statusEffectMagnitude: Int = 0
 )
 
 enum class Direction(val dx: Int, val dy: Int) {
@@ -133,7 +159,8 @@ data class Enemy(
     val armor: Int,
     val iconAscii: String,
     val bountyCredits: Int,
-    val description: String
+    val description: String,
+    var statusEffects: MutableList<ActiveStatusEffect> = mutableListOf()
 )
 
 data class LogMessage(
