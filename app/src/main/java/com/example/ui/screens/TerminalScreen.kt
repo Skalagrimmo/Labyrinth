@@ -47,6 +47,10 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.ui.components.CyberToastHost
 import com.example.ui.components.CyberToastType
 import com.example.ui.components.rememberCyberToastHostState
+import com.example.ui.components.VisualTurnIndicator
+import com.example.ui.components.CombatHackingMinigameView
+import com.example.ui.components.CyberVitalStatusHud
+import com.example.ui.components.AnimatedCyberHudConsole
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -347,7 +351,10 @@ fun TerminalScreen(
                                 onHack = { viewModel.combatHack() },
                                 onScan = { viewModel.combatScan() },
                                 onUseItem = { viewModel.useInventoryItem(it) },
-                                onEndTurn = { viewModel.endTurn() }
+                                onEndTurn = { viewModel.endTurn() },
+                                onSelectSymbol = { viewModel.selectCombatHackSymbol(it) },
+                                onClearHackBuffer = { viewModel.clearCombatHackBuffer() },
+                                onAbortHack = { viewModel.abortCombatHack() }
                             )
                         }
                         GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
@@ -381,10 +388,23 @@ fun TerminalScreen(
                                 }
                             )
                         }
+                        GameViewModel.ActiveScreen.SVDAG_WORLD_BUILDER -> {
+                            val dag = uiState.svdagWorld
+                            val stats = uiState.svdagStats
+                            if (dag != null && stats != null) {
+                                SvdagWorldInspectorScreen(
+                                    currentDag = dag,
+                                    currentStats = stats,
+                                    onRegenerateDag = { depth, seed -> viewModel.initOrRegenerateSvdag(depth, seed) },
+                                    onModifyVoxel = { x, y, z, type -> viewModel.modifySvdagVoxel(x, y, z, type) },
+                                    onBackToGame = { viewModel.exitSvdagWorldInspector() }
+                                )
+                            }
+                        }
                     }
                 }
 
-                // Right side column: Header + Telemetry Log Console + High-density Controls
+                // Right side column: Header + Vital Status HUD + Animated Console + High-density Controls
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -397,8 +417,10 @@ fun TerminalScreen(
                         onMenuClick = { viewModel.returnToStartMenu() }
                     )
 
-                    if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
-                        TerminalLogConsole(
+                    if (uiState.screen != GameViewModel.ActiveScreen.START_MENU &&
+                        uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
+                        CyberVitalStatusHud(uiState = uiState)
+                        AnimatedCyberHudConsole(
                             uiState = uiState,
                             onSendCommand = { viewModel.runTerminalCommand(it) },
                             modifier = Modifier.weight(0.45f)
@@ -422,6 +444,12 @@ fun TerminalScreen(
                     onLeaderboardClick = { viewModel.viewLeaderboard() },
                     onMenuClick = { viewModel.returnToStartMenu() }
                 )
+
+                if (uiState.screen != GameViewModel.ActiveScreen.START_MENU &&
+                    uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    CyberVitalStatusHud(uiState = uiState)
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -484,7 +512,10 @@ fun TerminalScreen(
                                 onHack = { viewModel.combatHack() },
                                 onScan = { viewModel.combatScan() },
                                 onUseItem = { viewModel.useInventoryItem(it) },
-                                onEndTurn = { viewModel.endTurn() }
+                                onEndTurn = { viewModel.endTurn() },
+                                onSelectSymbol = { viewModel.selectCombatHackSymbol(it) },
+                                onClearHackBuffer = { viewModel.clearCombatHackBuffer() },
+                                onAbortHack = { viewModel.abortCombatHack() }
                             )
                         }
                         GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
@@ -518,17 +549,30 @@ fun TerminalScreen(
                                 }
                             )
                         }
+                        GameViewModel.ActiveScreen.SVDAG_WORLD_BUILDER -> {
+                            val dag = uiState.svdagWorld
+                            val stats = uiState.svdagStats
+                            if (dag != null && stats != null) {
+                                SvdagWorldInspectorScreen(
+                                    currentDag = dag,
+                                    currentStats = stats,
+                                    onRegenerateDag = { depth, seed -> viewModel.initOrRegenerateSvdag(depth, seed) },
+                                    onModifyVoxel = { x, y, z, type -> viewModel.modifySvdagVoxel(x, y, z, type) },
+                                    onBackToGame = { viewModel.exitSvdagWorldInspector() }
+                                )
+                            }
+                        }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // Always Visible Terminal Log Output (Footer console log)
-                if (uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
-                    TerminalLogConsole(
+                // Animated Cyber HUD Console Ticker & Navigation Controls
+                if (uiState.screen != GameViewModel.ActiveScreen.START_MENU &&
+                    uiState.screen != GameViewModel.ActiveScreen.CHARACTER_CREATION) {
+                    AnimatedCyberHudConsole(
                         uiState = uiState,
-                        onSendCommand = { viewModel.runTerminalCommand(it) },
-                        modifier = Modifier.height(60.dp)
+                        onSendCommand = { viewModel.runTerminalCommand(it) }
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     HighDensityBottomNavigation(
@@ -1393,6 +1437,13 @@ fun ExplorationView(
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                VisualTurnIndicator(
+                                    combatTurn = uiState.combatTurn,
+                                    isCombatInputEnabled = uiState.isCombatInputEnabled,
+                                    bannerMessage = uiState.showCombatBanner,
+                                    compactMode = true
+                                )
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1451,8 +1502,18 @@ fun ExplorationView(
                                     modifier = Modifier.padding(vertical = 2.dp)
                                 )
 
-                                // Row 1: Primary Combat Actions (Attack, Defend, Item, Flee)
-                                var showItemMenu by remember { mutableStateOf(false) }
+                                 // Active Hacking Pattern Minigame vs Standard Combat Actions
+                                 if (uiState.activeCombatHack != null) {
+                                     CombatHackingMinigameView(
+                                         hackState = uiState.activeCombatHack,
+                                         onSelectSymbol = { viewModel.selectCombatHackSymbol(it) },
+                                         onClearBuffer = { viewModel.clearCombatHackBuffer() },
+                                         onAbort = { viewModel.abortCombatHack() },
+                                         modifier = Modifier.padding(vertical = 4.dp)
+                                     )
+                                 } else {
+                                     // Row 1: Primary Combat Actions (Attack, Defend, Item, Flee)
+                                     var showItemMenu by remember { mutableStateOf(false) }
 
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1470,7 +1531,7 @@ fun ExplorationView(
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1.3f)
-                                            .height(36.dp)
+                                            .heightIn(min = 44.dp)
                                             .testTag("btn_combat_attack")
                                     ) {
                                         Text(
@@ -1495,7 +1556,7 @@ fun ExplorationView(
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1.3f)
-                                            .height(36.dp)
+                                            .heightIn(min = 44.dp)
                                             .testTag("btn_combat_defend")
                                     ) {
                                         Text(
@@ -1520,7 +1581,7 @@ fun ExplorationView(
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(36.dp)
+                                            .heightIn(min = 44.dp)
                                             .testTag("btn_combat_item")
                                     ) {
                                         Text("ITEM", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -1539,7 +1600,7 @@ fun ExplorationView(
                                         contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(36.dp)
+                                            .heightIn(min = 44.dp)
                                             .testTag("btn_combat_flee")
                                     ) {
                                         Text("FLEE", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
@@ -1706,6 +1767,7 @@ fun ExplorationView(
                                         }
                                     }
                                 }
+                                 }
                             }
                         }
                     }
@@ -3950,7 +4012,10 @@ fun CombatView(
     onHack: () -> Unit = {},
     onScan: () -> Unit = {},
     onUseItem: (String) -> Unit = {},
-    onEndTurn: () -> Unit = {}
+    onEndTurn: () -> Unit = {},
+    onSelectSymbol: (String) -> Unit = {},
+    onClearHackBuffer: () -> Unit = {},
+    onAbortHack: () -> Unit = {}
 ) {
     val enemy = uiState.activeEnemy ?: return
     var activeSubMenu by remember { mutableStateOf("COMMANDS") } // "COMMANDS", "DAEMONS", "ITEMS"
@@ -3959,8 +4024,9 @@ fun CombatView(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF030712))
+            .verticalScroll(rememberScrollState())
             .padding(4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         // --- 1. TOP HEADER: ENCOUNTER & TURN PHASE BANNER ---
         Card(
@@ -3969,44 +4035,38 @@ fun CombatView(
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(if (uiState.isCombatInputEnabled) CyberBrightGreen else CyberPink)
-                    )
                     Text(
-                        text = if (uiState.showCombatBanner != null) {
-                            uiState.showCombatBanner!!
-                        } else if (uiState.isCombatInputEnabled) {
-                            "⚔️ PLAYER COMMAND PHASE"
-                        } else {
-                            "⚡ HOSTILE COMPUTING..."
-                        },
-                        color = if (uiState.showCombatBanner != null) CyberAmber else if (uiState.isCombatInputEnabled) CyberBrightGreen else CyberPink,
+                        text = "⚔️ TACTICAL COMBAT MATRIX",
+                        color = CyberPink,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 11.sp
+                        fontSize = 10.sp
+                    )
+                    Text(
+                        text = "ICE ${uiState.level} | LVL ${uiState.characterLevel} [${uiState.characterXp}/${uiState.xpToNextLevel} XP]",
+                        color = CyberAmber,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 9.5.sp
                     )
                 }
 
-                Text(
-                    text = "ICE ${uiState.level} | LVL ${uiState.characterLevel} [${uiState.characterXp}/${uiState.xpToNextLevel} XP]",
-                    color = CyberAmber,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 9.sp
+                VisualTurnIndicator(
+                    combatTurn = uiState.combatTurn,
+                    isCombatInputEnabled = uiState.isCombatInputEnabled,
+                    bannerMessage = uiState.showCombatBanner,
+                    compactMode = false
                 )
             }
         }
@@ -4018,7 +4078,7 @@ fun CombatView(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.3f)
+                .heightIn(min = 160.dp, max = 220.dp)
         ) {
             Box(
                 modifier = Modifier.fillMaxSize()
@@ -4078,7 +4138,7 @@ fun CombatView(
                             text = "TARGET LOCK 100%",
                             color = CyberBrightGreen,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
+                            fontSize = 8.5.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -4242,18 +4302,18 @@ fun CombatView(
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1.1f)
+                .wrapContentHeight()
         ) {
             Column(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .padding(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // Stance Selector Row (Slash / Chop / Thrust)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -4261,23 +4321,24 @@ fun CombatView(
                         color = CyberAmber,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 8.5.sp
+                        fontSize = 9.sp
                     )
 
                     listOf("Slash", "Chop", "Thrust").forEach { style ->
                         val isSelected = uiState.selectedCombatStyle == style
                         val borderCol = if (isSelected) CyberCyan else CyberBorder
                         val bgCol = if (isSelected) CyberMutedGreen else CyberDark
-                        val textCol = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.6f)
+                        val textCol = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.7f)
 
                         Box(
                             modifier = Modifier
                                 .weight(1f)
+                                .heightIn(min = 36.dp)
                                 .clip(RoundedCornerShape(6.dp))
                                 .background(bgCol)
                                 .border(1.dp, borderCol, RoundedCornerShape(6.dp))
                                 .clickable { onSetCombatStyle(style) }
-                                .padding(vertical = 4.dp)
+                                .padding(vertical = 6.dp)
                                 .testTag("btn_combat_stance_${style.lowercase()}"),
                             contentAlignment = Alignment.Center
                         ) {
@@ -4286,7 +4347,7 @@ fun CombatView(
                                 color = textCol,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 8.sp
+                                fontSize = 9.sp
                             )
                         }
                     }
@@ -4295,7 +4356,7 @@ fun CombatView(
                 // Sub-Deck Toggle Bar (COMMANDS vs DAEMONS vs ITEMS)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     listOf(
                         "COMMANDS" to "⚔️ TACTICS",
@@ -4306,21 +4367,21 @@ fun CombatView(
                         Button(
                             onClick = { activeSubMenu = key },
                             colors = ButtonDefaults.buttonColors(
-                                containerColor = if (isSelected) CyberCyan.copy(alpha = 0.2f) else CyberDark,
-                                contentColor = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.6f)
+                                containerColor = if (isSelected) CyberCyan.copy(alpha = 0.25f) else CyberDark,
+                                contentColor = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.7f)
                             ),
                             border = BorderStroke(1.dp, if (isSelected) CyberCyan else CyberBorder),
                             shape = RoundedCornerShape(6.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(32.dp)
+                                .heightIn(min = 40.dp)
                                 .testTag("btn_combat_deck_${key.lowercase()}")
                         ) {
                             Text(
                                 text = label,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 8.5.sp,
+                                fontSize = 9.sp,
                                 maxLines = 1
                             )
                         }
@@ -4332,20 +4393,19 @@ fun CombatView(
                 // Sub-Menu Content Switcher
                 when (activeSubMenu) {
                     "DAEMONS" -> {
-                        // Daemons/Programs sub-menu
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
+                                .heightIn(max = 220.dp)
                                 .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             if (uiState.installedPrograms.isEmpty()) {
                                 Text(
                                     text = "NO TACTICAL DAEMONS INSTALLED.",
                                     color = CyberBrightGreen.copy(alpha = 0.5f),
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 9.sp,
+                                    fontSize = 9.5.sp,
                                     modifier = Modifier.padding(8.dp)
                                 )
                             }
@@ -4365,7 +4425,7 @@ fun CombatView(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(6.dp),
+                                            .padding(8.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -4375,28 +4435,28 @@ fun CombatView(
                                                 color = if (canAfford) CyberCyan else CyberBrightGreen.copy(alpha = 0.4f),
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 9.5.sp
+                                                fontSize = 10.sp
                                             )
                                             Text(
                                                 text = prog.description,
                                                 color = CyberBrightGreen.copy(alpha = 0.7f),
                                                 fontFamily = FontFamily.Monospace,
-                                                fontSize = 7.5.sp
+                                                fontSize = 8.sp
                                             )
                                         }
                                         Button(
                                             onClick = { onExecuteProgram(prog) },
                                             enabled = canAfford,
                                             colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
-                                            shape = RoundedCornerShape(4.dp),
-                                            modifier = Modifier.height(28.dp)
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.heightIn(min = 36.dp)
                                         ) {
                                             Text(
                                                 text = "${prog.ramCost} MB",
                                                 color = Color.Black,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 8.sp
+                                                fontSize = 9.sp
                                             )
                                         }
                                     }
@@ -4405,20 +4465,19 @@ fun CombatView(
                         }
                     }
                     "ITEMS" -> {
-                        // Consumable Items sub-menu
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
+                                .heightIn(max = 220.dp)
                                 .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             if (uiState.inventory.isEmpty()) {
                                 Text(
                                     text = "NO COMBAT CONSUMABLES AVAILABLE.",
                                     color = CyberBrightGreen.copy(alpha = 0.5f),
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 9.sp,
+                                    fontSize = 9.5.sp,
                                     modifier = Modifier.padding(8.dp)
                                 )
                             }
@@ -4435,7 +4494,7 @@ fun CombatView(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .padding(6.dp),
+                                            .padding(8.dp),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
@@ -4444,21 +4503,21 @@ fun CombatView(
                                             color = CyberAmber,
                                             fontFamily = FontFamily.Monospace,
                                             fontWeight = FontWeight.Bold,
-                                            fontSize = 9.5.sp
+                                            fontSize = 10.sp
                                         )
                                         Button(
                                             onClick = { onUseItem(item) },
                                             enabled = uiState.isCombatInputEnabled,
                                             colors = ButtonDefaults.buttonColors(containerColor = CyberAmber),
-                                            shape = RoundedCornerShape(4.dp),
-                                            modifier = Modifier.height(28.dp)
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.heightIn(min = 36.dp)
                                         ) {
                                             Text(
                                                 text = "COMPILE",
                                                 color = Color.Black,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
-                                                fontSize = 8.sp
+                                                fontSize = 9.sp
                                             )
                                         }
                                     }
@@ -4467,30 +4526,37 @@ fun CombatView(
                         }
                     }
                     else -> {
-                        // Primary Wizardry Tactician Grid Commands
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
+                        if (uiState.activeCombatHack != null) {
+                            CombatHackingMinigameView(
+                                hackState = uiState.activeCombatHack,
+                                onSelectSymbol = onSelectSymbol,
+                                onClearBuffer = onClearHackBuffer,
+                                onAbort = onAbortHack,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        } else {
+                            // COMMANDS: Primary Tactician Action Grid
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                             // Row 1: Attack & Quick Hack
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Button(
                                     onClick = onAttack,
                                     enabled = uiState.isCombatInputEnabled,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF0F172A),
+                                        containerColor = Color(0xFF1E1B4B),
                                         disabledContainerColor = CyberDark
                                     ),
                                     border = BorderStroke(1.5.dp, CyberPink),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp)
+                                        .heightIn(min = 48.dp)
                                         .testTag("btn_combat_attack")
                                 ) {
                                     Text(
@@ -4498,7 +4564,7 @@ fun CombatView(
                                         color = CyberPink,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 9.5.sp
+                                        fontSize = 10.sp
                                     )
                                 }
 
@@ -4506,14 +4572,14 @@ fun CombatView(
                                     onClick = onHack,
                                     enabled = uiState.isCombatInputEnabled && uiState.ram >= 3,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF0F172A),
+                                        containerColor = Color(0xFF064E3B),
                                         disabledContainerColor = CyberDark
                                     ),
                                     border = BorderStroke(1.5.dp, CyberCyan),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp)
+                                        .heightIn(min = 48.dp)
                                         .testTag("btn_combat_hack")
                                 ) {
                                     Text(
@@ -4521,7 +4587,7 @@ fun CombatView(
                                         color = CyberCyan,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 9.5.sp
+                                        fontSize = 10.sp
                                     )
                                 }
                             }
@@ -4529,20 +4595,20 @@ fun CombatView(
                             // Row 2: Defend & Scan Target
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Button(
                                     onClick = onDefend,
                                     enabled = uiState.isCombatInputEnabled,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF0F172A),
+                                        containerColor = Color(0xFF064E3B),
                                         disabledContainerColor = CyberDark
                                     ),
                                     border = BorderStroke(1.5.dp, CyberBrightGreen),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp)
+                                        .heightIn(min = 48.dp)
                                         .testTag("btn_combat_defend")
                                 ) {
                                     Text(
@@ -4550,7 +4616,7 @@ fun CombatView(
                                         color = CyberBrightGreen,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 9.5.sp
+                                        fontSize = 10.sp
                                     )
                                 }
 
@@ -4558,14 +4624,14 @@ fun CombatView(
                                     onClick = onScan,
                                     enabled = uiState.isCombatInputEnabled,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF0F172A),
+                                        containerColor = Color(0xFF451A03),
                                         disabledContainerColor = CyberDark
                                     ),
                                     border = BorderStroke(1.5.dp, CyberAmber),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(44.dp)
+                                        .heightIn(min = 48.dp)
                                         .testTag("btn_combat_scan")
                                 ) {
                                     Text(
@@ -4573,7 +4639,7 @@ fun CombatView(
                                         color = CyberAmber,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 9.5.sp
+                                        fontSize = 10.sp
                                     )
                                 }
                             }
@@ -4581,7 +4647,7 @@ fun CombatView(
                             // Row 3: Pass Turn & Emergency Flee
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Button(
                                     onClick = onEndTurn,
@@ -4590,19 +4656,19 @@ fun CombatView(
                                         containerColor = Color(0xFF0F172A),
                                         disabledContainerColor = CyberDark
                                     ),
-                                    border = BorderStroke(1.dp, CyberBorder),
+                                    border = BorderStroke(1.5.dp, CyberBorder),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(38.dp)
+                                        .heightIn(min = 44.dp)
                                         .testTag("btn_combat_end_turn")
                                 ) {
                                     Text(
                                         text = "⏭️ END TURN",
-                                        color = CyberBrightGreen.copy(alpha = 0.8f),
+                                        color = CyberBrightGreen.copy(alpha = 0.9f),
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 9.sp
+                                        fontSize = 9.5.sp
                                     )
                                 }
 
@@ -4610,14 +4676,14 @@ fun CombatView(
                                     onClick = onFlee,
                                     enabled = uiState.isCombatInputEnabled,
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = Color(0xFF0F172A),
+                                        containerColor = Color(0xFF881337),
                                         disabledContainerColor = CyberDark
                                     ),
                                     border = BorderStroke(1.5.dp, CyberPink),
                                     shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(38.dp)
+                                        .heightIn(min = 44.dp)
                                         .testTag("btn_combat_flee")
                                 ) {
                                     Text(
@@ -4625,11 +4691,12 @@ fun CombatView(
                                         color = CyberPink,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
-                                        fontSize = 9.sp
+                                        fontSize = 9.5.sp
                                     )
                                 }
                             }
                         }
+                    }
                     }
                 }
             }
@@ -4640,7 +4707,9 @@ fun CombatView(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
             border = BorderStroke(1.dp, CyberBorder),
             shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .wrapContentHeight()
         ) {
             Column(
                 modifier = Modifier
@@ -6235,6 +6304,37 @@ fun HighDensityBottomNavigation(
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
+
+                // Tab 5: SVDAG
+                val isSvdagActive = currentScreen == GameViewModel.ActiveScreen.SVDAG_WORLD_BUILDER
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .clickable {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            if (currentScreen != GameViewModel.ActiveScreen.CHARACTER_CREATION &&
+                                currentScreen != GameViewModel.ActiveScreen.GAME_OVER) {
+                                viewModel.enterSvdagWorldInspector()
+                            }
+                        }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                        .testTag("svdag_tab_world_builder")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "SVDAG",
+                        tint = if (isSvdagActive) CyberCyan else CyberBrightGreen.copy(alpha = 0.4f),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        text = "SVDAG",
+                        color = if (isSvdagActive) CyberCyan else CyberBrightGreen.copy(alpha = 0.4f),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
             }
         }
     }
@@ -6682,6 +6782,25 @@ fun StartMenuView(
                         text = "📊 MAINFRAME HISTORIC RECORDS",
                         color = CyberCyan,
                         fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp
+                    )
+                }
+
+                // SVDAG World Builder Button
+                Button(
+                    onClick = { viewModel.enterSvdagWorldInspector() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFA855F7).copy(alpha = 0.15f)),
+                    border = BorderStroke(1.dp, Color(0xFFA855F7)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("btn_svdag_world_builder")
+                ) {
+                    Text(
+                        text = "🧊 SVDAG WORLD BUILDER (128³ VOXELS)",
+                        color = Color(0xFFA855F7),
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
                 }

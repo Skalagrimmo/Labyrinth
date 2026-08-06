@@ -116,6 +116,7 @@ fun MatrixHackingTerminalScreen(
     val totalRamGb = 16
     var nodeStatus by remember { mutableStateOf("CONNECTED // ENCRYPTED") }
     var isPatternMiniGameActive by remember { mutableStateOf(false) }
+    var initialSuiteMode by remember { mutableStateOf(HackingMinigameMode.HEX_BREACH) }
 
     val logs = remember {
         mutableStateListOf(
@@ -209,7 +210,18 @@ fun MatrixHackingTerminalScreen(
                 }
             }
             "hack", "pattern" -> {
-                addLog("LAUNCHING HIGH-SECURITY PATTERN BREACH MINI-GAME...", LogLevel.INFO)
+                addLog("LAUNCHING HIGH-SECURITY HEX MATRIX BREACH MINI-GAME...", LogLevel.INFO)
+                initialSuiteMode = HackingMinigameMode.HEX_BREACH
+                isPatternMiniGameActive = true
+            }
+            "tuner", "frequency" -> {
+                addLog("LAUNCHING FREQUENCY OSCILLOSCOPE SIGNAL TUNER...", LogLevel.INFO)
+                initialSuiteMode = HackingMinigameMode.SIGNAL_TUNER
+                isPatternMiniGameActive = true
+            }
+            "router", "circuit" -> {
+                addLog("LAUNCHING CIRCUIT CONDUIT RELAY ROUTER...", LogLevel.INFO)
+                initialSuiteMode = HackingMinigameMode.CIRCUIT_ROUTER
                 isPatternMiniGameActive = true
             }
             "status" -> {
@@ -307,7 +319,7 @@ fun MatrixHackingTerminalScreen(
                         .padding(vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    val quickCmds = listOf("help", "hack", "scan", "bypass", "bruteforce", "inject", "clear")
+                    val quickCmds = listOf("help", "hack", "tuner", "router", "scan", "bypass", "inject", "clear")
                     quickCmds.forEach { cmd ->
                         Box(
                             modifier = Modifier
@@ -350,13 +362,14 @@ fun MatrixHackingTerminalScreen(
                                 fontSize = 12.sp
                             )
                         },
-                        prefix = {
+                        leadingIcon = {
                             Text(
                                 text = "root@matrix:~# ",
                                 color = CyberCyan,
                                 fontFamily = TerminalFontFamily,
                                 fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 8.dp)
                             )
                         },
                         textStyle = TextStyle(
@@ -408,18 +421,19 @@ fun MatrixHackingTerminalScreen(
             }
 
             if (isPatternMiniGameActive) {
-                PatternMatchingHackingMiniGame(
+                CyberHackingMinigameSuite(
                     nodeName = "ARASAKA_CORE_77X",
                     securityLevel = 3,
-                    onBreachSuccess = { bounty ->
+                    initialMode = initialSuiteMode,
+                    onSuccess = { bounty ->
                         isPatternMiniGameActive = false
                         iceIntegrity = 0f
                         nodeStatus = "COMPROMISED // ROOT ACCESS"
-                        addLog("PATTERN MATCH BREACH SUCCESSFUL! Node decrypted (+ $bounty MB)", LogLevel.SUCCESS)
+                        addLog("CYBER SUITE BREACH SUCCESSFUL! Node decrypted (+ $bounty MB)", LogLevel.SUCCESS)
                     },
-                    onBreachFailed = {
+                    onFailed = {
                         traceLevel = (traceLevel + 0.25f).coerceAtMost(1.0f)
-                        addLog("PATTERN MATCH BREACH FAILED! TRACE RISK AT ${(traceLevel * 100).toInt()}%", LogLevel.WARN)
+                        addLog("CYBER SUITE BREACH FAILED! TRACE RISK AT ${(traceLevel * 100).toInt()}%", LogLevel.WARN)
                     },
                     onClose = {
                         isPatternMiniGameActive = false

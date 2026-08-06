@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
@@ -22,6 +24,18 @@ enum class CombatTurn {
     ENEMY,
     ANIMATING
 }
+
+data class CombatHackingPatternState(
+    val targetPattern: List<String>,
+    val userSequence: List<String> = emptyList(),
+    val availablePool: List<String>,
+    val timeRemainingSeconds: Int = 12,
+    val maxTimeSeconds: Int = 12,
+    val attemptsRemaining: Int = 3,
+    val maxAttempts: Int = 3,
+    val enemyName: String,
+    val potentialDamage: Int
+)
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -124,6 +138,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         // Visual Turn-Based Combat State & Effects
         val combatTurn: CombatTurn = CombatTurn.PLAYER,
+        val activeCombatHack: CombatHackingPatternState? = null,
         val combatFlashEnemy: Boolean = false,
         val combatFlashPlayer: Boolean = false,
         val combatScreenShake: Boolean = false,
@@ -172,7 +187,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val installedImplants: Map<com.example.data.ImplantBodySlot, com.example.data.CyberwareImplant?> = emptyMap(),
         val hasUsedEmergencyRebootThisRun: Boolean = false,
         val kineticShieldActiveThisCombat: Boolean = true,
-        val naniteStepCounter: Int = 0
+        val naniteStepCounter: Int = 0,
+
+        // Sparse Voxel DAG (SVDAG) World Engine State
+        val svdagWorld: com.example.data.svdag.SparseVoxelDag? = null,
+        val svdagStats: com.example.data.svdag.SvdagStats? = null,
+        val svdagScaleDepth: Int = 7
     )
 
     enum class ActiveScreen {
@@ -184,7 +204,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         UPGRADE_STORE,
         LEADERBOARD,
         GAME_OVER,
-        CYBERWARE_CLINIC
+        CYBERWARE_CLINIC,
+        SVDAG_WORLD_BUILDER
     }
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -257,7 +278,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (implant.passiveAbility != null) {
             addLog("  └ PASSIVE ABILITY ACTIVATED: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}", LogType.INFO)
         }
-        soundManager.playLootCollectionSound()
+        soundManager.playCyberwareInstallSound()
         saveGame()
         return true
     }
@@ -739,6 +760,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 // Small chance of recovering 1 RAM during safe navigation
                 recoverRamOnMove()
 
+                soundManager.playStepSound()
                 addLog("MOVED FORWARD into sub-channel (${nextX}, ${nextY})")
                 checkCellTriggers(nextX, nextY, cell)
                 processWeatherOnStep()
@@ -784,6 +806,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 updatePerspective()
                 revealCellsAround(nextX, nextY)
                 recoverRamOnMove()
+                soundManager.playStepSound()
                 addLog("MOVED BACKWARD into sub-channel (${nextX}, ${nextY})")
                 checkCellTriggers(nextX, nextY, cell)
                 processWeatherOnStep()
@@ -1747,10 +1770,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private var combatHackTimerJob: Job? = null
+
     fun combatHack() {
         if (!_uiState.value.isCombatInputEnabled) return
         val state = _uiState.value
         val enemy = state.activeEnemy ?: return
+
+        if (state.activeCombatHack != null) return
 
         if (processPlayerTurnStatusEffects()) {
             addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
@@ -1760,36 +1787,189 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (state.ram < 3) {
             addLog("HACK PROTOCOL ABORTED: Needs 3 MB RAM.", LogType.ERROR)
+            soundManager.playHackingErrorSound()
             return
         }
 
-        _uiState.update { it.copy(
-            ram = it.ram - 3
-        ) }
+        _uiState.update { it.copy(ram = it.ram - 3) }
+
+        // Generate target pattern and available symbol pool
+        val symbolPool = listOf("1C", "E9", "55", "7A", "BD", "FF", "30", "A3", "2D", "0F")
+        val patternLength = minOf(3 + (state.level / 2), 5)
+        val shuffledPool = symbolPool.shuffled()
+        val targetPattern = shuffledPool.take(patternLength)
+
+        // Distractors + target pattern shuffled for selection keypad (8 choices)
+        val keypadPool = (targetPattern + shuffledPool.drop(patternLength)).distinct().take(8).shuffled()
+
+        val potentialDamage = 32 + (state.level * 5) + state.damageBonus
+        val maxTime = maxOf(8, 14 - (state.level / 2))
+
+        val hackState = CombatHackingPatternState(
+            targetPattern = targetPattern,
+            userSequence = emptyList(),
+            availablePool = keypadPool,
+            timeRemainingSeconds = maxTime,
+            maxTimeSeconds = maxTime,
+            attemptsRemaining = 3,
+            maxAttempts = 3,
+            enemyName = enemy.name,
+            potentialDamage = potentialDamage
+        )
+
+        _uiState.update { it.copy(activeCombatHack = hackState) }
+
+        soundManager.playNodeBreachSound()
+        addLog("--- BREACH PROTOCOL INITIATED ---", LogType.ALERT)
+        addLog("MATCH TARGET HEX SEQUENCE TO OVERRIDE ${enemy.name.uppercase()} FIREWALL!", LogType.INFO)
+
+        startCombatHackTimer()
+    }
+
+    private fun startCombatHackTimer() {
+        combatHackTimerJob?.cancel()
+        combatHackTimerJob = viewModelScope.launch {
+            while (isActive) {
+                delay(1000)
+                val currentHack = _uiState.value.activeCombatHack ?: break
+                val newTime = currentHack.timeRemainingSeconds - 1
+                if (newTime <= 0) {
+                    _uiState.update { it.copy(activeCombatHack = currentHack.copy(timeRemainingSeconds = 0)) }
+                    handleCombatHackFailure(currentHack, "EXPLOIT TIMED OUT! Firewall trace completed.")
+                    break
+                } else {
+                    _uiState.update { it.copy(activeCombatHack = currentHack.copy(timeRemainingSeconds = newTime)) }
+                }
+            }
+        }
+    }
+
+    fun selectCombatHackSymbol(symbol: String) {
+        val currentHack = _uiState.value.activeCombatHack ?: return
+        val updatedSeq = currentHack.userSequence + symbol.uppercase()
+        val target = currentHack.targetPattern
+
+        soundManager.playBufferShiftSound()
+
+        // Check prefix match
+        val isPrefixMatch = target.take(updatedSeq.size) == updatedSeq
+
+        if (isPrefixMatch) {
+            if (updatedSeq.size == target.size) {
+                // COMPLETE PATTERN MATCHED!
+                combatHackTimerJob?.cancel()
+                _uiState.update { it.copy(activeCombatHack = currentHack.copy(userSequence = updatedSeq)) }
+                handleCombatHackSuccess(currentHack)
+            } else {
+                // Partial prefix match
+                _uiState.update { it.copy(activeCombatHack = currentHack.copy(userSequence = updatedSeq)) }
+            }
+        } else {
+            // MISMATCH!
+            soundManager.playHackingErrorSound()
+            val newAttempts = currentHack.attemptsRemaining - 1
+            addLog("SECURITY REJECT: Mismatched symbol '$symbol'! Attempts left: $newAttempts", LogType.ERROR)
+
+            if (newAttempts <= 0) {
+                combatHackTimerJob?.cancel()
+                handleCombatHackFailure(currentHack, "BREACH COUNTERMEASURES TRIGGERED! Out of attempts.")
+            } else {
+                _uiState.update {
+                    it.copy(
+                        activeCombatHack = currentHack.copy(
+                            userSequence = emptyList(),
+                            attemptsRemaining = newAttempts
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    fun clearCombatHackBuffer() {
+        val currentHack = _uiState.value.activeCombatHack ?: return
+        soundManager.playTerminalKeyPressSound()
+        _uiState.update { it.copy(activeCombatHack = currentHack.copy(userSequence = emptyList())) }
+        addLog("HACK BUFFER CLEARED.", LogType.INFO)
+    }
+
+    fun abortCombatHack() {
+        val currentHack = _uiState.value.activeCombatHack ?: return
+        combatHackTimerJob?.cancel()
+        soundManager.playHackingErrorSound()
+        handleCombatHackFailure(currentHack, "EXPLOIT ABORTED BY OPERATOR.")
+    }
+
+    private fun handleCombatHackSuccess(hackState: CombatHackingPatternState) {
+        val enemy = _uiState.value.activeEnemy ?: return
 
         viewModelScope.launch {
-            val hackDmg = 25 + (state.level * 4) + state.damageBonus
+            soundManager.playHackingSuccessSound()
+            val hackDmg = hackState.potentialDamage
             val enemyRemIntegrity = maxOf(0, enemy.integrity - hackDmg)
             enemy.integrity = enemyRemIntegrity
 
-            _uiState.update { it.copy(combatFlashEnemy = true, enemyDamagePopup = "-$hackDmg HP") }
-            addLog("DIRECT SYSTEM EXPLOIT COMPILED: Bypassed firewall entirely!", LogType.SUCCESS)
-            addLog("Dealt $hackDmg system-penetrating damage to ${enemy.name}.", LogType.SUCCESS)
+            _uiState.update {
+                it.copy(
+                    activeCombatHack = null,
+                    combatFlashEnemy = true,
+                    enemyDamagePopup = "-$hackDmg HP (CRIT EXPLOIT)"
+                )
+            }
 
-            // Inflict Stunned status effect on enemy!
-            applyStatusEffectToEnemy(com.example.data.StatusEffectType.STUNNED, turns = 1, source = "Direct Exploit")
+            addLog("PATTERNS MATCHED PERFECTLY! FIREWALL OVERRIDDEN!", LogType.SUCCESS)
+            addLog("Dealt $hackDmg system-penetrating exploit damage & STUNNED ${enemy.name}!", LogType.SUCCESS)
 
-            kotlinx.coroutines.delay(400)
+            applyStatusEffectToEnemy(com.example.data.StatusEffectType.STUNNED, turns = 1, source = "Breach Protocol")
+
+            delay(500)
             _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
 
             if (enemy.integrity <= 0) {
                 _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
-                kotlinx.coroutines.delay(1200)
+                delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
             } else {
-                // Automatically run enemy turn on player action completion
                 executeEnemyCombatTurnInline()
+            }
+        }
+    }
+
+    private fun handleCombatHackFailure(hackState: CombatHackingPatternState, reason: String) {
+        val enemy = _uiState.value.activeEnemy
+
+        viewModelScope.launch {
+            soundManager.playHackingErrorSound()
+            addLog(reason, LogType.ALERT)
+
+            if (enemy != null) {
+                val fallbackDmg = maxOf(5, hackState.potentialDamage / 3)
+                enemy.integrity = maxOf(0, enemy.integrity - fallbackDmg)
+
+                _uiState.update {
+                    it.copy(
+                        activeCombatHack = null,
+                        combatFlashEnemy = true,
+                        enemyDamagePopup = "-$fallbackDmg HP (PARTIAL)"
+                    )
+                }
+
+                addLog("Partial feedback breach dealt $fallbackDmg damage to ${enemy.name}.", LogType.ALERT)
+
+                delay(500)
+                _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
+
+                if (enemy.integrity <= 0) {
+                    _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                    delay(1200)
+                    handleCombatVictoryInline(enemy)
+                    _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
+                } else {
+                    executeEnemyCombatTurnInline()
+                }
+            } else {
+                _uiState.update { it.copy(activeCombatHack = null) }
             }
         }
     }
@@ -3228,6 +3408,50 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("BROADCASTING MAIN HISTORIC RECORDS DATABASE...", LogType.SUCCESS)
     }
 
+    // ----------------------------------------------------
+    // Sparse Voxel DAG (SVDAG) World Engine Operations
+    // ----------------------------------------------------
+
+    fun ensureSvdagInitialized(targetDepth: Int = 7) {
+        if (_uiState.value.svdagWorld == null || _uiState.value.svdagWorld?.maxDepth != targetDepth) {
+            val (dag, stats) = com.example.data.svdag.SvdagWorldBuilder.generateCyberspaceMegaSector(targetDepth)
+            _uiState.update { it.copy(svdagWorld = dag, svdagStats = stats, svdagScaleDepth = targetDepth) }
+        }
+    }
+
+    fun initOrRegenerateSvdag(targetDepth: Int = 7, seed: Long = System.currentTimeMillis()) {
+        viewModelScope.launch(Dispatchers.Default) {
+            val (dag, stats) = com.example.data.svdag.SvdagWorldBuilder.generateCyberspaceMegaSector(targetDepth, seed)
+            withContext(Dispatchers.Main) {
+                _uiState.update { it.copy(svdagWorld = dag, svdagStats = stats, svdagScaleDepth = targetDepth) }
+                addLog("SVDAG WORLD BUILDER: Generated ${dag.gridSize}³ Voxels (${stats.totalNodes} DAG Nodes)", LogType.SUCCESS)
+                addLog("SVDAG DEDUPLICATION: ${String.format(java.util.Locale.US, "%.1f%%", stats.compressionRatio)} memory reduction.", LogType.INFO)
+            }
+        }
+    }
+
+    fun modifySvdagVoxel(x: Int, y: Int, z: Int, type: com.example.data.svdag.VoxelType) {
+        val currentDag = _uiState.value.svdagWorld ?: return
+        currentDag.setVoxel(x, y, z, type)
+        val newStats = currentDag.getStats()
+        _uiState.update { it.copy(svdagStats = newStats) }
+    }
+
+    fun enterSvdagWorldInspector() {
+        ensureSvdagInitialized(_uiState.value.svdagScaleDepth)
+        _uiState.update { it.copy(screen = ActiveScreen.SVDAG_WORLD_BUILDER) }
+        addLog("OPENING SVDAG HIGH-SCALE WORLD INSPECTOR...", LogType.SUCCESS)
+    }
+
+    fun exitSvdagWorldInspector() {
+        if (_uiState.value.runnerName.isEmpty()) {
+            _uiState.update { it.copy(screen = ActiveScreen.START_MENU) }
+        } else {
+            _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
+            updatePerspective()
+        }
+    }
+
     fun exitLeaderboard() {
         if (_uiState.value.integrity <= 0) {
             _uiState.update { it.copy(screen = ActiveScreen.GAME_OVER) }
@@ -3328,6 +3552,30 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val mainCommand = parts[0].lowercase()
 
         val state = _uiState.value
+
+        // Intercept input when combat pattern matching minigame is active
+        if (state.activeCombatHack != null) {
+            when (mainCommand) {
+                "clear" -> {
+                    clearCombatHackBuffer()
+                    return
+                }
+                "abort", "exit", "cancel" -> {
+                    abortCombatHack()
+                    return
+                }
+                else -> {
+                    val symbolInput = if (mainCommand == "hack" && parts.size > 1) parts[1].uppercase() else mainCommand.uppercase()
+                    if (state.activeCombatHack.availablePool.contains(symbolInput)) {
+                        selectCombatHackSymbol(symbolInput)
+                        return
+                    } else {
+                        addLog("HACK PATTERN COMMAND: Enter a valid symbol e.g. '${state.activeCombatHack.availablePool.first()}', 'clear', or 'abort'", LogType.ALERT)
+                        return
+                    }
+                }
+            }
+        }
 
         when (mainCommand) {
             "help", "?" -> {

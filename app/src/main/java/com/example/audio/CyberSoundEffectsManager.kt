@@ -5,7 +5,6 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioTrack
-import android.media.ToneGenerator
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -29,13 +28,6 @@ class CyberSoundEffectsManager private constructor(context: Context) {
         COMBAT("Overclocked Synthwave", 130),
         HACKING("Matrix Data Stream", 110),
         OFF("Audio Muted", 0)
-    }
-
-    private var toneGenerator: ToneGenerator? = try {
-        ToneGenerator(AudioManager.STREAM_MUSIC, 85)
-    } catch (e: Exception) {
-        Log.e("CyberSoundEffects", "Failed to initialize ToneGenerator: ${e.message}")
-        null
     }
 
     private var isMuted: Boolean = false
@@ -200,58 +192,87 @@ class CyberSoundEffectsManager private constructor(context: Context) {
     }
 
     // ----------------------------------------------------
-    // Sound Effects (SFX) Methods
+    // Sound Effects (SFX) PCM Synthesizer
     // ----------------------------------------------------
+
+    private fun playTone(freqHz: Double, durationMs: Int, volume: Float = 0.35f) {
+        if (isMuted) return
+        scope.launch(Dispatchers.Default) {
+            try {
+                val sampleRate = 22050
+                val numSamples = (sampleRate * (durationMs / 1000.0)).toInt().coerceAtLeast(100)
+                val buffer = ShortArray(numSamples)
+                var phase = 0.0
+                val phaseIncrement = 2.0 * Math.PI * freqHz / sampleRate
+
+                for (i in 0 until numSamples) {
+                    val env = when {
+                        i < 80 -> i / 80.0
+                        i > numSamples - 80 -> (numSamples - i) / 80.0
+                        else -> 1.0
+                    }
+                    val sample = (Math.sin(phase) * 32767 * volume * env).toInt().coerceIn(-32768, 32767)
+                    buffer[i] = sample.toShort()
+                    phase += phaseIncrement
+                }
+
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_GAME)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(buffer.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+
+                track.write(buffer, 0, buffer.size)
+                track.play()
+                delay(durationMs.toLong() + 40)
+                track.release()
+            } catch (e: Exception) {
+                Log.e("CyberSoundEffects", "Error playing PCM tone sound effect", e)
+            }
+        }
+    }
 
     /**
      * Audio cue when executing terminal commands.
      */
     fun playTerminalCommandSound() {
-        if (isMuted) return
-        try {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
-        } catch (e: Exception) {
-            Log.e("CyberSoundEffects", "Error playing terminal command sound", e)
-        }
+        playTone(880.0, 80)
     }
 
     /**
      * Audio cue for terminal keyboard typing input.
      */
     fun playTerminalKeyPressSound() {
-        if (isMuted) return
-        try {
-            toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 30)
-        } catch (e: Exception) {
-            Log.e("CyberSoundEffects", "Error playing keypress sound", e)
-        }
+        playTone(1200.0, 30, 0.25f)
     }
 
     /**
      * Cybernetic step movement sound effect.
      */
     fun playStepSound() {
-        if (isMuted) return
-        try {
-            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE, 25)
-        } catch (e: Exception) {
-            Log.e("CyberSoundEffects", "Error playing step sound", e)
-        }
+        playTone(180.0, 30, 0.2f)
     }
 
     /**
      * Door open/close pneumatic sound effect.
      */
     fun playDoorSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_SIGNAL_OFF, 60)
-                delay(70)
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_PROMPT, 50)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing door sound", e)
-            }
+            playTone(220.0, 60)
+            delay(70)
+            playTone(440.0, 50)
         }
     }
 
@@ -259,15 +280,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Elevator / sector lift transition sound.
      */
     fun playElevatorSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 80)
-                delay(90)
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 100)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing elevator sound", e)
-            }
+            playTone(523.25, 80)
+            delay(90)
+            playTone(659.25, 100)
         }
     }
 
@@ -275,27 +291,17 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for standard combat damage hit.
      */
     fun playCombatHitSound() {
-        if (isMuted) return
-        try {
-            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ABBR_INTERCEPT, 120)
-        } catch (e: Exception) {
-            Log.e("CyberSoundEffects", "Error playing combat hit sound", e)
-        }
+        playTone(180.0, 120, 0.5f)
     }
 
     /**
      * Audio cue for critical combat impact or heavy attack.
      */
     fun playCombatCritSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_ABBR_ALERT, 90)
-                delay(90)
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 120)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing combat crit sound", e)
-            }
+            playTone(300.0, 90, 0.5f)
+            delay(90)
+            playTone(800.0, 120, 0.6f)
         }
     }
 
@@ -303,15 +309,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for cyber weapon plasma / melee blade slash.
      */
     fun playPlasmaSlashSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_HIGH_PBX_L, 40)
-                delay(45)
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_MED_PBX_L, 60)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing plasma slash sound", e)
-            }
+            playTone(600.0, 40)
+            delay(45)
+            playTone(300.0, 60)
         }
     }
 
@@ -319,15 +320,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue when barrier / kinetic shield absorbs damage.
      */
     fun playShieldAbsorbSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_NETWORK_USA, 70)
-                delay(60)
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 80)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing shield absorb sound", e)
-            }
+            playTone(200.0, 70)
+            delay(60)
+            playTone(900.0, 80)
         }
     }
 
@@ -335,15 +331,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue when collecting loot caches or bounties.
      */
     fun playLootCollectionSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 70)
-                delay(80)
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_HIGH_L, 110)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing loot collection sound", e)
-            }
+            playTone(700.0, 70)
+            delay(80)
+            playTone(1400.0, 110)
         }
     }
 
@@ -351,15 +342,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for successful node breach or pattern match.
      */
     fun playHackingSuccessSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 90)
-                delay(100)
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 140)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing hacking success sound", e)
-            }
+            playTone(880.0, 90)
+            delay(100)
+            playTone(1760.0, 140)
         }
     }
 
@@ -367,39 +353,24 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for failed hack or security error.
      */
     fun playHackingErrorSound() {
-        if (isMuted) return
-        try {
-            toneGenerator?.startTone(ToneGenerator.TONE_SUP_ERROR, 200)
-        } catch (e: Exception) {
-            Log.e("CyberSoundEffects", "Error playing hacking error sound", e)
-        }
+        playTone(150.0, 200, 0.5f)
     }
 
     /**
      * Audio cue when selecting or shifting buffer in hacking matrix.
      */
     fun playBufferShiftSound() {
-        if (isMuted) return
-        try {
-            toneGenerator?.startTone(ToneGenerator.TONE_CDMA_KEYPAD_VOLUME_KEY_LITE, 35)
-        } catch (e: Exception) {
-            Log.e("CyberSoundEffects", "Error playing buffer shift sound", e)
-        }
+        playTone(1000.0, 35, 0.25f)
     }
 
     /**
      * Audio cue when breaching a cyber security node.
      */
     fun playNodeBreachSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP, 60)
-                delay(60)
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_BEEP2, 90)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing node breach sound", e)
-            }
+            playTone(500.0, 60)
+            delay(60)
+            playTone(1000.0, 90)
         }
     }
 
@@ -407,28 +378,21 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for installing cybernetic implants / surgery.
      */
     fun playCyberwareInstallSound() {
-        if (isMuted) return
         scope.launch {
-            try {
-                toneGenerator?.startTone(ToneGenerator.TONE_CDMA_HIGH_PBX_L, 60)
-                delay(70)
-                toneGenerator?.startTone(ToneGenerator.TONE_PROP_ACK, 120)
-            } catch (e: Exception) {
-                Log.e("CyberSoundEffects", "Error playing cyberware install sound", e)
-            }
+            playTone(400.0, 60)
+            delay(70)
+            playTone(1200.0, 120)
         }
     }
 
     /**
-     * Release tone generator and synth resources.
+     * Release synth resources.
      */
     fun release() {
         bgmJob?.cancel()
         audioTrack?.stop()
         audioTrack?.release()
         audioTrack = null
-        toneGenerator?.release()
-        toneGenerator = null
     }
 
     companion object {
@@ -437,7 +401,8 @@ class CyberSoundEffectsManager private constructor(context: Context) {
 
         fun getInstance(context: Context): CyberSoundEffectsManager {
             return instance ?: synchronized(this) {
-                instance ?: CyberSoundEffectsManager(context.applicationContext).also { instance = it }
+                val appContext = context.applicationContext
+                instance ?: CyberSoundEffectsManager(appContext).also { instance = it }
             }
         }
     }
