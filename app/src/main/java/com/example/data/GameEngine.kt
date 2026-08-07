@@ -353,11 +353,88 @@ object GameEngine {
         return grid
     }
 
+    private fun enrichMapWithSecretsAndBypasses(grid: Array<Array<com.example.data.CellType>>, random: kotlin.random.Random) {
+        val height = grid.size
+        val width = grid[0].size
+
+        // 1. Find solid wall locations next to walkable paths and turn them into SECRET_WALL with hidden alcoves behind
+        val candidateWallSpots = mutableListOf<Pair<Int, Int>>()
+        for (y in 2 until height - 2) {
+            for (x in 2 until width - 2) {
+                if (grid[y][x] == com.example.data.CellType.WALL) {
+                    val hasWalkableNeighbor = listOf(
+                        grid[y - 1][x], grid[y + 1][x], grid[y][x - 1], grid[y][x + 1]
+                    ).any { it != com.example.data.CellType.WALL && it != com.example.data.CellType.SECRET_WALL }
+
+                    val hasDeepWallSpace = grid[y - 1][x] == com.example.data.CellType.WALL || grid[y + 1][x] == com.example.data.CellType.WALL ||
+                            grid[y][x - 1] == com.example.data.CellType.WALL || grid[y][x + 1] == com.example.data.CellType.WALL
+
+                    if (hasWalkableNeighbor && hasDeepWallSpace) {
+                        candidateWallSpots.add(Pair(x, y))
+                    }
+                }
+            }
+        }
+        candidateWallSpots.shuffle(random)
+
+        val secretCount = minOf(8, candidateWallSpots.size / 4)
+        for (i in 0 until secretCount) {
+            val (swx, swy) = candidateWallSpots[i]
+            grid[swy][swx] = com.example.data.CellType.SECRET_WALL
+
+            // Carve small secret vault behind the secret wall
+            for (dy in -1..1) {
+                for (dx in -1..1) {
+                    if (dx == 0 && dy == 0) continue
+                    val nx = swx + dx
+                    val ny = swy + dy
+                    if (nx in 1 until width - 1 && ny in 1 until height - 1 && grid[ny][nx] == com.example.data.CellType.WALL) {
+                        grid[ny][nx] = if (random.nextBoolean()) com.example.data.CellType.SCAN_CACHE else com.example.data.CellType.SECRET_CACHE
+                    }
+                }
+            }
+        }
+
+        // 2. Add HACKABLE_TERMINAL & TERMINAL_DOOR gates blocking shortcut corridors
+        val walkableCells = mutableListOf<Pair<Int, Int>>()
+        for (y in 2 until height - 2) {
+            for (x in 2 until width - 2) {
+                if (grid[y][x] == com.example.data.CellType.PATH) {
+                    walkableCells.add(Pair(x, y))
+                }
+            }
+        }
+        walkableCells.shuffle(random)
+
+        if (walkableCells.size >= 10) {
+            val gateCount = minOf(6, walkableCells.size / 15)
+            for (g in 0 until gateCount) {
+                val (px, py) = walkableCells[g * 2]
+                grid[py][px] = com.example.data.CellType.HACKABLE_TERMINAL
+
+                for (dir in listOf(Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1))) {
+                    val gx = px + dir.first
+                    val gy = py + dir.second
+                    if (gx in 1 until width - 1 && gy in 1 until height - 1 && grid[gy][gx] == com.example.data.CellType.PATH) {
+                        grid[gy][gx] = com.example.data.CellType.TERMINAL_DOOR
+                        break
+                    }
+                }
+            }
+        }
+
+        // 3. Add ALTERNATIVE_VENT sub-conduit bypass routes
+        for (i in 0 until minOf(10, walkableCells.size / 15)) {
+            val (vx, vy) = walkableCells[walkableCells.size - 1 - i]
+            grid[vy][vx] = com.example.data.CellType.ALTERNATIVE_VENT
+        }
+    }
+
     // Specialized procedural generator for corporate building floors
     fun generateBuildingFloor(floor: Int, seed: Long = System.currentTimeMillis()): Array<Array<com.example.data.CellType>> {
         val random = kotlin.random.Random(seed + floor * 100)
-        val width = 35
-        val height = 35
+        val width = 64
+        val height = 64
         val grid = Array(height) { Array(width) { com.example.data.CellType.WALL } }
 
         fun carveCell(x: Int, y: Int, type: com.example.data.CellType) {
@@ -656,14 +733,15 @@ object GameEngine {
             grid[cell.second][cell.first] = com.example.data.CellType.SECRET_CACHE
         }
 
+        enrichMapWithSecretsAndBypasses(grid, random)
         return grid
     }
 
     // Specialized procedural generator for underground collector tunnels
     fun generateCollectorTunnels(level: Int, seed: Long = System.currentTimeMillis()): Array<Array<com.example.data.CellType>> {
         val random = kotlin.random.Random(seed + level * 50)
-        val width = 31
-        val height = 31
+        val width = 64
+        val height = 64
         val grid = Array(height) { Array(width) { com.example.data.CellType.WALL } }
 
         fun carve(x: Int, y: Int, type: com.example.data.CellType) {
@@ -739,14 +817,15 @@ object GameEngine {
             grid[cell.second][cell.first] = com.example.data.CellType.SECRET_CACHE
         }
 
+        enrichMapWithSecretsAndBypasses(grid, random)
         return grid
     }
 
     // Specialized procedural generator for dynamic open metropolitan Cyber-City sectors
     fun generateCitySector(districtIndex: Int, seed: Long = System.currentTimeMillis()): Array<Array<com.example.data.CellType>> {
         val random = kotlin.random.Random(seed + districtIndex * 70)
-        val width = 35
-        val height = 35
+        val width = 64
+        val height = 64
         val grid = Array(height) { Array(width) { com.example.data.CellType.WALL } }
 
         fun carve(x: Int, y: Int, type: com.example.data.CellType) {
@@ -800,7 +879,7 @@ object GameEngine {
         grid[1][1] = com.example.data.CellType.SAFE_ZONE
 
         // Ultimate sector gate at the corner
-        grid[31][31] = com.example.data.CellType.ENCRYPTED_PORTAL
+        grid[height - 3][width - 3] = com.example.data.CellType.ENCRYPTED_PORTAL
 
         val walkable = mutableListOf<Pair<Int, Int>>()
         for (y in 1 until height - 1) {
@@ -827,6 +906,7 @@ object GameEngine {
             grid[cell.second][cell.first] = com.example.data.CellType.SECRET_CACHE
         }
 
+        enrichMapWithSecretsAndBypasses(grid, random)
         return grid
     }
 

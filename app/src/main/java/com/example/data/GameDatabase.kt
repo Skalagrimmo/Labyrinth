@@ -99,7 +99,7 @@ interface InventoryItemDao {
         GameSaveProgressEntity::class,
         InventoryItemEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class GameDatabase : RoomDatabase() {

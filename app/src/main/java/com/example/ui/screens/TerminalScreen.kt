@@ -295,7 +295,7 @@ fun TerminalScreen(
                 // Left main section: Active Screen Viewport (interactive exploration/combat/character/menus)
                 Box(
                     modifier = Modifier
-                        .weight(1.3f)
+                        .weight(1.75f)
                         .fillMaxHeight()
                 ) {
                     when (uiState.screen) {
@@ -395,6 +395,9 @@ fun TerminalScreen(
                                 SvdagWorldInspectorScreen(
                                     currentDag = dag,
                                     currentStats = stats,
+                                    scanSummary = uiState.svdagScanSummary,
+                                    scanRippleState = uiState.svdagRippleState,
+                                    onTriggerScan = { ox, oy, oz, radius -> viewModel.triggerSvdagScan(ox, oy, oz, radius) },
                                     onRegenerateDag = { depth, seed -> viewModel.initOrRegenerateSvdag(depth, seed) },
                                     onModifyVoxel = { x, y, z, type -> viewModel.modifySvdagVoxel(x, y, z, type) },
                                     onBackToGame = { viewModel.exitSvdagWorldInspector() }
@@ -407,7 +410,7 @@ fun TerminalScreen(
                 // Right side column: Header + Vital Status HUD + Animated Console + High-density Controls
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(0.65f)
                         .fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
@@ -556,6 +559,9 @@ fun TerminalScreen(
                                 SvdagWorldInspectorScreen(
                                     currentDag = dag,
                                     currentStats = stats,
+                                    scanSummary = uiState.svdagScanSummary,
+                                    scanRippleState = uiState.svdagRippleState,
+                                    onTriggerScan = { ox, oy, oz, radius -> viewModel.triggerSvdagScan(ox, oy, oz, radius) },
                                     onRegenerateDag = { depth, seed -> viewModel.initOrRegenerateSvdag(depth, seed) },
                                     onModifyVoxel = { x, y, z, type -> viewModel.modifySvdagVoxel(x, y, z, type) },
                                     onBackToGame = { viewModel.exitSvdagWorldInspector() }
@@ -1294,7 +1300,7 @@ fun ExplorationView(
             // Left Viewport (ASCII wireframe)
             Column(
                 modifier = Modifier
-                    .weight(1.1f)
+                    .weight(1.55f)
                     .fillMaxHeight()
             ) {
                 Card(
@@ -1780,7 +1786,7 @@ fun ExplorationView(
 
             Column(
                 modifier = Modifier
-                    .weight(1.05f)
+                    .weight(0.70f)
                     .fillMaxHeight()
             ) {
                 // Top-Down Mini-map
@@ -1789,7 +1795,7 @@ fun ExplorationView(
                     border = BorderStroke(1.dp, CyberBorder.copy(alpha = minimapAlpha)),
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
-                        .weight(1.45f)
+                        .weight(0.95f)
                         .fillMaxWidth()
                         .graphicsLayer(
                             alpha = minimapAlpha,
@@ -1803,14 +1809,30 @@ fun ExplorationView(
                             .padding(4.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Text(
-                            text = "SECTOR LOGIC RADAR",
-                            color = CyberCyan.copy(alpha = minimapAlpha),
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(bottom = 2.dp)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "SECTOR LOGIC RADAR",
+                                color = CyberCyan.copy(alpha = minimapAlpha),
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (uiState.isScanActive || uiState.scanTurnsLeft > 0) {
+                                Text(
+                                    text = "📡 ACTIVE (${uiState.scanTurnsLeft} CYCLES)",
+                                    color = CyberPink,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
 
                         // Render top down map
                         Box(
@@ -2009,30 +2031,61 @@ fun ExplorationView(
                         Spacer(modifier = Modifier.height(4.dp))
                         HorizontalDivider(color = CyberBorder, thickness = 1.dp)
 
-                        // Click to interact/hack
-                        Button(
-                            onClick = {
-                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                                viewModel.interact()
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = CyberPink.copy(alpha = 0.5f),
-                                disabledContainerColor = CyberPink.copy(alpha = 0.25f)
-                            ),
-                            shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(26.dp)
-                                .testTag("btn_interact_hack")
+                        // Action Row: Click to interact / Execute Radar Scan
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Text(
-                                text = "EXECUTE NODE INTERACTION",
-                                color = Color.White,
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Button(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    viewModel.interact()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = CyberPink.copy(alpha = 0.5f),
+                                    disabledContainerColor = CyberPink.copy(alpha = 0.25f)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(26.dp)
+                                    .testTag("btn_interact_hack")
+                            ) {
+                                Text(
+                                    text = "INTERACT",
+                                    color = Color.White,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    viewModel.triggerMapScan()
+                                },
+                                enabled = uiState.ram >= 2,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF00E5FF).copy(alpha = 0.6f),
+                                    disabledContainerColor = Color(0xFF00E5FF).copy(alpha = 0.2f)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(26.dp)
+                                    .testTag("btn_radar_scan")
+                            ) {
+                                Text(
+                                    text = if (uiState.isScanActive) "SCANNING (${uiState.scanTurnsLeft})" else "📡 SCAN (2 RAM)",
+                                    color = Color.White,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
@@ -3668,9 +3721,13 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
                         val isExplored = insideBounds && uiState.exploredCells.contains(Pair(mx, my))
                         val distSq = (mx - px) * (mx - px) + (my - py) * (my - py)
                         val inActiveRange = insideBounds && (distSq <= 3 * 3 + 1)
+                        val isScannedEnemy = insideBounds && uiState.scannedEnemies.contains(Pair(mx, my))
+                        val isScannedLoot = insideBounds && uiState.scannedLoot.contains(Pair(mx, my))
+                        val isScanActive = uiState.isScanActive || uiState.scanTurnsLeft > 0
+                        val isScannedCell = isScanActive && (isScannedEnemy || isScannedLoot)
 
-                        // Outer boundary or unexplored cells are hidden in Fog of War
-                        if (!isExplored && !inActiveRange) {
+                        // Outer boundary or unexplored cells are hidden in Fog of War unless revealed by Scan
+                        if (!isExplored && !inActiveRange && !isScannedCell) {
                             // Faint mesh dot for unexplored cells
                             drawCircle(
                                 color = Color(0xFF0F172A).copy(alpha = 0.3f),
@@ -3680,7 +3737,7 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
                             continue
                         }
 
-                        val alpha = if (inActiveRange) 1.0f else 0.4f
+                        val alpha = if (inActiveRange || isScannedCell) 1.0f else 0.4f
                         val cell = if (insideBounds) maze[my][mx] else CellType.WALL
 
                         when (cell) {
@@ -3784,6 +3841,85 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
                                     start = Offset(center.x, center.y - cellSize * 0.15f),
                                     end = Offset(center.x, center.y + cellSize * 0.15f),
                                     strokeWidth = 3f
+                                )
+                            }
+                            CellType.SECRET_WALL -> {
+                                if (isScanActive || isScannedCell) {
+                                    val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                    drawRoundRect(
+                                        color = Color(0xFF06B6D4).copy(alpha = alpha * 0.3f),
+                                        topLeft = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.1f),
+                                        size = Size(cellSize * 0.8f, cellSize * 0.8f),
+                                        cornerRadius = CornerRadius(4f, 4f)
+                                    )
+                                    drawRoundRect(
+                                        color = Color(0xFF22D3EE).copy(alpha = alpha),
+                                        topLeft = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.1f),
+                                        size = Size(cellSize * 0.8f, cellSize * 0.8f),
+                                        cornerRadius = CornerRadius(4f, 4f),
+                                        style = Stroke(width = 2f)
+                                    )
+                                } else {
+                                    drawRoundRect(
+                                        color = Color(0xFF334155).copy(alpha = alpha * 0.8f),
+                                        topLeft = Offset(cellLeft + cellSize * 0.1f, cellTop + cellSize * 0.1f),
+                                        size = Size(cellSize * 0.8f, cellSize * 0.8f),
+                                        cornerRadius = CornerRadius(4f, 4f)
+                                    )
+                                }
+                            }
+                            CellType.HACKABLE_TERMINAL -> {
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawCircle(
+                                    color = Color(0xFF00E5FF).copy(alpha = alpha * 0.25f),
+                                    radius = cellSize * 0.45f,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFF00E5FF).copy(alpha = alpha),
+                                    radius = cellSize * 0.35f,
+                                    center = center,
+                                    style = Stroke(width = 2.5f)
+                                )
+                            }
+                            CellType.TERMINAL_DOOR -> {
+                                drawRect(
+                                    color = Color(0xFFEF4444).copy(alpha = alpha * 0.3f),
+                                    topLeft = Offset(cellLeft + cellSize * 0.15f, cellTop + cellSize * 0.15f),
+                                    size = Size(cellSize * 0.7f, cellSize * 0.7f)
+                                )
+                                drawRect(
+                                    color = Color(0xFFF87171).copy(alpha = alpha),
+                                    topLeft = Offset(cellLeft + cellSize * 0.15f, cellTop + cellSize * 0.15f),
+                                    size = Size(cellSize * 0.7f, cellSize * 0.7f),
+                                    style = Stroke(width = 3f)
+                                )
+                            }
+                            CellType.SCAN_CACHE -> {
+                                val center = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                                drawCircle(
+                                    color = Color(0xFFF59E0B).copy(alpha = alpha * 0.35f),
+                                    radius = cellSize * 0.45f,
+                                    center = center
+                                )
+                                drawCircle(
+                                    color = Color(0xFFFBBF24).copy(alpha = alpha),
+                                    radius = cellSize * 0.28f,
+                                    center = center,
+                                    style = Stroke(width = 3f)
+                                )
+                            }
+                            CellType.ALTERNATIVE_VENT -> {
+                                drawRect(
+                                    color = Color(0xFF14B8A6).copy(alpha = alpha * 0.2f),
+                                    topLeft = Offset(cellLeft + cellSize * 0.2f, cellTop + cellSize * 0.2f),
+                                    size = Size(cellSize * 0.6f, cellSize * 0.6f)
+                                )
+                                drawRect(
+                                    color = Color(0xFF2DD4BF).copy(alpha = alpha),
+                                    topLeft = Offset(cellLeft + cellSize * 0.2f, cellTop + cellSize * 0.2f),
+                                    size = Size(cellSize * 0.6f, cellSize * 0.6f),
+                                    style = Stroke(width = 2f)
                                 )
                             }
                             CellType.SECRET_CACHE -> {
@@ -3969,7 +4105,73 @@ fun RenderMiniMap(uiState: GameViewModel.GameUiState) {
                                 )
                             }
                         }
+
+                        // Draw Scanned Target / Threat Lock Overlay Indicators
+                        if (uiState.isScanActive || uiState.scanTurnsLeft > 0) {
+                            val cellCenter = Offset(cellLeft + cellSize / 2f, cellTop + cellSize / 2f)
+                            if (isScannedEnemy) {
+                                // Glowing Hostile Threat Ping Ring & Target Crosshairs
+                                drawCircle(
+                                    color = Color(0xFFFF0055).copy(alpha = 0.35f),
+                                    radius = cellSize * 0.65f,
+                                    center = cellCenter
+                                )
+                                drawCircle(
+                                    color = Color(0xFFFF0055),
+                                    radius = cellSize * 0.45f,
+                                    center = cellCenter,
+                                    style = Stroke(width = 2.5f)
+                                )
+                                drawLine(
+                                    color = Color(0xFFFF0055),
+                                    start = Offset(cellCenter.x - cellSize * 0.5f, cellCenter.y),
+                                    end = Offset(cellCenter.x + cellSize * 0.5f, cellCenter.y),
+                                    strokeWidth = 1.5f
+                                )
+                                drawLine(
+                                    color = Color(0xFFFF0055),
+                                    start = Offset(cellCenter.x, cellCenter.y - cellSize * 0.5f),
+                                    end = Offset(cellCenter.x, cellCenter.y + cellSize * 0.5f),
+                                    strokeWidth = 1.5f
+                                )
+                            } else if (isScannedLoot) {
+                                // Glowing Loot / Cache Beacon Ring
+                                drawCircle(
+                                    color = Color(0xFFFFB703).copy(alpha = 0.35f),
+                                    radius = cellSize * 0.65f,
+                                    center = cellCenter
+                                )
+                                drawCircle(
+                                    color = Color(0xFFFFB703),
+                                    radius = cellSize * 0.45f,
+                                    center = cellCenter,
+                                    style = Stroke(width = 2.5f)
+                                )
+                                drawCircle(
+                                    color = Color(0xFF00E5FF),
+                                    radius = cellSize * 0.25f,
+                                    center = cellCenter,
+                                    style = Stroke(width = 1.5f)
+                                )
+                            }
+                        }
                     }
+                }
+
+                // Global Active Radar Sonar Pulse Wave Overlay
+                if (uiState.isScanActive || uiState.scanTurnsLeft > 0) {
+                    val playerCenter = Offset(startX + viewRadius * cellSize + cellSize / 2f, startY + viewRadius * cellSize + cellSize / 2f)
+                    drawCircle(
+                        color = Color(0xFF00E5FF).copy(alpha = 0.15f),
+                        radius = cellSize * 7.5f,
+                        center = playerCenter
+                    )
+                    drawCircle(
+                        color = Color(0xFF00E5FF).copy(alpha = 0.5f),
+                        radius = cellSize * 7.5f,
+                        center = playerCenter,
+                        style = Stroke(width = 2f)
+                    )
                 }
             }
         }
@@ -4019,14 +4221,16 @@ fun CombatView(
 ) {
     val enemy = uiState.activeEnemy ?: return
     var activeSubMenu by remember { mutableStateOf("COMMANDS") } // "COMMANDS", "DAEMONS", "ITEMS"
-
+    val configuration = LocalConfiguration.current
+    val screenHeightDp = configuration.screenHeightDp
+    val isSmallScreen = screenHeightDp < 700
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF030712))
             .verticalScroll(rememberScrollState())
             .padding(4.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // --- 1. TOP HEADER: ENCOUNTER & TURN PHASE BANNER ---
         Card(
@@ -4051,7 +4255,7 @@ fun CombatView(
                         color = CyberPink,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 10.sp
+                        fontSize = if (isSmallScreen) 9.sp else 10.sp
                     )
                     Text(
                         text = "ICE ${uiState.level} | LVL ${uiState.characterLevel} [${uiState.characterXp}/${uiState.xpToNextLevel} XP]",

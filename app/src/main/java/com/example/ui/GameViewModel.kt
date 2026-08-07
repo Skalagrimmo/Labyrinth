@@ -118,6 +118,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val installedPrograms: List<Program> = emptyList(),
         val inventory: List<String> = listOf("NanoMed.sys", "RAMBoost.exe"),
 
+        // Map Scan Ability State
+        val isScanActive: Boolean = false,
+        val scanTurnsLeft: Int = 0,
+        val scannedEnemies: Set<Pair<Int, Int>> = emptySet(),
+        val scannedLoot: Set<Pair<Int, Int>> = emptySet(),
+        val scanTimestamp: Long = 0L,
+
         // Active combat
         val activeEnemy: Enemy? = null,
         val enemyCombatAction: String = "",
@@ -192,7 +199,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Sparse Voxel DAG (SVDAG) World Engine State
         val svdagWorld: com.example.data.svdag.SparseVoxelDag? = null,
         val svdagStats: com.example.data.svdag.SvdagStats? = null,
-        val svdagScaleDepth: Int = 7
+        val svdagScaleDepth: Int = 7,
+        val svdagScanSummary: com.example.data.svdag.SvdagScanSummary? = null,
+        val svdagRippleState: com.example.data.svdag.SvdagRippleState? = null
     )
 
     enum class ActiveScreen {
@@ -526,8 +535,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
-            val perspective = withContext(Dispatchers.Default) {
-                GameEngine.render3DPerspective(finalMaze, finalX, finalY, Direction.EAST)
+            val (perspective, svdagData) = withContext(Dispatchers.Default) {
+                val p = GameEngine.render3DPerspective(finalMaze, finalX, finalY, Direction.EAST)
+                val svdag = com.example.data.svdag.SvdagWorldBuilder.buildSvdagFrom2DLevel(finalMaze, heightLevels = 16, targetDepth = 6)
+                Pair(p, svdag)
             }
 
             // 4. Update state
@@ -542,6 +553,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     gridY = finalY,
                     direction = Direction.EAST,
                     perspectiveText = perspective,
+                    svdagWorld = svdagData.first,
+                    svdagStats = svdagData.second,
+                    svdagScaleDepth = 6,
                     exploredCells = targetExplored,
                     buildingFloors = updatedBuildingFloors,
                     buildingExplored = updatedBuildingExplored,
@@ -852,6 +866,97 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("ROTATED VECTOR 90° RIGHT.")
     }
 
+    fun triggerMapScan() {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) {
+            addLog("SCAN ERROR: Sector Logic Radar only available in exploration mode.", LogType.ERROR)
+            return
+        }
+
+        val ramCost = 2
+        if (state.ram < ramCost) {
+            addLog("SCAN FAILED: Insufficient RAM (Requires $ramCost MB RAM).", LogType.ERROR)
+            return
+        }
+
+        val px = state.gridX
+        val py = state.gridY
+        val maze = state.maze
+        if (maze.isEmpty()) return
+
+        val scanRadius = 8
+        val foundEnemies = mutableSetOf<Pair<Int, Int>>()
+        val foundLoot = mutableSetOf<Pair<Int, Int>>()
+        val scannedCells = mutableSetOf<Pair<Int, Int>>()
+
+        val rowCount = maze.size
+        val colCount = maze[0].size
+
+        for (dy in -scanRadius..scanRadius) {
+            for (dx in -scanRadius..scanRadius) {
+                val nx = px + dx
+                val ny = py + dy
+                if (nx in 0 until colCount && ny in 0 until rowCount) {
+                    if (dx * dx + dy * dy <= scanRadius * scanRadius) {
+                        scannedCells.add(Pair(nx, ny))
+                        val cell = maze[ny][nx]
+                        when (cell) {
+                            CellType.VIRUS_NODE -> foundEnemies.add(Pair(nx, ny))
+                            CellType.DATA_STORE, CellType.SECRET_CACHE, CellType.ENCRYPTED_PORTAL,
+                            CellType.ELEVATOR, CellType.STAIRS_UP, CellType.STAIRS_DOWN -> foundLoot.add(Pair(nx, ny))
+                            else -> {}
+                        }
+                    }
+                }
+            }
+        }
+
+        val updatedExplored = state.exploredCells + scannedCells
+        val now = System.currentTimeMillis()
+
+        var svdagSummary: com.example.data.svdag.SvdagScanSummary? = null
+        var svdagRipple: com.example.data.svdag.SvdagRippleState? = null
+
+        val currentDag = state.svdagWorld
+        if (currentDag != null) {
+            val ox = px.coerceIn(0, currentDag.gridSize - 1)
+            val oy = py.coerceIn(0, currentDag.gridSize - 1)
+            val oz = 1
+            svdagSummary = com.example.data.svdag.SvdagScannerService.performSvdagScan(currentDag, ox, oy, oz, radius = scanRadius)
+            svdagRipple = com.example.data.svdag.SvdagScannerService.computeRippleState(
+                scanTimestamp = now,
+                currentTimeMs = now,
+                originX = ox.toFloat(),
+                originY = oy.toFloat(),
+                originZ = oz.toFloat(),
+                maxRadius = scanRadius.toFloat(),
+                detectedItems = svdagSummary.items
+            )
+        }
+
+        _uiState.update {
+            it.copy(
+                ram = (it.ram - ramCost).coerceAtLeast(0),
+                isScanActive = true,
+                scanTurnsLeft = 6,
+                scannedEnemies = foundEnemies,
+                scannedLoot = foundLoot,
+                exploredCells = updatedExplored,
+                scanTimestamp = now,
+                svdagScanSummary = svdagSummary,
+                svdagRippleState = svdagRipple
+            )
+        }
+
+        soundManager.playNodeBreachSound()
+        addLog("📡 SECTOR SCAN EXECUTED (-$ramCost RAM): Radius $scanRadius sonar pulse active!", LogType.SUCCESS)
+        if (svdagSummary != null) {
+            addLog("  ↳ SVDAG SCANNER: Found ${svdagSummary.interactiveCount} Interactive, ${svdagSummary.secretCount} Secrets, ${svdagSummary.alternativePathCount} Bypass Paths.", LogType.INFO)
+        } else {
+            addLog("  ↳ Revealed ${foundEnemies.size} HOSTILE SIGNALS and ${foundLoot.size} LOOT/CACHES on Map HUD.", LogType.INFO)
+        }
+    }
+
     private fun recoverRamOnMove() {
         _uiState.update { state ->
             val gained = if (Random.nextInt(100) < 40) 1 else 0
@@ -869,6 +974,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 var turnsLeft = state.weatherTurnsLeft
                 var originalMaze = state.originalMaze
                 var currentMaze = state.maze
+                var scanTurns = state.scanTurnsLeft
+                var scanActive = state.isScanActive
+
+                if (scanTurns > 0) {
+                    scanTurns--
+                    if (scanTurns <= 0) {
+                        scanActive = false
+                        pendingLogs.add(Pair("📡 RADAR SCAN EXPIRED: Active sonar sweep signal faded.", LogType.INFO))
+                    }
+                }
 
                 if (weather != com.example.data.CyberWeather.CLEAR) {
                     turnsLeft--
@@ -956,7 +1071,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         nextEventSteps = newNextEventSteps,
                         predictedWeather = predicted,
                         originalMaze = originalMaze,
-                        maze = currentMaze
+                        maze = currentMaze,
+                        scanTurnsLeft = scanTurns,
+                        isScanActive = scanActive
                     )
                 } else {
                     var integrity = state.integrity
@@ -990,7 +1107,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         integrity = integrity,
                         ram = ram,
                         originalMaze = originalMaze,
-                        maze = currentMaze
+                        maze = currentMaze,
+                        scanTurnsLeft = scanTurns,
+                        isScanActive = scanActive
                     )
                 }
             }
@@ -1091,6 +1210,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun update() {
         val state = _uiState.value
         if (state.screen != ActiveScreen.EXPLORATION) return
+        if (state.gameState != GameState.EXPLORATION) {
+        // Просто оновлюємо AI ворога, якщо він є
+        if (state.activeEnemy != null) {
+            runRealTimeCombatTick()
+        }
+        return
 
         val playerX = state.gridX
         val playerY = state.gridY
@@ -1459,6 +1584,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerCombatInline(targetX: Int, targetY: Int) {
+    if (_uiState.value.gameState != GameState.EXPLORATION) {
+        addLog("⚠️ ALREADY IN COMBAT: Cannot initiate new engagement.", LogType.ALERT)
+        return
+            }
         val level = _uiState.value.level
         val enemy = GameEngine.spawnEnemy(level)
 
@@ -2484,7 +2613,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (cellAhead == CellType.DATA_STORE || cellAhead == CellType.ENCRYPTED_PORTAL || 
                 cellAhead == CellType.VIRUS_NODE || cellAhead == CellType.SECRET_CACHE ||
                 cellAhead == CellType.STAIRS_UP || cellAhead == CellType.STAIRS_DOWN ||
-                cellAhead == CellType.ELEVATOR) {
+                cellAhead == CellType.ELEVATOR || cellAhead == CellType.SECRET_WALL ||
+                cellAhead == CellType.HACKABLE_TERMINAL || cellAhead == CellType.TERMINAL_DOOR ||
+                cellAhead == CellType.SCAN_CACHE || cellAhead == CellType.ALTERNATIVE_VENT) {
                 cellToInteractWith = cellAhead
             }
         }
@@ -2495,7 +2626,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (cellCurrent == CellType.DATA_STORE || cellCurrent == CellType.ENCRYPTED_PORTAL || 
                 cellCurrent == CellType.VIRUS_NODE || cellCurrent == CellType.SECRET_CACHE ||
                 cellCurrent == CellType.STAIRS_UP || cellCurrent == CellType.STAIRS_DOWN ||
-                cellCurrent == CellType.ELEVATOR) {
+                cellCurrent == CellType.ELEVATOR || cellCurrent == CellType.SECRET_WALL ||
+                cellCurrent == CellType.HACKABLE_TERMINAL || cellCurrent == CellType.TERMINAL_DOOR ||
+                cellCurrent == CellType.SCAN_CACHE || cellCurrent == CellType.ALTERNATIVE_VENT) {
                 cellToInteractWith = cellCurrent
                 interactX = state.gridX
                 interactY = state.gridY
@@ -2508,6 +2641,46 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         when (cellToInteractWith) {
+            CellType.SECRET_WALL -> {
+                addLog("🔓 PHASE MATRIX OVERRIDE: Discovered hidden illusory wall passage!", LogType.SUCCESS)
+                val updatedMaze = state.maze.map { it.clone() }.toTypedArray()
+                updatedMaze[interactY][interactX] = CellType.PATH
+                _uiState.update { it.copy(maze = updatedMaze) }
+                soundManager.playNodeBreachSound()
+                addExperience(50)
+                updatePerspective()
+            }
+            CellType.HACKABLE_TERMINAL -> {
+                addLog("INITIATING OVERRIDE PROTOCOL ON SECURITY GATE TERMINAL...", LogType.ALERT)
+                startHackingPuzzle(interactX, interactY, difficulty = state.level + 1)
+            }
+            CellType.TERMINAL_DOOR -> {
+                addLog("🔒 SECURITY GATE LOCKED: Hack adjacent terminal node to unlock gate bypass.", LogType.ERROR)
+            }
+            CellType.SCAN_CACHE -> {
+                addLog("✨ QUANTUM STEALTH CACHE ACCESSED!", LogType.SUCCESS)
+                val rewards = listOf("QuantumSlasher.pkg", "AegisShield.sys", "HyperRAM.exe", "Overclock.pkg", "NaniteRegen.sys")
+                val reward = rewards.random()
+                val bonusCredits = 250 + Random.nextInt(100)
+                val updatedInventory = state.inventory + reward
+                val updatedMaze = state.maze.map { it.clone() }.toTypedArray()
+                updatedMaze[interactY][interactX] = CellType.PATH
+                _uiState.update { s ->
+                    s.copy(
+                        maze = updatedMaze,
+                        credits = s.credits + bonusCredits,
+                        totalCreditsEarned = s.totalCreditsEarned + bonusCredits,
+                        inventory = updatedInventory
+                    )
+                }
+                soundManager.playLootCollectionSound()
+                addExperience(75)
+                updatePerspective()
+            }
+            CellType.ALTERNATIVE_VENT -> {
+                addLog("🌀 ENTERED SUB-CONDUIT BYPASS VENT: Sliding through service duct...", LogType.INFO)
+                soundManager.playStepSound()
+            }
             CellType.DATA_STORE -> {
                 addLog("INITIATING HANDSHAKE WITH DATA STORE CORE...", LogType.INFO)
                 startHackingPuzzle(interactX, interactY, difficulty = state.level)
@@ -2687,6 +2860,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val updatedMaze = state.maze.map { it.clone() }.toTypedArray()
         if (state.targetNodeY in updatedMaze.indices && state.targetNodeX in updatedMaze[0].indices) {
             updatedMaze[state.targetNodeY][state.targetNodeX] = CellType.PATH
+        }
+
+        val isTerminal = nodeType == CellType.HACKABLE_TERMINAL
+        if (isTerminal) {
+            addLog("🔑 SECURITY TERMINAL OVERRIDDEN! Unlocking all sector gate barriers...", LogType.SUCCESS)
+            for (y in updatedMaze.indices) {
+                for (x in updatedMaze[0].indices) {
+                    if (updatedMaze[y][x] == CellType.TERMINAL_DOOR) {
+                        updatedMaze[y][x] = CellType.PATH
+                    }
+                }
+            }
         }
 
         val obtainedKeycard = state.currentZone == com.example.data.Zone.BUILDING && state.buildingFloor == 2 && isSecretCache && !state.hasElevatorKeycard
@@ -3437,6 +3622,44 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         _uiState.update { it.copy(svdagStats = newStats) }
     }
 
+    fun triggerSvdagScan(originX: Int? = null, originY: Int? = null, originZ: Int? = null, radius: Int = 16) {
+        val currentDag = _uiState.value.svdagWorld ?: return
+        val ox = originX ?: (currentDag.gridSize / 2)
+        val oy = originY ?: (currentDag.gridSize / 2)
+        val oz = originZ ?: (currentDag.gridSize / 2)
+
+        val summary = com.example.data.svdag.SvdagScannerService.performSvdagScan(
+            dag = currentDag,
+            originX = ox,
+            originY = oy,
+            originZ = oz,
+            radius = radius
+        )
+
+        val now = System.currentTimeMillis()
+        val rippleState = com.example.data.svdag.SvdagScannerService.computeRippleState(
+            scanTimestamp = now,
+            currentTimeMs = now,
+            originX = ox.toFloat(),
+            originY = oy.toFloat(),
+            originZ = oz.toFloat(),
+            maxRadius = radius.toFloat(),
+            detectedItems = summary.items
+        )
+
+        _uiState.update {
+            it.copy(
+                svdagScanSummary = summary,
+                svdagRippleState = rippleState,
+                scanTimestamp = now
+            )
+        }
+
+        soundManager.playNodeBreachSound()
+        addLog("📡 SVDAG SCANNER SERVICE EXECUTED: Radius $radius Voxels sonar sweep!", LogType.SUCCESS)
+        addLog("  ↳ Detected ${summary.interactiveCount} Interactive Objects, ${summary.secretCount} Classified Secrets, ${summary.alternativePathCount} Bypass Vents.", LogType.INFO)
+    }
+
     fun enterSvdagWorldInspector() {
         ensureSvdagInitialized(_uiState.value.svdagScaleDepth)
         _uiState.update { it.copy(screen = ActiveScreen.SVDAG_WORLD_BUILDER) }
@@ -3814,6 +4037,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "load" -> {
                 loadGame()
             }
+            "scan", "radar", "sonar" -> {
+                triggerMapScan()
+            }
             "menu" -> {
                 returnToStartMenu()
             }
@@ -3952,9 +4178,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             level = state.level,
             integrity = state.integrity,
             maxIntegrity = state.maxIntegrity,
+            playerShield = state.playerShield,
+            playerMaxShield = state.playerMaxShield,
             ram = state.ram,
             maxRam = state.maxRam,
+            ramRecoveryRate = state.ramRecoveryRate,
             credits = state.credits,
+            damageBonus = state.damageBonus,
+            defenseBonus = state.defenseBonus,
+            characterLevel = state.characterLevel,
+            characterXp = state.characterXp,
+            xpToNextLevel = state.xpToNextLevel,
             gridX = state.gridX,
             gridY = state.gridY,
             direction = state.direction.name,
@@ -3964,11 +4198,27 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             cityDistrictIndex = state.cityDistrictIndex,
             hasElevatorKeycard = state.hasElevatorKeycard,
             activeWeather = state.activeWeather.name,
+            weatherTurnsLeft = state.weatherTurnsLeft,
+            stepsSinceLastEvent = state.stepsSinceLastEvent,
+            nextEventSteps = state.nextEventSteps,
+            predictedWeather = state.predictedWeather?.name ?: "",
             nodesHackedCount = state.nodesHackedCount,
             totalCreditsEarned = state.totalCreditsEarned,
             inventoryCsv = state.inventory.joinToString(","),
             installedCyberwareCsv = state.installedCyberware.joinToString(",") { it.id },
-            installedProgramsCsv = state.installedPrograms.joinToString(",") { it.id }
+            installedProgramsCsv = state.installedPrograms.joinToString(",") { it.id },
+            installedImplantsCsv = state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" },
+            exploredCellsCsv = serializeExploredCells(state.exploredCells),
+            mazeData = serializeMaze(state.maze),
+            originalMazeData = state.originalMaze?.let { serializeMaze(it) } ?: "",
+            buildingFloorsData = serializeFloors(state.buildingFloors),
+            buildingExploredData = serializeExploredMap(state.buildingExplored),
+            collectorsLevelsData = serializeFloors(state.collectorsLevels),
+            collectorsExploredData = serializeExploredMap(state.collectorsExplored),
+            cityDistrictsData = serializeFloors(state.cityDistricts),
+            cityExploredData = serializeExploredMap(state.cityExplored),
+            gameStateName = state.gameState.name,
+            logFeedSerialized = state.logFeed.joinToString("$$") { "${it.text}||${it.type.name}||${it.timestamp}" }
         )
 
         val inventoryEntities = state.inventory.map { item ->
@@ -4057,6 +4307,158 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadGame() {
+        viewModelScope.launch {
+            val roomProgress = repository.getSaveProgressSync("current_save")
+            if (roomProgress != null) {
+                try {
+                    val runnerClass = try {
+                        NetrunnerClass.valueOf(roomProgress.runnerClass)
+                    } catch (e: Exception) {
+                        NetrunnerClass.CODE_SLASHER
+                    }
+
+                    val direction = try {
+                        Direction.valueOf(roomProgress.direction)
+                    } catch (e: Exception) {
+                        Direction.EAST
+                    }
+
+                    val currentZone = try {
+                        com.example.data.Zone.valueOf(roomProgress.currentZone)
+                    } catch (e: Exception) {
+                        com.example.data.Zone.BUILDING
+                    }
+
+                    val activeWeather = try {
+                        com.example.data.CyberWeather.valueOf(roomProgress.activeWeather)
+                    } catch (e: Exception) {
+                        com.example.data.CyberWeather.CLEAR
+                    }
+
+                    val predictedWeather = if (roomProgress.predictedWeather.isNotEmpty()) {
+                        try {
+                            com.example.data.CyberWeather.valueOf(roomProgress.predictedWeather)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else null
+
+                    val gameState = try {
+                        GameState.valueOf(roomProgress.gameStateName)
+                    } catch (e: Exception) {
+                        GameState.EXPLORATION
+                    }
+
+                    // Restore inventories from Room CSV / entities
+                    val inventory = if (roomProgress.inventoryCsv.isEmpty()) emptyList() else roomProgress.inventoryCsv.split(",")
+                    val installedCyberware = if (roomProgress.installedCyberwareCsv.isEmpty()) emptyList() else roomProgress.installedCyberwareCsv.split(",").map { getCyberwareById(it) }
+                    val installedPrograms = if (roomProgress.installedProgramsCsv.isEmpty()) emptyList() else roomProgress.installedProgramsCsv.split(",").map { getProgramById(it) }
+
+                    val installedImplantsMap = mutableMapOf<com.example.data.ImplantBodySlot, com.example.data.CyberwareImplant?>()
+                    if (roomProgress.installedImplantsCsv.isNotEmpty()) {
+                        roomProgress.installedImplantsCsv.split(",").forEach { entry ->
+                            val parts = entry.split(":")
+                            if (parts.size == 2) {
+                                try {
+                                    val slot = com.example.data.ImplantBodySlot.valueOf(parts[0])
+                                    val implant = com.example.data.CyberwareImplantRegistry.getImplantById(parts[1])
+                                    if (implant != null) {
+                                        installedImplantsMap[slot] = implant
+                                    }
+                                } catch (e: Exception) {}
+                            }
+                        }
+                    }
+
+                    // Logs
+                    val logFeed = if (roomProgress.logFeedSerialized.isEmpty()) emptyList() else roomProgress.logFeedSerialized.split("$$").mapNotNull { line ->
+                        val parts = line.split("||")
+                        if (parts.size == 3) {
+                            val text = parts[0]
+                            val type = try { LogType.valueOf(parts[1]) } catch(e: Exception) { LogType.INFO }
+                            val ts = parts[2].toLongOrNull() ?: System.currentTimeMillis()
+                            LogMessage(text, type, ts)
+                        } else null
+                    }
+
+                    // Maps and Mazes
+                    val maze = deserializeMaze(roomProgress.mazeData)
+                    val originalMaze = if (roomProgress.originalMazeData.isEmpty()) null else deserializeMaze(roomProgress.originalMazeData)
+                    val buildingFloors = deserializeFloors(roomProgress.buildingFloorsData)
+                    val buildingExplored = deserializeExploredMap(roomProgress.buildingExploredData)
+                    val collectorsLevels = deserializeFloors(roomProgress.collectorsLevelsData)
+                    val collectorsExplored = deserializeExploredMap(roomProgress.collectorsExploredData)
+                    val cityDistricts = deserializeFloors(roomProgress.cityDistrictsData)
+                    val cityExplored = deserializeExploredMap(roomProgress.cityExploredData)
+                    val exploredCells = deserializeExploredCells(roomProgress.exploredCellsCsv)
+
+                    _uiState.update {
+                        it.copy(
+                            screen = ActiveScreen.EXPLORATION,
+                            runnerName = roomProgress.runnerName,
+                            runnerClass = runnerClass,
+                            maxIntegrity = roomProgress.maxIntegrity,
+                            integrity = roomProgress.integrity,
+                            playerMaxShield = roomProgress.playerMaxShield,
+                            playerShield = roomProgress.playerShield,
+                            maxRam = roomProgress.maxRam,
+                            ram = roomProgress.ram,
+                            ramRecoveryRate = roomProgress.ramRecoveryRate,
+                            credits = roomProgress.credits,
+                            damageBonus = roomProgress.damageBonus,
+                            defenseBonus = roomProgress.defenseBonus,
+                            characterLevel = roomProgress.characterLevel,
+                            characterXp = roomProgress.characterXp,
+                            xpToNextLevel = roomProgress.xpToNextLevel,
+                            gridX = roomProgress.gridX,
+                            gridY = roomProgress.gridY,
+                            direction = direction,
+                            level = roomProgress.level,
+                            currentZone = currentZone,
+                            buildingFloor = roomProgress.buildingFloor,
+                            collectorsLevel = roomProgress.collectorsLevel,
+                            cityDistrictIndex = roomProgress.cityDistrictIndex,
+                            hasElevatorKeycard = roomProgress.hasElevatorKeycard,
+                            inventory = inventory,
+                            installedCyberware = installedCyberware,
+                            installedPrograms = installedPrograms,
+                            installedImplants = installedImplantsMap,
+                            exploredCells = exploredCells,
+                            activeWeather = activeWeather,
+                            weatherTurnsLeft = roomProgress.weatherTurnsLeft,
+                            stepsSinceLastEvent = roomProgress.stepsSinceLastEvent,
+                            nextEventSteps = roomProgress.nextEventSteps,
+                            predictedWeather = predictedWeather,
+                            nodesHackedCount = roomProgress.nodesHackedCount,
+                            totalCreditsEarned = roomProgress.totalCreditsEarned,
+                            maze = maze,
+                            originalMaze = originalMaze,
+                            buildingFloors = buildingFloors,
+                            buildingExplored = buildingExplored,
+                            collectorsLevels = collectorsLevels,
+                            collectorsExplored = collectorsExplored,
+                            cityDistricts = cityDistricts,
+                            cityExplored = cityExplored,
+                            gameState = gameState,
+                            logFeed = logFeed
+                        )
+                    }
+
+                    addLog("💾 ROOM DB: RESTORED RUNNER COGNITIVE CHIP FROM LOCAL SQLITE.", LogType.SUCCESS)
+                    addLog("RE-LINKED AT GRID COORDINATES (${roomProgress.gridX}, ${roomProgress.gridY}).", LogType.INFO)
+                    updatePerspective()
+                    return@launch
+                } catch (e: Exception) {
+                    addLog("⚠️ ROOM RESTORE ALERT: ${e.localizedMessage}, checking secondary storage...", LogType.ALERT)
+                }
+            }
+
+            // Fallback to SharedPreferences
+            loadFromSharedPreferences()
+        }
+    }
+
+    private fun loadFromSharedPreferences() {
         val sharedPrefs = getApplication<Application>().getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
         if (!sharedPrefs.getBoolean("has_saved_game", false)) {
             addLog("⚠️ ERROR: NO RESTORE POINT FOUND.", LogType.ERROR)
@@ -4172,7 +4574,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             _uiState.update {
                 it.copy(
-                    screen = ActiveScreen.EXPLORATION, // Enter game directly!
+                    screen = ActiveScreen.EXPLORATION,
                     runnerName = sharedPrefs.getString("runnerName", "") ?: "",
                     runnerClass = runnerClass,
                     maxIntegrity = sharedPrefs.getInt("maxIntegrity", 100),
@@ -4222,8 +4624,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
-            addLog("📶 COGNITIVE RESTORE POINT ESTABLISHED.", LogType.SUCCESS)
-            addLog("RE-LINKED AT GRID COORDINATES ($exploredCellsStr).", LogType.INFO)
+            addLog("📶 COGNITIVE RESTORE POINT ESTABLISHED (SECONDARY CHIP).", LogType.SUCCESS)
             updatePerspective()
 
         } catch (e: Exception) {

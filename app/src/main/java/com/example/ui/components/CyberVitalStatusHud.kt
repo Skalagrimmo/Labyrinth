@@ -126,7 +126,7 @@ fun CyberVitalStatusHud(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 4.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -203,20 +203,20 @@ fun CyberHealthWidget(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
             .background(CyberCardBg, CutCornerShape(4.dp))
             .border(BorderStroke(1.dp, gaugeColor.copy(alpha = 0.4f)), CutCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .padding(horizontal = 4.dp, vertical = 2.dp)
             .testTag("cyber_health_widget")
     ) {
         // Radial / Arc Health Progress Circle with Heartbeat Pulse
         Box(
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val strokeWidth = 3.5.dp.toPx()
+                val strokeWidth = 2.5.dp.toPx()
                 val diameter = size.minDimension - strokeWidth
                 val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
 
@@ -252,7 +252,7 @@ fun CyberHealthWidget(
                         useCenter = false,
                         topLeft = Offset(1.dp.toPx(), 1.dp.toPx()),
                         size = Size(diameter - 2.dp.toPx(), diameter - 2.dp.toPx()),
-                        style = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+                        style = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
             }
@@ -263,7 +263,7 @@ fun CyberHealthWidget(
                     text = "${(healthRatio * 100).toInt()}%",
                     color = gaugeColor,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 9.sp,
+                    fontSize = 7.5.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -272,18 +272,18 @@ fun CyberHealthWidget(
         Column(verticalArrangement = Arrangement.Center) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(5.dp)
+                        .size(4.dp)
                         .background(gaugeColor.copy(alpha = pulseAlpha), CircleShape)
                 )
                 Text(
-                    text = if (isCritical) "VITAL WARNING" else "CYBER-HEALTH",
+                    text = if (isCritical) "VITAL WARN" else "HEALTH",
                     color = gaugeColor,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 8.5.sp,
+                    fontSize = 7.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
@@ -293,7 +293,7 @@ fun CyberHealthWidget(
                 text = "$animatedHealth/$maxHealth HP",
                 color = Color.White,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
+                fontSize = 8.5.sp,
                 fontWeight = FontWeight.Bold
             )
 
@@ -302,7 +302,7 @@ fun CyberHealthWidget(
                     text = "SHIELD: $currentShield/$maxShield",
                     color = CyberCyan,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 7.5.sp
+                    fontSize = 6.5.sp
                 )
             }
         }
@@ -354,18 +354,18 @@ fun SignalIntegrityWidget(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
             .background(CyberCardBg, CutCornerShape(4.dp))
             .border(BorderStroke(1.dp, signalColor.copy(alpha = 0.4f)), CutCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .padding(horizontal = 4.dp, vertical = 2.dp)
             .testTag("signal_integrity_widget")
     ) {
         // Oscilloscope Wave Canvas
         Box(
             modifier = Modifier
-                .width(44.dp)
-                .height(28.dp)
+                .width(30.dp)
+                .height(20.dp)
                 .background(CyberDark, RoundedCornerShape(3.dp))
                 .border(0.5.dp, signalColor.copy(alpha = 0.5f), RoundedCornerShape(3.dp))
         ) {
@@ -377,7 +377,7 @@ fun SignalIntegrityWidget(
                 val path = Path()
                 val points = 30
                 val freq = if (animatedStability < 65f) 4.5f else 2.5f
-                val amp = (1f - (animatedStability / 100f)) * (h / 3f) + 3f
+                val amp = (1f - (animatedStability / 100f)) * (h / 3f) + 2f
 
                 for (i in 0..points) {
                     val progress = i.toFloat() / points
@@ -390,7 +390,7 @@ fun SignalIntegrityWidget(
                 drawPath(
                     path = path,
                     color = signalColor,
-                    style = Stroke(width = 1.8f)
+                    style = Stroke(width = 1.4f)
                 )
             }
         }
@@ -398,20 +398,20 @@ fun SignalIntegrityWidget(
         Column(verticalArrangement = Arrangement.Center) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 // 5-bar signal strength bars
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(1.5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(1.dp),
                     verticalAlignment = Alignment.Bottom
                 ) {
                     val activeBars = (animatedStability / 20f).toInt().coerceIn(1, 5)
                     for (b in 1..5) {
-                        val barHeight = (4 + b * 2).dp
+                        val barHeight = (3 + b * 1.5f).dp
                         val barColor = if (b <= activeBars) signalColor else Color.DarkGray
                         Box(
                             modifier = Modifier
-                                .width(2.5.dp)
+                                .width(2.dp)
                                 .height(barHeight)
                                 .background(barColor, RoundedCornerShape(1.dp))
                         )
@@ -419,24 +419,24 @@ fun SignalIntegrityWidget(
                 }
 
                 Text(
-                    text = "SIGNAL LINK",
+                    text = "SIGNAL",
                     color = signalColor,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 8.5.sp,
+                    fontSize = 7.5.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
 
             Text(
-                text = "%.1f%% STABLE".format(animatedStability),
+                text = "%.1f%%".format(animatedStability),
                 color = Color.White,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 9.5.sp,
+                fontSize = 8.5.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = if (animatedStability > 85f) "ENCRYPTED" else "INTERFERENCE",
+                text = if (animatedStability > 85f) "ENCRYPT" else "JAMMED",
                 color = signalColor.copy(alpha = 0.8f),
                 fontFamily = FontFamily.Monospace,
                 fontSize = 7.5.sp
@@ -512,20 +512,20 @@ fun TimeToBreachWidget(
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         modifier = modifier
             .background(CyberCardBg, CutCornerShape(4.dp))
             .border(BorderStroke(1.dp, widgetColor.copy(alpha = 0.4f)), CutCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 4.dp)
+            .padding(horizontal = 4.dp, vertical = 2.dp)
             .testTag("time_to_breach_widget")
     ) {
         // Circular Progress Ring / Countdown Arc
         Box(
-            modifier = Modifier.size(36.dp),
+            modifier = Modifier.size(24.dp),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val strokeWidth = 3.dp.toPx()
+                val strokeWidth = 2.dp.toPx()
                 val diameter = size.minDimension - strokeWidth
                 val topLeft = Offset(strokeWidth / 2f, strokeWidth / 2f)
 
@@ -556,25 +556,25 @@ fun TimeToBreachWidget(
                 imageVector = if (isWarning) Icons.Default.Warning else Icons.Default.Lock,
                 contentDescription = breachTitle,
                 tint = widgetColor.copy(alpha = warningPulse),
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(12.dp)
             )
         }
 
         Column(verticalArrangement = Arrangement.Center) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(5.dp)
+                        .size(4.dp)
                         .background(widgetColor.copy(alpha = warningPulse), CircleShape)
                 )
                 Text(
                     text = breachTitle,
                     color = widgetColor,
                     fontFamily = FontFamily.Monospace,
-                    fontSize = 8.5.sp,
+                    fontSize = 7.5.sp,
                     fontWeight = FontWeight.Bold,
                     maxLines = 1
                 )
@@ -584,7 +584,7 @@ fun TimeToBreachWidget(
                 text = displayValue,
                 color = Color.White,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 10.sp,
+                fontSize = 8.5.sp,
                 fontWeight = FontWeight.Bold
             )
 

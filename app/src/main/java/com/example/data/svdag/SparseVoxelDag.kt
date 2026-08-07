@@ -30,7 +30,12 @@ enum class VoxelType(
     GRAVITY_SLOPE(10, "Gravity Slope", 0xFFEC4899, false, 'L'),
     ELEVATOR(11, "Elevator Column", 0xFF14B8A6, false, 'X'),
     VENT_TUNNEL(12, "Service Conduit", 0xFF64748B, false, 'T'),
-    ELEVATED_BALCONY(13, "High-Level Balcony", 0xFF8B5CF6, false, 'B');
+    ELEVATED_BALCONY(13, "High-Level Balcony", 0xFF8B5CF6, false, 'B'),
+    SECRET_WALL(14, "Illusory Wall", 0xFF475569, true, 'W'),
+    HACKABLE_TERMINAL(15, "Security Terminal", 0xFF00E5FF, true, 'K'),
+    TERMINAL_DOOR(16, "Security Door", 0xFF334155, true, 'G'),
+    SCAN_CACHE(17, "Quantum Stealth Cache", 0xFFFFD700, true, 'M'),
+    ALTERNATIVE_VENT(18, "Sub-Conduit Vent", 0xFF38BDF8, false, 'Q');
 
     companion object {
         private val VALUES = values()
@@ -52,6 +57,11 @@ enum class VoxelType(
             CellType.GRAVITY_SLOPE -> GRAVITY_SLOPE
             CellType.ECHO -> DATA_CORE
             CellType.ELEVATOR -> ELEVATOR
+            CellType.SECRET_WALL -> SECRET_WALL
+            CellType.HACKABLE_TERMINAL -> HACKABLE_TERMINAL
+            CellType.TERMINAL_DOOR -> TERMINAL_DOOR
+            CellType.SCAN_CACHE -> SCAN_CACHE
+            CellType.ALTERNATIVE_VENT -> ALTERNATIVE_VENT
         }
     }
 }

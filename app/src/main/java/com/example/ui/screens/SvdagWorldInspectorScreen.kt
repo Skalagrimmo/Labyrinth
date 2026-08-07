@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -43,6 +44,9 @@ import java.util.Locale
 fun SvdagWorldInspectorScreen(
     currentDag: SparseVoxelDag,
     currentStats: SvdagStats,
+    scanSummary: SvdagScanSummary? = null,
+    scanRippleState: SvdagRippleState? = null,
+    onTriggerScan: ((ox: Int, oy: Int, oz: Int, radius: Int) -> Unit)? = null,
     onRegenerateDag: (targetDepth: Int, seed: Long) -> Unit,
     onModifyVoxel: (x: Int, y: Int, z: Int, type: VoxelType) -> Unit,
     onBackToGame: () -> Unit,
@@ -54,6 +58,28 @@ fun SvdagWorldInspectorScreen(
     var selectedZ by remember(currentDag) { mutableStateOf(currentDag.gridSize / 2) }
     var selectedVoxelType by remember { mutableStateOf(VoxelType.SOLID_WALL) }
     var hoveredVoxelInfo by remember { mutableStateOf<String?>(null) }
+
+    // Scanner Ripple Animation Loop
+    var rippleAnimProgress by remember { mutableFloatStateOf(0f) }
+    var isRipplingActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(scanRippleState?.scanTimestamp) {
+        if (scanRippleState != null) {
+            val startTime = System.currentTimeMillis()
+            val duration = 2500f
+            isRipplingActive = true
+            while (isRipplingActive) {
+                val elapsed = System.currentTimeMillis() - startTime
+                if (elapsed >= duration) {
+                    rippleAnimProgress = 1f
+                    isRipplingActive = false
+                    break
+                }
+                rippleAnimProgress = elapsed / duration
+                kotlinx.coroutines.delay(16)
+            }
+        }
+    }
 
     // Raycast Simulator State
     var raycastOriginX by remember(currentDag) { mutableStateOf((currentDag.gridSize / 2).toDouble()) }
@@ -486,6 +512,74 @@ fun SvdagWorldInspectorScreen(
                                 strokeWidth = 1f
                             )
                         }
+
+                        // --- DRAW SVDAG SCANNER SERVICE HIGHLIGHTS & VISUAL RIPPLE EFFECT ---
+                        val items = scanSummary?.items ?: scanRippleState?.detectedItems ?: emptyList()
+                        for (item in items) {
+                            val inSlice = when (sliceAxis) {
+                                "XY" -> item.z == selectedZ
+                                "XZ" -> item.y == selectedZ
+                                else -> item.x == selectedZ
+                            }
+                            if (inSlice) {
+                                val (gx, gy) = when (sliceAxis) {
+                                    "XY" -> Pair(item.x, item.y)
+                                    "XZ" -> Pair(item.x, item.z)
+                                    else -> Pair(item.y, item.z)
+                                }
+                                if (gx in 0 until gridDisplaySize && gy in 0 until gridDisplaySize) {
+                                    val itemColor = Color(item.colorHex)
+                                    // Glowing highlight fill
+                                    drawRect(
+                                        color = itemColor.copy(alpha = 0.35f),
+                                        topLeft = Offset(gx * cellW, gy * cellH),
+                                        size = Size(cellW, cellH)
+                                    )
+                                    // Glowing highlight border
+                                    drawRect(
+                                        color = itemColor,
+                                        topLeft = Offset(gx * cellW, gy * cellH),
+                                        size = Size(cellW, cellH),
+                                        style = Stroke(width = 2.5f)
+                                    )
+                                    // Target pulse ring
+                                    drawCircle(
+                                        color = itemColor.copy(alpha = 0.9f),
+                                        radius = cellW * 0.45f,
+                                        center = Offset(gx * cellW + cellW / 2f, gy * cellH + cellH / 2f),
+                                        style = Stroke(width = 1.5f)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Draw expanding sonar wave front if ripple animation is active
+                        if (isRipplingActive && scanRippleState != null) {
+                            val (oxCanvas, oyCanvas) = when (sliceAxis) {
+                                "XY" -> Pair(scanRippleState.scanOriginX, scanRippleState.scanOriginY)
+                                "XZ" -> Pair(scanRippleState.scanOriginX, scanRippleState.scanOriginZ)
+                                else -> Pair(scanRippleState.scanOriginY, scanRippleState.scanOriginZ)
+                            }
+                            val originOffset = Offset(
+                                (oxCanvas.coerceIn(0f, gridDisplaySize.toFloat())) * cellW,
+                                (oyCanvas.coerceIn(0f, gridDisplaySize.toFloat())) * cellH
+                            )
+                            val currentR = rippleAnimProgress * scanRippleState.maxRadius * cellW
+                            val fadeAlpha = (1f - rippleAnimProgress).coerceIn(0f, 1f)
+
+                            drawCircle(
+                                color = Color(0xFF00E5FF).copy(alpha = fadeAlpha * 0.8f),
+                                radius = currentR,
+                                center = originOffset,
+                                style = Stroke(width = 4f)
+                            )
+                            drawCircle(
+                                color = Color(0xFF38BDF8).copy(alpha = fadeAlpha * 0.4f),
+                                radius = (currentR * 0.7f).coerceAtLeast(0f),
+                                center = originOffset,
+                                style = Stroke(width = 2f)
+                            )
+                        }
                     }
                 }
 
@@ -502,7 +596,195 @@ fun SvdagWorldInspectorScreen(
             }
         }
 
-        // --- 5. Interactive DDA Raycast Simulator ---
+        // --- 5. SVDAG Scanner Service & Visual Ripple Highlights ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = cyberCardBg),
+            border = BorderStroke(1.dp, cyberCyan.copy(alpha = 0.6f)),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "📡 SVDAG SCANNER SERVICE",
+                        color = cyberCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Surface(
+                        color = cyberCyan.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(1.dp, cyberCyan)
+                    ) {
+                        Text(
+                            text = "RIPPLE SONAR ACTIVE",
+                            color = cyberCyan,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        onTriggerScan?.invoke(currentDag.gridSize / 2, currentDag.gridSize / 2, selectedZ, 16)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = cyberCyan),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("svdag_execute_scanner_service")
+                ) {
+                    Icon(imageVector = Icons.Default.Search, contentDescription = "Scan", tint = Color.Black)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "EXECUTE SVDAG SPATIAL SCANNER (RIPPLE EFFECT)",
+                        color = Color.Black,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                scanSummary?.let { sum ->
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 3 Category Badge Counters
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            color = Color(0xFF00E5FF).copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, Color(0xFF00E5FF)),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("INTERACTIVE", color = Color(0xFF00E5FF), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("${sum.interactiveCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+
+                        Surface(
+                            color = Color(0xFFFFD700).copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, Color(0xFFFFD700)),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("SECRETS", color = Color(0xFFFFD700), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("${sum.secretCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+
+                        Surface(
+                            color = Color(0xFF10B981).copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, Color(0xFF10B981)),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("BYPASS PATHS", color = Color(0xFF10B981), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("${sum.alternativePathCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "DETECTED OBJECTS & SECRETS (${sum.totalDetected}):",
+                        color = Color.LightGray,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 160.dp)
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (sum.items.isEmpty()) {
+                            Text(
+                                text = "No interactive objects or secrets within scan radius.",
+                                color = Color.Gray,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(vertical = 4.dp)
+                            )
+                        } else {
+                            sum.items.take(12).forEach { item ->
+                                val catColor = Color(item.colorHex)
+                                Surface(
+                                    color = Color(0xFF020617),
+                                    border = BorderStroke(1.dp, catColor.copy(alpha = 0.6f)),
+                                    shape = RoundedCornerShape(4.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = item.displayName,
+                                                    color = catColor,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "[${item.category.displayName}]",
+                                                    color = Color.Gray,
+                                                    fontSize = 8.sp,
+                                                    fontFamily = FontFamily.Monospace
+                                                )
+                                            }
+                                            Text(
+                                                text = item.description,
+                                                color = Color.LightGray,
+                                                fontSize = 8.sp,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                        }
+                                        Text(
+                                            text = "(${item.x}, ${item.y}, ${item.z})",
+                                            color = catColor,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 6. Interactive DDA Raycast Simulator ---
         Card(
             colors = CardDefaults.cardColors(containerColor = cyberCardBg),
             border = BorderStroke(1.dp, cyberBlue.copy(alpha = 0.5f)),
