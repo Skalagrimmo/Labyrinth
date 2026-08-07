@@ -35,7 +35,8 @@ enum class VoxelType(
     HACKABLE_TERMINAL(15, "Security Terminal", 0xFF00E5FF, true, 'K'),
     TERMINAL_DOOR(16, "Security Door", 0xFF334155, true, 'G'),
     SCAN_CACHE(17, "Quantum Stealth Cache", 0xFFFFD700, true, 'M'),
-    ALTERNATIVE_VENT(18, "Sub-Conduit Vent", 0xFF38BDF8, false, 'Q');
+    ALTERNATIVE_VENT(18, "Sub-Conduit Vent", 0xFF38BDF8, false, 'Q'),
+    ICE_PATROL(19, "ICE Patrol Unit", 0xFFFF0055, false, 'I');
 
     companion object {
         private val VALUES = values()
@@ -71,18 +72,25 @@ enum class VoxelType(
  */
 sealed class SvdagNode {
     /** Leaf node representing a single uniform voxel material */
-    data class LeafNode(val voxelType: VoxelType) : SvdagNode()
+    data class LeafNode(val voxelType: VoxelType) : SvdagNode() {
+        val dominantVoxel: VoxelType get() = voxelType
+    }
 
     /** Internal octree node pointing to 8 child node IDs in pool */
-    data class InternalNode(val children: IntArray) : SvdagNode() {
+    data class InternalNode(
+        val children: IntArray,
+        val dominantVoxel: VoxelType = VoxelType.EMPTY
+    ) : SvdagNode() {
         override fun equals(other: Any?): Boolean {
             if (this === other) return true
             if (other !is InternalNode) return false
-            return children.contentEquals(other.children)
+            return children.contentEquals(other.children) && dominantVoxel == other.dominantVoxel
         }
 
         override fun hashCode(): Int {
-            return children.contentHashCode()
+            var result = children.contentHashCode()
+            result = 31 * result + dominantVoxel.hashCode()
+            return result
         }
     }
 }
@@ -101,7 +109,9 @@ data class SvdagStats(
     val dagMemoryBytes: Long,
     val compressionRatio: Float,
     val buildTimeMs: Long,
-    val averageRaycastMicros: Double
+    val averageRaycastMicros: Double,
+    val currentLodLevel: Int = 0,
+    val lodCellSize: Int = 1
 )
 
 /**
@@ -167,6 +177,33 @@ class SparseVoxelDag(val maxDepth: Int) {
     }
 
     /**
+     * Computes the representative/dominant voxel type across 8 child node IDs for LOD filtering.
+     * Non-empty solid/interactive voxels are prioritized over EMPTY.
+     */
+    private fun computeDominantVoxel(children: IntArray): VoxelType {
+        val counts = HashMap<VoxelType, Int>()
+        for (childId in children) {
+            val vType = when (val node = nodesList[childId]) {
+                is SvdagNode.LeafNode -> node.voxelType
+                is SvdagNode.InternalNode -> node.dominantVoxel
+            }
+            counts[vType] = (counts[vType] ?: 0) + 1
+        }
+        // Prioritize non-empty voxels first
+        val nonEmpty = counts.filterKeys { it != VoxelType.EMPTY }
+        if (nonEmpty.isNotEmpty()) {
+            return nonEmpty.maxByOrNull { entry ->
+                // Higher priority weight for interactive / solid voxels
+                var weight = entry.value * 10
+                if (entry.key.isSolid) weight += 5
+                if (entry.key != VoxelType.SOLID_WALL && entry.key != VoxelType.PATH) weight += 15
+                weight
+            }?.key ?: VoxelType.EMPTY
+        }
+        return VoxelType.EMPTY
+    }
+
+    /**
      * Deduplicates internal octree node. If all 8 children are identical and refer to a leaf, fold it into that leaf.
      */
     fun getOrInsertInternal(children: IntArray): Int {
@@ -183,7 +220,8 @@ class SparseVoxelDag(val maxDepth: Int) {
             return firstChild
         }
 
-        val key = SvdagNode.InternalNode(children.clone())
+        val dominant = computeDominantVoxel(children)
+        val key = SvdagNode.InternalNode(children.clone(), dominant)
         val existingId = nodeKeyToIdMap[key]
         if (existingId != null) {
             return existingId
@@ -193,6 +231,43 @@ class SparseVoxelDag(val maxDepth: Int) {
         nodesList.add(key)
         nodeKeyToIdMap[key] = newId
         return newId
+    }
+
+    /**
+     * Query voxel at 3D integer coordinates (x, y, z) with a specific Level of Detail (LOD).
+     * @param lod Level of Detail step (0 = Full Resolution, 1 = 2x2x2 downsample, 2 = 4x4x4 downsample, etc.).
+     * Traversing down to (maxDepth - lod) steps returns filtered dominant voxels at higher tree levels.
+     */
+    fun getVoxelAtLod(x: Int, y: Int, z: Int, lod: Int = 0): VoxelType {
+        if (x !in 0 until gridSize || y !in 0 until gridSize || z !in 0 until gridSize) {
+            return VoxelType.EMPTY
+        }
+
+        val targetDepth = (maxDepth - lod).coerceAtLeast(0)
+        var currentId = rootId
+        var currentDepth = maxDepth
+
+        while (currentDepth > targetDepth) {
+            val node = nodesList[currentId]
+            if (node is SvdagNode.LeafNode) {
+                return node.voxelType
+            }
+            val internal = node as SvdagNode.InternalNode
+
+            val shift = currentDepth - 1
+            val bitX = (x shr shift) and 1
+            val bitY = (y shr shift) and 1
+            val bitZ = (z shr shift) and 1
+
+            val childIndex = (bitZ shl 2) or (bitY shl 1) or bitX
+            currentId = internal.children[childIndex]
+            currentDepth--
+        }
+
+        return when (val node = nodesList[currentId]) {
+            is SvdagNode.LeafNode -> node.voxelType
+            is SvdagNode.InternalNode -> node.dominantVoxel
+        }
     }
 
     /**
@@ -384,9 +459,77 @@ class SparseVoxelDag(val maxDepth: Int) {
     }
 
     /**
+     * DDA Voxel Raycast traversing SVDAG with a requested Level of Detail (LOD).
+     */
+    fun raycastLOD(
+        originX: Double, originY: Double, originZ: Double,
+        dirX: Double, dirY: Double, dirZ: Double,
+        maxDistance: Double = 64.0,
+        lod: Int = 0
+    ): SvdagRaycastResult {
+        if (lod <= 0) return raycast(originX, originY, originZ, dirX, dirY, dirZ, maxDistance)
+
+        val stepSize = (1 shl lod).toDouble()
+        var currX = originX
+        var currY = originY
+        var currZ = originZ
+
+        val invDirX = if (abs(dirX) > 0.00001) 1.0 / dirX else 1e9
+        val invDirY = if (abs(dirY) > 0.00001) 1.0 / dirY else 1e9
+        val invDirZ = if (abs(dirZ) > 0.00001) 1.0 / dirZ else 1e9
+
+        var traversedDist = 0.0
+        var steps = 0
+        val maxSteps = (gridSize / stepSize.toInt()).coerceAtLeast(1) * 3
+
+        while (traversedDist < maxDistance && steps < maxSteps) {
+            steps++
+            val vx = currX.toInt()
+            val vy = currY.toInt()
+            val vz = currZ.toInt()
+
+            if (vx in 0 until gridSize && vy in 0 until gridSize && vz in 0 until gridSize) {
+                val voxel = getVoxelAtLod(vx, vy, vz, lod)
+                if (voxel.isSolid) {
+                    return SvdagRaycastResult(
+                        hit = true,
+                        hitX = currX, hitY = currY, hitZ = currZ,
+                        voxelX = vx, voxelY = vy, voxelZ = vz,
+                        voxelType = voxel,
+                        stepsTaken = steps,
+                        distance = traversedDist
+                    )
+                }
+            } else if (traversedDist > 0 && (vx < -2 || vy < -2 || vz < -2 || vx > gridSize + 2 || vy > gridSize + 2 || vz > gridSize + 2)) {
+                break
+            }
+
+            val stepMargin = stepSize
+            val nextX = if (dirX > 0) ((vx / stepSize.toInt() + 1) * stepSize - currX) * invDirX else (currX - (vx / stepSize.toInt()) * stepSize) * abs(invDirX)
+            val nextY = if (dirY > 0) ((vy / stepSize.toInt() + 1) * stepSize - currY) * invDirY else (currY - (vy / stepSize.toInt()) * stepSize) * abs(invDirY)
+            val nextZ = if (dirZ > 0) ((vz / stepSize.toInt() + 1) * stepSize - currZ) * invDirZ else (currZ - (vz / stepSize.toInt()) * stepSize) * abs(invDirZ)
+
+            val minDelta = minOf(nextX.coerceAtLeast(0.01), nextY.coerceAtLeast(0.01), nextZ.coerceAtLeast(0.01))
+            currX += dirX * minDelta
+            currY += dirY * minDelta
+            currZ += dirZ * minDelta
+            traversedDist += minDelta
+        }
+
+        return SvdagRaycastResult(
+            hit = false,
+            hitX = currX, hitY = currY, hitZ = currZ,
+            voxelX = currX.toInt(), voxelY = currY.toInt(), voxelZ = currZ.toInt(),
+            voxelType = VoxelType.EMPTY,
+            stepsTaken = steps,
+            distance = traversedDist
+        )
+    }
+
+    /**
      * Compute current DAG node pool statistics & compression metrics.
      */
-    fun getStats(buildTimeMs: Long = 0, raycastMicros: Double = 0.0): SvdagStats {
+    fun getStats(buildTimeMs: Long = 0, raycastMicros: Double = 0.0, lodLevel: Int = 0): SvdagStats {
         var leaves = 0
         var internals = 0
         for (node in nodesList) {
@@ -399,6 +542,8 @@ class SparseVoxelDag(val maxDepth: Int) {
         val dagBytes = (leaves * 16L) + (internals * 56L)
         val compression = if (rawBytes > 0) (1.0f - (dagBytes.toFloat() / rawBytes.toFloat())) * 100.0f else 0f
 
+        val cellSize = 1 shl lodLevel
+
         return SvdagStats(
             maxDepth = maxDepth,
             gridSize = gridSize,
@@ -410,7 +555,9 @@ class SparseVoxelDag(val maxDepth: Int) {
             dagMemoryBytes = dagBytes,
             compressionRatio = compression.coerceIn(0f, 99.99f),
             buildTimeMs = buildTimeMs,
-            averageRaycastMicros = raycastMicros
+            averageRaycastMicros = raycastMicros,
+            currentLodLevel = lodLevel,
+            lodCellSize = cellSize
         )
     }
 

@@ -46,7 +46,12 @@ fun SvdagWorldInspectorScreen(
     currentStats: SvdagStats,
     scanSummary: SvdagScanSummary? = null,
     scanRippleState: SvdagRippleState? = null,
+    iceEntities: List<IceEntity> = emptyList(),
+    playerPos: Triple<Int, Int, Int> = Triple(2, 2, 3),
+    playerHideStatus: PlayerHideStatus? = null,
     onTriggerScan: ((ox: Int, oy: Int, oz: Int, radius: Int) -> Unit)? = null,
+    onTickIceAI: (() -> Unit)? = null,
+    onMovePlayer: ((dx: Int, dy: Int, dz: Int) -> Unit)? = null,
     onRegenerateDag: (targetDepth: Int, seed: Long) -> Unit,
     onModifyVoxel: (x: Int, y: Int, z: Int, type: VoxelType) -> Unit,
     onBackToGame: () -> Unit,
@@ -54,6 +59,7 @@ fun SvdagWorldInspectorScreen(
 ) {
     val view = LocalView.current
     var selectedDepth by remember(currentDag) { mutableStateOf(currentDag.maxDepth) }
+    var selectedLodLevel by remember { mutableIntStateOf(currentStats.currentLodLevel) }
     var sliceAxis by remember { mutableStateOf("XY") } // "XY", "XZ", "YZ"
     var selectedZ by remember(currentDag) { mutableStateOf(currentDag.gridSize / 2) }
     var selectedVoxelType by remember { mutableStateOf(VoxelType.SOLID_WALL) }
@@ -223,6 +229,85 @@ fun SvdagWorldInspectorScreen(
                                 text = label,
                                 color = if (isSelected) Color.Black else Color.White,
                                 fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 2B. LEVEL OF DETAIL (LOD) SYSTEM CONTROL BAR ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = cyberCardBg),
+            border = BorderStroke(1.dp, cyberGold.copy(alpha = 0.6f)),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "LEVEL OF DETAIL (LOD) HIERARCHY FILTER",
+                        color = cyberGold,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Surface(
+                        color = cyberGold.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(1.dp, cyberGold)
+                    ) {
+                        Text(
+                            text = "LOD $selectedLodLevel (${1 shl selectedLodLevel}³ VOXEL BLOCK)",
+                            color = cyberGold,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        Pair(0, "LOD 0\n[Full 1x1]"),
+                        Pair(1, "LOD 1\n[Coarse 2x2]"),
+                        Pair(2, "LOD 2\n[Block 4x4]"),
+                        Pair(3, "LOD 3\n[Zone 8x8]")
+                    ).forEach { (lod, label) ->
+                        val isSelected = selectedLodLevel == lod
+                        Button(
+                            onClick = {
+                                view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                selectedLodLevel = lod
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isSelected) cyberGold else Color(0xFF1E293B)
+                            ),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("svdag_lod_$lod")
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isSelected) Color.Black else Color.White,
+                                fontSize = 8.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
                                 textAlign = TextAlign.Center
@@ -450,7 +535,7 @@ fun SvdagWorldInspectorScreen(
                     Canvas(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(currentDag, selectedZ, sliceAxis, selectedVoxelType) {
+                            .pointerInput(currentDag, selectedZ, sliceAxis, selectedVoxelType, selectedLodLevel) {
                                 detectTapGestures { offset ->
                                     val cellWidth = size.width / gridDisplaySize
                                     val cellHeight = size.height / gridDisplaySize
@@ -479,7 +564,7 @@ fun SvdagWorldInspectorScreen(
                                     else -> Triple(selectedZ, x, y)
                                 }
 
-                                val vType = currentDag.getVoxel(vx, vy, vz)
+                                val vType = currentDag.getVoxelAtLod(vx, vy, vz, selectedLodLevel)
 
                                 if (vType != VoxelType.EMPTY) {
                                     drawRect(
@@ -580,6 +665,95 @@ fun SvdagWorldInspectorScreen(
                                 style = Stroke(width = 2f)
                             )
                         }
+
+                        // --- DRAW ACTIVE ICE ENTITIES ON CANVAS ---
+                        for (ice in iceEntities) {
+                            val inSlice = when (sliceAxis) {
+                                "XY" -> ice.z == selectedZ
+                                "XZ" -> ice.y == selectedZ
+                                else -> ice.x == selectedZ
+                            }
+                            if (inSlice) {
+                                val (ix, iy) = when (sliceAxis) {
+                                    "XY" -> Pair(ice.x, ice.y)
+                                    "XZ" -> Pair(ice.x, ice.z)
+                                    else -> Pair(ice.y, ice.z)
+                                }
+                                if (ix in 0 until gridDisplaySize && iy in 0 until gridDisplaySize) {
+                                    val center = Offset(ix * cellW + cellW / 2f, iy * cellH + cellH / 2f)
+                                    val alertColor = Color(ice.alertLevel.colorHex)
+
+                                    // Faint detection radius ring
+                                    drawCircle(
+                                        color = alertColor.copy(alpha = 0.25f),
+                                        radius = ice.type.detectionRadius * cellW,
+                                        center = center,
+                                        style = Stroke(width = 1.5f)
+                                    )
+                                    // Pulsing threat node
+                                    drawCircle(
+                                        color = alertColor.copy(alpha = 0.4f),
+                                        radius = cellW * 0.6f,
+                                        center = center
+                                    )
+                                    drawCircle(
+                                        color = alertColor,
+                                        radius = cellW * 0.35f,
+                                        center = center,
+                                        style = Stroke(width = 2.5f)
+                                    )
+                                    // Directional indicator ray
+                                    val dirX = when (sliceAxis) {
+                                        "XY" -> ice.facingDx
+                                        "XZ" -> ice.facingDx
+                                        else -> ice.facingDy
+                                    }
+                                    val dirY = when (sliceAxis) {
+                                        "XY" -> ice.facingDy
+                                        "XZ" -> ice.facingDz
+                                        else -> ice.facingDz
+                                    }
+                                    val endRay = Offset(center.x + dirX * cellW * 0.8f, center.y + dirY * cellH * 0.8f)
+                                    drawLine(
+                                        color = alertColor,
+                                        start = center,
+                                        end = endRay,
+                                        strokeWidth = 3f
+                                    )
+                                }
+                            }
+                        }
+
+                        // --- DRAW PLAYER POSITION ON CANVAS ---
+                        val pInSlice = when (sliceAxis) {
+                            "XY" -> playerPos.third == selectedZ
+                            "XZ" -> playerPos.second == selectedZ
+                            else -> playerPos.first == selectedZ
+                        }
+                        if (pInSlice) {
+                            val (px, py) = when (sliceAxis) {
+                                "XY" -> Pair(playerPos.first, playerPos.second)
+                                "XZ" -> Pair(playerPos.first, playerPos.third)
+                                else -> Pair(playerPos.second, playerPos.third)
+                            }
+                            if (px in 0 until gridDisplaySize && py in 0 until gridDisplaySize) {
+                                val pCenter = Offset(px * cellW + cellW / 2f, py * cellH + cellH / 2f)
+                                val isHidden = playerHideStatus?.isHidden == true
+                                val pColor = if (isHidden) Color(0xFF10B981) else Color(0xFF00E5FF)
+
+                                drawCircle(
+                                    color = pColor.copy(alpha = 0.5f),
+                                    radius = cellW * 0.7f,
+                                    center = pCenter
+                                )
+                                drawCircle(
+                                    color = Color.White,
+                                    radius = cellW * 0.4f,
+                                    center = pCenter,
+                                    style = Stroke(width = 3f)
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -596,7 +770,235 @@ fun SvdagWorldInspectorScreen(
             }
         }
 
-        // --- 5. SVDAG Scanner Service & Visual Ripple Highlights ---
+        // --- 5. ICE SECURITY PATROL & STEALTH HIDING SYSTEM ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = cyberCardBg),
+            border = BorderStroke(1.dp, Color(0xFFFF0055).copy(alpha = 0.6f)),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "🛡️ ICE SECURITY PATROL & STEALTH AI",
+                        color = Color(0xFFFF0055),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    val isHidden = playerHideStatus?.isHidden == true
+                    Surface(
+                        color = if (isHidden) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFFF0055).copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(1.dp, if (isHidden) Color(0xFF10B981) else Color(0xFFFF0055))
+                    ) {
+                        Text(
+                            text = if (isHidden) "🟢 STEALTH CONCEALED" else "🚨 EXPOSED IN HALLWAY",
+                            color = if (isHidden) Color(0xFF10B981) else Color(0xFFFF0055),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Player Hide Reason Subtext
+                Surface(
+                    color = Color(0xFF0F172A),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = playerHideStatus?.hideReason ?: "🚨 Player exposed in hallway corridor. ICE patrols will initiate A* pathfinding pursuit if in line of sight!",
+                        color = if (playerHideStatus?.isHidden == true) Color(0xFF10B981) else Color(0xFFF87171),
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(8.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Player Stepping Controls
+                Text(
+                    text = "RUNNER MOVEMENT CONTROLS (POS: (${playerPos.first}, ${playerPos.second}, ${playerPos.third}))",
+                    color = cyberCyan,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onMovePlayer?.invoke(-1, 0, 0)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.weight(1f).testTag("svdag_move_x_neg")
+                    ) {
+                        Text("◄ X-", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onMovePlayer?.invoke(1, 0, 0)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.weight(1f).testTag("svdag_move_x_pos")
+                    ) {
+                        Text("► X+", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onMovePlayer?.invoke(0, -1, 0)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.weight(1f).testTag("svdag_move_y_neg")
+                    ) {
+                        Text("▲ Y-", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onMovePlayer?.invoke(0, 1, 0)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.weight(1f).testTag("svdag_move_y_pos")
+                    ) {
+                        Text("▼ Y+", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onMovePlayer?.invoke(0, 0, -1)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.weight(1f).testTag("svdag_move_z_neg")
+                    ) {
+                        Text("▲ Z-", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            onMovePlayer?.invoke(0, 0, 1)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.weight(1f).testTag("svdag_move_z_pos")
+                    ) {
+                        Text("▼ Z+", fontSize = 9.sp, color = Color.White, fontFamily = FontFamily.Monospace)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // ICE AI Tick Trigger
+                Button(
+                    onClick = {
+                        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        onTickIceAI?.invoke()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF0055)),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("svdag_tick_ice_ai")
+                ) {
+                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Tick ICE", tint = Color.White)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "EXECUTE ICE PATHFINDING AI TICK (A* HALLWAY SWEEP)",
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // List of Active ICE Entities
+                Text(
+                    text = "ACTIVE ICE PATROL UNITS (${iceEntities.size})",
+                    color = cyberGold,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    iceEntities.forEach { ice ->
+                        Surface(
+                            color = Color(0xFF0F172A),
+                            border = BorderStroke(1.dp, Color(ice.alertLevel.colorHex)),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "${ice.name} [${ice.id}]",
+                                        color = Color.White,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Surface(
+                                        color = Color(ice.alertLevel.colorHex).copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(4.dp)
+                                    ) {
+                                        Text(
+                                            text = ice.alertLevel.label,
+                                            color = Color(ice.alertLevel.colorHex),
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Position: (${ice.x}, ${ice.y}, ${ice.z}) | Facing: (${ice.facingDx}, ${ice.facingDy}, ${ice.facingDz}) | Speed: ${ice.type.speed} | Radius: ${ice.type.detectionRadius}",
+                                    color = Color.LightGray,
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- 6. SVDAG Scanner Service & Visual Ripple Highlights ---
         Card(
             colors = CardDefaults.cardColors(containerColor = cyberCardBg),
             border = BorderStroke(1.dp, cyberCyan.copy(alpha = 0.6f)),
@@ -697,8 +1099,20 @@ fun SvdagWorldInspectorScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("BYPASS PATHS", color = Color(0xFF10B981), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                                Text("${sum.alternativePathCount}", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("BYPASS PATHS", color = Color(0xFF10B981), fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("${sum.alternativePathCount}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+
+                        Surface(
+                            color = Color(0xFFFF0055).copy(alpha = 0.15f),
+                            border = BorderStroke(1.dp, Color(0xFFFF0055)),
+                            shape = RoundedCornerShape(6.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("ICE THREATS", color = Color(0xFFFF0055), fontSize = 7.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                Text("${sum.iceCount}", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                             }
                         }
                     }
@@ -806,10 +1220,11 @@ fun SvdagWorldInspectorScreen(
                 Button(
                     onClick = {
                         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                        raycastResult = currentDag.raycast(
+                        raycastResult = currentDag.raycastLOD(
                             raycastOriginX, raycastOriginY, raycastOriginZ,
                             raycastDirX, raycastDirY, raycastDirZ,
-                            maxDistance = currentDag.gridSize.toDouble()
+                            maxDistance = currentDag.gridSize.toDouble(),
+                            lod = selectedLodLevel
                         )
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = cyberBlue),
@@ -821,7 +1236,7 @@ fun SvdagWorldInspectorScreen(
                     Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Fire Ray")
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "EXECUTE SVDAG RAYCAST TEST",
+                        text = "EXECUTE SVDAG RAYCAST TEST (LOD $selectedLodLevel)",
                         color = Color.White,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

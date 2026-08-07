@@ -24,6 +24,11 @@ enum class SvdagScanCategory(
         displayName = "Bypass / Sub-Conduit",
         colorHex = 0xFF10B981, // Cyber Emerald / Teal
         description = "Ventilation service ducts, alternative conduits, elevators, and staircases."
+    ),
+    HAZARD_ICE(
+        displayName = "ICE Security Threat",
+        colorHex = 0xFFFF0055, // Cyber Crimson / Red
+        description = "Active Intrusion Countermeasures Electronics patrolling SVDAG hallways."
     )
 }
 
@@ -66,6 +71,7 @@ data class SvdagScanSummary(
     val interactiveCount: Int,
     val secretCount: Int,
     val alternativePathCount: Int,
+    val iceCount: Int = 0,
     val maxRadius: Float,
     val scanDurationMs: Long,
     val items: List<SvdagDetectedItem>
@@ -96,6 +102,9 @@ object SvdagScannerService {
             VoxelType.GRAVITY_SLOPE,
             VoxelType.ELEVATED_BALCONY -> SvdagScanCategory.ALTERNATIVE_PATH
 
+            VoxelType.BLACK_ICE,
+            VoxelType.ICE_PATROL -> SvdagScanCategory.HAZARD_ICE
+
             else -> null
         }
     }
@@ -114,19 +123,22 @@ object SvdagScannerService {
         VoxelType.ELEVATOR -> "Elevator column connecting building floor levels."
         VoxelType.GRAVITY_SLOPE -> "Gravity-assisted slope transition route."
         VoxelType.ELEVATED_BALCONY -> "High-altitude balcony overlook with tactical vantage."
+        VoxelType.BLACK_ICE -> "Lethal Black-ICE barrier process guarding core data routes."
+        VoxelType.ICE_PATROL -> "Active Intrusion Countermeasures Electronics patrolling SVDAG hallway."
         else -> type.displayName
     }
 
     /**
      * Performs a 3D spatial scan query over the SparseVoxelDag structure
-     * identifying interactive game objects, secrets, and alternative paths.
+     * identifying interactive game objects, secrets, alternative paths, and active ICE threats.
      */
     fun performSvdagScan(
         dag: SparseVoxelDag,
         originX: Int,
         originY: Int,
         originZ: Int,
-        radius: Int = 12
+        radius: Int = 12,
+        activeIceEntities: List<IceEntity> = emptyList()
     ): SvdagScanSummary {
         val startTime = System.currentTimeMillis()
         val detected = mutableListOf<SvdagDetectedItem>()
@@ -171,6 +183,35 @@ object SvdagScannerService {
             }
         }
 
+        // Also detect active ICE entities passed from state
+        for (ice in activeIceEntities) {
+            val dx = ice.x - originX
+            val dy = ice.y - originY
+            val dz = ice.z - originZ
+            val distSq = (dx * dx + dy * dy + dz * dz).toDouble()
+            if (distSq <= radiusSq) {
+                val dist = sqrt(distSq)
+                val statusText = when (ice.alertLevel) {
+                    IceAlertLevel.PATROL -> "Patrolling hallway corridor"
+                    IceAlertLevel.SUSPICIOUS -> "Searching last known signal"
+                    IceAlertLevel.HUNTING -> "🚨 HUNTING PLAYER!"
+                }
+                detected.add(
+                    SvdagDetectedItem(
+                        x = ice.x,
+                        y = ice.y,
+                        z = ice.z,
+                        voxelType = VoxelType.ICE_PATROL,
+                        category = SvdagScanCategory.HAZARD_ICE,
+                        distanceFromOrigin = dist,
+                        displayName = "${ice.name} [${ice.id}]",
+                        description = "Type: ${ice.type.typeName} | Status: ${ice.alertLevel.label} | $statusText",
+                        colorHex = SvdagScanCategory.HAZARD_ICE.colorHex
+                    )
+                )
+            }
+        }
+
         val sortedItems = detected.sortedBy { it.distanceFromOrigin }
         val durationMs = System.currentTimeMillis() - startTime
 
@@ -179,6 +220,7 @@ object SvdagScannerService {
             interactiveCount = sortedItems.count { it.category == SvdagScanCategory.INTERACTIVE },
             secretCount = sortedItems.count { it.category == SvdagScanCategory.SECRET },
             alternativePathCount = sortedItems.count { it.category == SvdagScanCategory.ALTERNATIVE_PATH },
+            iceCount = sortedItems.count { it.category == SvdagScanCategory.HAZARD_ICE },
             maxRadius = radius.toFloat(),
             scanDurationMs = durationMs,
             items = sortedItems

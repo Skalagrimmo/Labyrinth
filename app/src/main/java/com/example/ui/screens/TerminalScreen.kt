@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import android.view.HapticFeedbackConstants
@@ -397,12 +398,29 @@ fun TerminalScreen(
                                     currentStats = stats,
                                     scanSummary = uiState.svdagScanSummary,
                                     scanRippleState = uiState.svdagRippleState,
+                                    iceEntities = uiState.svdagIceEntities,
+                                    playerPos = uiState.svdagPlayerPos,
+                                    playerHideStatus = uiState.svdagPlayerHideStatus,
                                     onTriggerScan = { ox, oy, oz, radius -> viewModel.triggerSvdagScan(ox, oy, oz, radius) },
+                                    onTickIceAI = { viewModel.tickSvdagIceAI() },
+                                    onMovePlayer = { dx, dy, dz -> viewModel.moveSvdagPlayer(dx, dy, dz) },
                                     onRegenerateDag = { depth, seed -> viewModel.initOrRegenerateSvdag(depth, seed) },
                                     onModifyVoxel = { x, y, z, type -> viewModel.modifySvdagVoxel(x, y, z, type) },
                                     onBackToGame = { viewModel.exitSvdagWorldInspector() }
                                 )
                             }
+                        }
+                        GameViewModel.ActiveScreen.DATA_FRAGMENTS_VAULT -> {
+                            DataVaultScreen(
+                                uiState = uiState,
+                                onUnlockTheme = { viewModel.unlockCosmeticTheme(it) },
+                                onEquipTheme = { viewModel.setActiveTheme(it) },
+                                onUnlockPrompt = { viewModel.unlockPromptStyle(it) },
+                                onEquipPrompt = { viewModel.setActivePromptStyle(it) },
+                                onUnlockBuff = { viewModel.unlockPerformanceBuff(it) },
+                                onToggleBuff = { viewModel.togglePerformanceBuff(it) },
+                                onExitVault = { viewModel.exitDataVaultScreen() }
+                            )
                         }
                     }
                 }
@@ -561,12 +579,29 @@ fun TerminalScreen(
                                     currentStats = stats,
                                     scanSummary = uiState.svdagScanSummary,
                                     scanRippleState = uiState.svdagRippleState,
+                                    iceEntities = uiState.svdagIceEntities,
+                                    playerPos = uiState.svdagPlayerPos,
+                                    playerHideStatus = uiState.svdagPlayerHideStatus,
                                     onTriggerScan = { ox, oy, oz, radius -> viewModel.triggerSvdagScan(ox, oy, oz, radius) },
+                                    onTickIceAI = { viewModel.tickSvdagIceAI() },
+                                    onMovePlayer = { dx, dy, dz -> viewModel.moveSvdagPlayer(dx, dy, dz) },
                                     onRegenerateDag = { depth, seed -> viewModel.initOrRegenerateSvdag(depth, seed) },
                                     onModifyVoxel = { x, y, z, type -> viewModel.modifySvdagVoxel(x, y, z, type) },
                                     onBackToGame = { viewModel.exitSvdagWorldInspector() }
                                 )
                             }
+                        }
+                        GameViewModel.ActiveScreen.DATA_FRAGMENTS_VAULT -> {
+                            DataVaultScreen(
+                                uiState = uiState,
+                                onUnlockTheme = { viewModel.unlockCosmeticTheme(it) },
+                                onEquipTheme = { viewModel.setActiveTheme(it) },
+                                onUnlockPrompt = { viewModel.unlockPromptStyle(it) },
+                                onEquipPrompt = { viewModel.setActivePromptStyle(it) },
+                                onUnlockBuff = { viewModel.unlockPerformanceBuff(it) },
+                                onToggleBuff = { viewModel.togglePerformanceBuff(it) },
+                                onExitVault = { viewModel.exitDataVaultScreen() }
+                            )
                         }
                     }
                 }
@@ -6986,6 +7021,26 @@ fun StartMenuView(
                         text = "📊 MAINFRAME HISTORIC RECORDS",
                         color = CyberCyan,
                         fontFamily = FontFamily.Monospace,
+                        fontSize = 12.sp
+                    )
+                }
+
+                // Data Fragment Vault Button
+                val currentFrags = viewModel.uiState.collectAsState().value.dataFragments
+                Button(
+                    onClick = { viewModel.enterDataVaultScreen() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00FFCC).copy(alpha = 0.15f)),
+                    border = BorderStroke(1.dp, Color(0xFF00FFCC)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp)
+                        .testTag("btn_data_fragment_vault")
+                ) {
+                    Text(
+                        text = "💾 DATA VAULT [FRAGMENTS: $currentFrags]",
+                        color = Color(0xFF00FFCC),
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
                 }

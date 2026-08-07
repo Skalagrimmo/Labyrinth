@@ -244,6 +244,116 @@ class CyberSoundEffectsManager private constructor(context: Context) {
         }
     }
 
+    private fun playFrequencySweep(
+        startFreqHz: Double,
+        endFreqHz: Double,
+        durationMs: Int,
+        volume: Float = 0.35f,
+        isHarshSquare: Boolean = false
+    ) {
+        if (isMuted) return
+        scope.launch(Dispatchers.Default) {
+            try {
+                val sampleRate = 22050
+                val numSamples = (sampleRate * (durationMs / 1000.0)).toInt().coerceAtLeast(100)
+                val buffer = ShortArray(numSamples)
+                var phase = 0.0
+
+                for (i in 0 until numSamples) {
+                    val progress = i.toDouble() / numSamples
+                    val currentFreq = startFreqHz + (endFreqHz - startFreqHz) * progress
+                    val phaseIncrement = 2.0 * Math.PI * currentFreq / sampleRate
+
+                    val env = when {
+                        i < 80 -> i / 80.0
+                        i > numSamples - 80 -> (numSamples - i) / 80.0
+                        else -> 1.0
+                    }
+
+                    val rawWave = if (isHarshSquare) {
+                        if (Math.sin(phase) >= 0) 1.0 else -1.0
+                    } else {
+                        Math.sin(phase)
+                    }
+
+                    val sample = (rawWave * 32767 * volume * env).toInt().coerceIn(-32768, 32767)
+                    buffer[i] = sample.toShort()
+                    phase += phaseIncrement
+                }
+
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_GAME)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build()
+                    )
+                    .setAudioFormat(
+                        AudioFormat.Builder()
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sampleRate)
+                            .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                            .build()
+                    )
+                    .setBufferSizeInBytes(buffer.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+
+                track.write(buffer, 0, buffer.size)
+                track.play()
+                delay(durationMs.toLong() + 40)
+                track.release()
+            } catch (e: Exception) {
+                Log.e("CyberSoundEffects", "Error playing PCM sweep sound effect", e)
+            }
+        }
+    }
+
+    /**
+     * Audio cue when initiating a spatial sonar/radar map scan.
+     */
+    fun playScannerPingSound() {
+        playFrequencySweep(startFreqHz = 1600.0, endFreqHz = 900.0, durationMs = 120, volume = 0.4f)
+    }
+
+    /**
+     * Audio cue triggered when scanner detects interactive items, secrets, or bypass paths.
+     * Plays ascending pitches proportional to item count and distinct chimes for secrets or bypass routes.
+     */
+    fun playScannerDetectionSound(itemCount: Int, hasSecrets: Boolean = false, hasBypass: Boolean = false) {
+        if (isMuted) return
+        scope.launch {
+            if (itemCount <= 0) {
+                // Low subtle ping for empty scan area
+                playTone(320.0, 90, 0.2f)
+                return@launch
+            }
+
+            // Ascending pitch sonar blips based on detected count
+            val baseNotes = doubleArrayOf(523.25, 659.25, 783.99, 1046.50, 1318.51, 1567.98) // C5, E5, G5, C6, E6, G6
+            val countToPlay = itemCount.coerceIn(1, baseNotes.size)
+
+            for (idx in 0 until countToPlay) {
+                playTone(baseNotes[idx], 60, 0.35f)
+                delay(50)
+            }
+
+            // High-pitched gold shimmer chime for detected secrets
+            if (hasSecrets) {
+                delay(40)
+                playTone(2093.0, 140, 0.45f) // C7 note
+                delay(30)
+                playTone(2637.0, 160, 0.4f)  // E7 note
+            }
+
+            // Emerald synth blip for bypass conduits / vents
+            if (hasBypass) {
+                delay(30)
+                playFrequencySweep(startFreqHz = 1100.0, endFreqHz = 1750.0, durationMs = 90, volume = 0.35f)
+            }
+        }
+    }
+
     /**
      * Audio cue when executing terminal commands.
      */
@@ -339,21 +449,58 @@ class CyberSoundEffectsManager private constructor(context: Context) {
     }
 
     /**
+     * Audio cue when hacking a security node or breaching a system terminal succeeds.
+     * Plays a triumphant multi-stage digital breach victory sequence.
+     */
+    fun playSecurityNodeHackSuccessSound() {
+        if (isMuted) return
+        scope.launch {
+            // Stage 1: Ascending cyber triad cascade
+            playTone(659.25, 70, 0.35f)  // E5
+            delay(65)
+            playTone(880.0, 70, 0.4f)   // A5
+            delay(65)
+            playTone(1046.50, 80, 0.45f) // C6
+            delay(75)
+            playTone(1318.51, 110, 0.5f) // E6
+            delay(80)
+
+            // Stage 2: Sub-bass resonance chime indicating access barrier override
+            playTone(220.0, 180, 0.4f)
+            playTone(1760.0, 220, 0.45f) // High A6 harmonic shimmer
+        }
+    }
+
+    /**
+     * Audio cue when hacking a security node or breaching a system terminal fails.
+     * Plays a harsh electrical glitch alarm & descending ICE lockout sweep.
+     */
+    fun playSecurityNodeHackFailureSound() {
+        if (isMuted) return
+        scope.launch {
+            // Stage 1: Harsh 150Hz feedback error burst
+            playFrequencySweep(startFreqHz = 180.0, endFreqHz = 120.0, durationMs = 150, volume = 0.5f, isHarshSquare = true)
+            delay(130)
+
+            // Stage 2: Descending dual alarm siren lockout
+            playFrequencySweep(startFreqHz = 520.0, endFreqHz = 220.0, durationMs = 180, volume = 0.45f)
+            delay(120)
+            playTone(95.0, 250, 0.6f) // Deep hardware feedback impact
+        }
+    }
+
+    /**
      * Audio cue for successful node breach or pattern match.
      */
     fun playHackingSuccessSound() {
-        scope.launch {
-            playTone(880.0, 90)
-            delay(100)
-            playTone(1760.0, 140)
-        }
+        playSecurityNodeHackSuccessSound()
     }
 
     /**
      * Audio cue for failed hack or security error.
      */
     fun playHackingErrorSound() {
-        playTone(150.0, 200, 0.5f)
+        playSecurityNodeHackFailureSound()
     }
 
     /**

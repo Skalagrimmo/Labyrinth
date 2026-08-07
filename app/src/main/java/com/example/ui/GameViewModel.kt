@@ -200,8 +200,23 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val svdagWorld: com.example.data.svdag.SparseVoxelDag? = null,
         val svdagStats: com.example.data.svdag.SvdagStats? = null,
         val svdagScaleDepth: Int = 7,
+        val svdagLodLevel: Int = 0,
         val svdagScanSummary: com.example.data.svdag.SvdagScanSummary? = null,
-        val svdagRippleState: com.example.data.svdag.SvdagRippleState? = null
+        val svdagRippleState: com.example.data.svdag.SvdagRippleState? = null,
+        val svdagIceEntities: List<com.example.data.svdag.IceEntity> = emptyList(),
+        val svdagPlayerPos: Triple<Int, Int, Int> = Triple(2, 2, 3),
+        val svdagPlayerHideStatus: com.example.data.svdag.PlayerHideStatus? = null,
+        val svdagAutoPatrolActive: Boolean = false,
+
+        // Data Fragments & Cosmetic Customization Vault System
+        val dataFragments: Int = 0,
+        val totalDataFragmentsExtracted: Int = 0,
+        val unlockedThemes: Set<String> = setOf("DEFAULT_CYBER"),
+        val activeCosmeticTheme: String = "DEFAULT_CYBER",
+        val unlockedPrompts: Set<String> = setOf("DEFAULT"),
+        val activePromptStyle: String = "DEFAULT",
+        val unlockedBuffs: Set<String> = emptySet(),
+        val activeBuffs: Set<String> = emptySet()
     )
 
     enum class ActiveScreen {
@@ -214,7 +229,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         LEADERBOARD,
         GAME_OVER,
         CYBERWARE_CLINIC,
-        SVDAG_WORLD_BUILDER
+        SVDAG_WORLD_BUILDER,
+        DATA_FRAGMENTS_VAULT
     }
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -948,7 +964,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        soundManager.playNodeBreachSound()
+        soundManager.playScannerPingSound()
+        val detectedCount = if (svdagSummary != null) svdagSummary.interactiveCount else (foundEnemies.size + foundLoot.size)
+        val hasSecretVaults = if (svdagSummary != null) svdagSummary.secretCount > 0 else foundLoot.any { pair ->
+            maze[pair.second][pair.first] == CellType.SECRET_CACHE
+        }
+        val hasBypassPaths = if (svdagSummary != null) svdagSummary.alternativePathCount > 0 else false
+        soundManager.playScannerDetectionSound(itemCount = detectedCount, hasSecrets = hasSecretVaults, hasBypass = hasBypassPaths)
         addLog("📡 SECTOR SCAN EXECUTED (-$ramCost RAM): Radius $scanRadius sonar pulse active!", LogType.SUCCESS)
         if (svdagSummary != null) {
             addLog("  ↳ SVDAG SCANNER: Found ${svdagSummary.interactiveCount} Interactive, ${svdagSummary.secretCount} Secrets, ${svdagSummary.alternativePathCount} Bypass Paths.", LogType.INFO)
@@ -1211,11 +1233,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val state = _uiState.value
         if (state.screen != ActiveScreen.EXPLORATION) return
         if (state.gameState != GameState.EXPLORATION) {
-        // Просто оновлюємо AI ворога, якщо він є
-        if (state.activeEnemy != null) {
-            runRealTimeCombatTick()
+            // Просто оновлюємо AI ворога, якщо він є
+            if (state.activeEnemy != null) {
+                runRealTimeCombatTick()
+            }
+            return
         }
-        return
 
         val playerX = state.gridX
         val playerY = state.gridY
@@ -2831,6 +2854,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleHackingSuccess() {
+        soundManager.playSecurityNodeHackSuccessSound()
         val state = _uiState.value
         val nodeType = if (state.targetNodeY in state.maze.indices && state.targetNodeX in state.maze[0].indices) {
             state.maze[state.targetNodeY][state.targetNodeX]
@@ -2839,8 +2863,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         val isSecretCache = nodeType == CellType.SECRET_CACHE
-        val baseBounty = if (isSecretCache) 300 + (state.level * 100) else 100 + (state.level * 50)
+        var baseBounty = if (isSecretCache) 300 + (state.level * 100) else 100 + (state.level * 50)
+        
+        // Performance Buff: CREDIT_SIPHON (+25% bonus credits)
+        if (state.activeBuffs.contains("CREDIT_SIPHON")) {
+            baseBounty = (baseBounty * 1.25f).toInt()
+        }
         val bountyCredits = baseBounty + Random.nextInt(50)
+
+        // Data Fragments Extraction
+        val fragmentsExtracted = if (isSecretCache) Random.nextInt(3, 6) else Random.nextInt(1, 3)
 
         val rewards = if (isSecretCache) {
             listOf("SlasherMod.pkg", "AegisProtocol.sys", "OverflowExploit.exe", "Overclocker.sys", "HyperRAM.exe")
@@ -2885,11 +2917,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 nodesHackedCount = stateNow.nodesHackedCount + 1,
                 maze = updatedMaze,
                 activePuzzle = null,
-                hasElevatorKeycard = stateNow.hasElevatorKeycard || obtainedKeycard
+                hasElevatorKeycard = stateNow.hasElevatorKeycard || obtainedKeycard,
+                dataFragments = stateNow.dataFragments + fragmentsExtracted,
+                totalDataFragmentsExtracted = stateNow.totalDataFragmentsExtracted + fragmentsExtracted
             )
         }
 
         updatePerspective()
+        addLog("💾 DATA FRAGMENTS EXTRACTED: +$fragmentsExtracted Data Fragments retrieved! [Vault Total: ${_uiState.value.dataFragments}]", LogType.SUCCESS)
         if (obtainedKeycard) {
             addLog("🔑 SECURE KEYCARD RETRIEVED FROM CRYPT-CACHE!", LogType.SUCCESS)
             addLog("ELEVATOR LINK ONLINE: You can now access the Express Elevator shaft in the building center!", LogType.SUCCESS)
@@ -2905,6 +2940,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun handleHackingFailure() {
+        soundManager.playSecurityNodeHackFailureSound()
         val state = _uiState.value
         // Damage integrity as security payload penalty
         val penaltyDmg = 15 + (state.level * 5)
@@ -3600,26 +3636,123 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun ensureSvdagInitialized(targetDepth: Int = 7) {
         if (_uiState.value.svdagWorld == null || _uiState.value.svdagWorld?.maxDepth != targetDepth) {
             val (dag, stats) = com.example.data.svdag.SvdagWorldBuilder.generateCyberspaceMegaSector(targetDepth)
-            _uiState.update { it.copy(svdagWorld = dag, svdagStats = stats, svdagScaleDepth = targetDepth) }
+            val initialIce = com.example.data.svdag.SvdagIcePathfinder.generateDefaultPatrolEntities(dag)
+            val pPos = Triple(dag.gridSize / 2, dag.gridSize / 2, dag.gridSize / 2)
+            val hideStatus = com.example.data.svdag.SvdagIcePathfinder.evaluatePlayerHidingStatus(pPos.first, pPos.second, pPos.third, dag)
+            _uiState.update {
+                it.copy(
+                    svdagWorld = dag,
+                    svdagStats = stats,
+                    svdagScaleDepth = targetDepth,
+                    svdagIceEntities = initialIce,
+                    svdagPlayerPos = pPos,
+                    svdagPlayerHideStatus = hideStatus
+                )
+            }
         }
     }
 
     fun initOrRegenerateSvdag(targetDepth: Int = 7, seed: Long = System.currentTimeMillis()) {
         viewModelScope.launch(Dispatchers.Default) {
             val (dag, stats) = com.example.data.svdag.SvdagWorldBuilder.generateCyberspaceMegaSector(targetDepth, seed)
+            val initialIce = com.example.data.svdag.SvdagIcePathfinder.generateDefaultPatrolEntities(dag)
+            val pPos = Triple(dag.gridSize / 2, dag.gridSize / 2, dag.gridSize / 2)
+            val hideStatus = com.example.data.svdag.SvdagIcePathfinder.evaluatePlayerHidingStatus(pPos.first, pPos.second, pPos.third, dag)
             withContext(Dispatchers.Main) {
-                _uiState.update { it.copy(svdagWorld = dag, svdagStats = stats, svdagScaleDepth = targetDepth) }
+                _uiState.update {
+                    it.copy(
+                        svdagWorld = dag,
+                        svdagStats = stats,
+                        svdagScaleDepth = targetDepth,
+                        svdagIceEntities = initialIce,
+                        svdagPlayerPos = pPos,
+                        svdagPlayerHideStatus = hideStatus
+                    )
+                }
                 addLog("SVDAG WORLD BUILDER: Generated ${dag.gridSize}³ Voxels (${stats.totalNodes} DAG Nodes)", LogType.SUCCESS)
                 addLog("SVDAG DEDUPLICATION: ${String.format(java.util.Locale.US, "%.1f%%", stats.compressionRatio)} memory reduction.", LogType.INFO)
+                addLog("🛡️ SVDAG ICE SECURITY: Spawned ${initialIce.size} hallway patrol daemons with A* pathfinding.", LogType.ALERT)
             }
+        }
+    }
+
+    fun moveSvdagPlayer(dx: Int, dy: Int, dz: Int) {
+        val dag = _uiState.value.svdagWorld ?: return
+        val currentP = _uiState.value.svdagPlayerPos
+        val nx = (currentP.first + dx).coerceIn(0, dag.gridSize - 1)
+        val ny = (currentP.second + dy).coerceIn(0, dag.gridSize - 1)
+        val nz = (currentP.third + dz).coerceIn(0, dag.gridSize - 1)
+        val newPos = Triple(nx, ny, nz)
+
+        val hideStatus = com.example.data.svdag.SvdagIcePathfinder.evaluatePlayerHidingStatus(nx, ny, nz, dag, _uiState.value.maze)
+        _uiState.update {
+            it.copy(
+                svdagPlayerPos = newPos,
+                svdagPlayerHideStatus = hideStatus
+            )
+        }
+        if (hideStatus.isHidden) {
+            addLog("🙈 STEALTH EVASION: Player reached (${nx}, ${ny}, ${nz}) - ${hideStatus.hideReason}", LogType.INFO)
+        } else {
+            addLog("👟 PLAYER MOVED: Position (${nx}, ${ny}, ${nz}) - EXPOSED IN HALLWAY", LogType.INFO)
+        }
+    }
+
+    fun tickSvdagIceAI() {
+        val dag = _uiState.value.svdagWorld ?: return
+        val currentIce = _uiState.value.svdagIceEntities
+        val pPos = _uiState.value.svdagPlayerPos
+        val maze = _uiState.value.maze
+
+        val updatedIceList = mutableListOf<com.example.data.svdag.IceEntity>()
+        var playerIntercepted = false
+
+        for (ice in currentIce) {
+            val res = com.example.data.svdag.SvdagIcePathfinder.tickIceEntity(ice, pPos, dag, maze)
+            updatedIceList.add(res.updatedIce)
+            if (res.actionMessage.isNotEmpty()) {
+                val logType = when (res.updatedIce.alertLevel) {
+                    com.example.data.svdag.IceAlertLevel.HUNTING -> LogType.ALERT
+                    com.example.data.svdag.IceAlertLevel.SUSPICIOUS -> LogType.INFO
+                    com.example.data.svdag.IceAlertLevel.PATROL -> LogType.INFO
+                }
+                addLog(res.actionMessage, logType)
+            }
+            if (res.interceptedPlayer) {
+                playerIntercepted = true
+            }
+        }
+
+        val hideStatus = com.example.data.svdag.SvdagIcePathfinder.evaluatePlayerHidingStatus(pPos.first, pPos.second, pPos.third, dag, maze)
+
+        _uiState.update {
+            it.copy(
+                svdagIceEntities = updatedIceList,
+                svdagPlayerHideStatus = hideStatus
+            )
+        }
+
+        if (playerIntercepted && !hideStatus.isHidden) {
+            soundManager.playHackingErrorSound()
+            addLog("💥 CRITICAL SECURITY BREACH: ICE Security Patrol intercepted player in hallway!", LogType.ALERT)
+            triggerCombatInline(pPos.first, pPos.second)
         }
     }
 
     fun modifySvdagVoxel(x: Int, y: Int, z: Int, type: com.example.data.svdag.VoxelType) {
         val currentDag = _uiState.value.svdagWorld ?: return
         currentDag.setVoxel(x, y, z, type)
-        val newStats = currentDag.getStats()
+        val newStats = currentDag.getStats(lodLevel = _uiState.value.svdagLodLevel)
         _uiState.update { it.copy(svdagStats = newStats) }
+    }
+
+    fun setSvdagLodLevel(lod: Int) {
+        val activeLod = lod.coerceIn(0, 4)
+        val dag = _uiState.value.svdagWorld
+        val newStats = dag?.getStats(lodLevel = activeLod) ?: _uiState.value.svdagStats
+        _uiState.update { it.copy(svdagLodLevel = activeLod, svdagStats = newStats) }
+        val cellSize = 1 shl activeLod
+        addLog("SVDAG LOD SYSTEM: Switched to Level of Detail $activeLod ($cellSize³ Voxel Block Aggregation)", LogType.INFO)
     }
 
     fun triggerSvdagScan(originX: Int? = null, originY: Int? = null, originZ: Int? = null, radius: Int = 16) {
@@ -3633,7 +3766,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             originX = ox,
             originY = oy,
             originZ = oz,
-            radius = radius
+            radius = radius,
+            activeIceEntities = _uiState.value.svdagIceEntities
         )
 
         val now = System.currentTimeMillis()
@@ -3655,7 +3789,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
 
-        soundManager.playNodeBreachSound()
+        soundManager.playScannerPingSound()
+        soundManager.playScannerDetectionSound(
+            itemCount = summary.interactiveCount,
+            hasSecrets = summary.secretCount > 0,
+            hasBypass = summary.alternativePathCount > 0
+        )
         addLog("📡 SVDAG SCANNER SERVICE EXECUTED: Radius $radius Voxels sonar sweep!", LogType.SUCCESS)
         addLog("  ↳ Detected ${summary.interactiveCount} Interactive Objects, ${summary.secretCount} Classified Secrets, ${summary.alternativePathCount} Bypass Vents.", LogType.INFO)
     }
@@ -3690,6 +3829,164 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             repository.clearAll()
             addLog("MAINFRAME LOGS PURGED SUCCESSFULLY.", LogType.ALERT)
+        }
+    }
+
+    // --- DATA FRAGMENTS & COSMETIC VAULT METHODS ---
+
+    fun extractDataFragments(amount: Int, sourceDescription: String) {
+        if (amount <= 0) return
+        _uiState.update { s ->
+            val updatedFrags = s.dataFragments + amount
+            val updatedTotal = s.totalDataFragmentsExtracted + amount
+            s.copy(
+                dataFragments = updatedFrags,
+                totalDataFragmentsExtracted = updatedTotal
+            )
+        }
+        soundManager.playLootCollectionSound()
+        addLog("💾 DATA FRAGMENTS EXTRACTED: +$amount Fragments from $sourceDescription! [Total: ${_uiState.value.dataFragments}]", LogType.SUCCESS)
+    }
+
+    fun unlockCosmeticTheme(themeId: String) {
+        val theme = com.example.data.CosmeticTheme.fromId(themeId)
+        val s = _uiState.value
+        if (s.unlockedThemes.contains(themeId)) {
+            addLog("🎨 THEME ALREADY UNLOCKED: ${theme.title}", LogType.INFO)
+            return
+        }
+        if (s.dataFragments < theme.cost) {
+            soundManager.playHackingErrorSound()
+            addLog("❌ INSUFFICIENT DATA FRAGMENTS: Need ${theme.cost} Fragments (Have ${s.dataFragments})", LogType.ALERT)
+            return
+        }
+
+        _uiState.update { stateNow ->
+            stateNow.copy(
+                dataFragments = stateNow.dataFragments - theme.cost,
+                unlockedThemes = stateNow.unlockedThemes + themeId,
+                activeCosmeticTheme = themeId
+            )
+        }
+        soundManager.playHackingSuccessSound()
+        addLog("🎨 COSMETIC THEME UNLOCKED & EQUIPPED: ${theme.title}!", LogType.SUCCESS)
+    }
+
+    fun setActiveTheme(themeId: String) {
+        val s = _uiState.value
+        if (!s.unlockedThemes.contains(themeId)) {
+            addLog("🔒 THEME LOCKED: Unlock first with Data Fragments.", LogType.ALERT)
+            return
+        }
+        val theme = com.example.data.CosmeticTheme.fromId(themeId)
+        _uiState.update { it.copy(activeCosmeticTheme = themeId) }
+        soundManager.playTerminalKeyPressSound()
+        addLog("🎨 TERMINAL COSMETIC THEME EQUIPPED: ${theme.title}", LogType.INFO)
+    }
+
+    fun unlockPromptStyle(promptId: String) {
+        val prompt = com.example.data.TerminalPromptStyle.fromId(promptId)
+        val s = _uiState.value
+        if (s.unlockedPrompts.contains(promptId)) {
+            addLog("💻 PROMPT ALREADY UNLOCKED: ${prompt.title}", LogType.INFO)
+            return
+        }
+        if (s.dataFragments < prompt.cost) {
+            soundManager.playHackingErrorSound()
+            addLog("❌ INSUFFICIENT DATA FRAGMENTS: Need ${prompt.cost} Fragments (Have ${s.dataFragments})", LogType.ALERT)
+            return
+        }
+
+        _uiState.update { stateNow ->
+            stateNow.copy(
+                dataFragments = stateNow.dataFragments - prompt.cost,
+                unlockedPrompts = stateNow.unlockedPrompts + promptId,
+                activePromptStyle = promptId
+            )
+        }
+        soundManager.playHackingSuccessSound()
+        addLog("💻 TERMINAL PROMPT UNLOCKED & EQUIPPED: ${prompt.title} (${prompt.promptString})!", LogType.SUCCESS)
+    }
+
+    fun setActivePromptStyle(promptId: String) {
+        val s = _uiState.value
+        if (!s.unlockedPrompts.contains(promptId)) {
+            addLog("🔒 PROMPT LOCKED: Unlock first with Data Fragments.", LogType.ALERT)
+            return
+        }
+        val prompt = com.example.data.TerminalPromptStyle.fromId(promptId)
+        _uiState.update { it.copy(activePromptStyle = promptId) }
+        soundManager.playTerminalKeyPressSound()
+        addLog("💻 ACTIVE TERMINAL PROMPT SET: ${prompt.promptString}", LogType.INFO)
+    }
+
+    fun unlockPerformanceBuff(buffId: String) {
+        val buff = com.example.data.PerformanceBuff.fromId(buffId) ?: return
+        val s = _uiState.value
+        if (s.unlockedBuffs.contains(buffId)) {
+            addLog("⚡ BUFF ALREADY UNLOCKED: ${buff.title}", LogType.INFO)
+            return
+        }
+        if (s.dataFragments < buff.cost) {
+            soundManager.playHackingErrorSound()
+            addLog("❌ INSUFFICIENT DATA FRAGMENTS: Need ${buff.cost} Fragments (Have ${s.dataFragments})", LogType.ALERT)
+            return
+        }
+
+        _uiState.update { stateNow ->
+            val updatedActive = stateNow.activeBuffs + buffId
+            var updatedIntegrity = stateNow.integrity
+            var updatedMaxIntegrity = stateNow.maxIntegrity
+
+            // If thermal shield buff unlocked, apply integrity bonus
+            if (buffId == "SHIELD_MATRIX") {
+                updatedMaxIntegrity += 20
+                updatedIntegrity += 20
+            }
+
+            stateNow.copy(
+                dataFragments = stateNow.dataFragments - buff.cost,
+                unlockedBuffs = stateNow.unlockedBuffs + buffId,
+                activeBuffs = updatedActive,
+                integrity = updatedIntegrity,
+                maxIntegrity = updatedMaxIntegrity
+            )
+        }
+        soundManager.playHackingSuccessSound()
+        addLog("⚡ PERFORMANCE BUFF UNLOCKED & ACTIVATED: ${buff.title}! ${buff.description}", LogType.SUCCESS)
+    }
+
+    fun togglePerformanceBuff(buffId: String) {
+        val s = _uiState.value
+        if (!s.unlockedBuffs.contains(buffId)) {
+            addLog("🔒 BUFF LOCKED: Unlock first with Data Fragments.", LogType.ALERT)
+            return
+        }
+        val buff = com.example.data.PerformanceBuff.fromId(buffId) ?: return
+        val isCurrentlyActive = s.activeBuffs.contains(buffId)
+        val newActiveSet = if (isCurrentlyActive) s.activeBuffs - buffId else s.activeBuffs + buffId
+
+        _uiState.update { it.copy(activeBuffs = newActiveSet) }
+        soundManager.playTerminalKeyPressSound()
+        if (!isCurrentlyActive) {
+            addLog("⚡ BUFF ACTIVATED: ${buff.title} (${buff.description})", LogType.SUCCESS)
+        } else {
+            addLog("🔌 BUFF DEACTIVATED: ${buff.title}", LogType.INFO)
+        }
+    }
+
+    fun enterDataVaultScreen() {
+        _uiState.update { it.copy(screen = ActiveScreen.DATA_FRAGMENTS_VAULT) }
+        soundManager.playTerminalCommandSound()
+        addLog("🔓 ACCESSING DATA FRAGMENT DECRYPTION VAULT...", LogType.SUCCESS)
+    }
+
+    fun exitDataVaultScreen() {
+        if (_uiState.value.runnerName.isEmpty()) {
+            _uiState.update { it.copy(screen = ActiveScreen.START_MENU) }
+        } else {
+            _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
+            updatePerspective()
         }
     }
 
@@ -3809,6 +4106,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("COMBAT STANCE: 'style slash'/'chop'/'thrust', or 'stance <style>'", LogType.INFO)
                 addLog("INVENTORY: 'inventory'/'items', 'use <item>', 'equip <item>', 'unequip <slot>'", LogType.INFO)
                 addLog("EXPLORATION ARCHITECTURE: 'scavenge'/'search', 'drop <item>', 'sort <option>', 'category <type>'", LogType.INFO)
+                addLog("DATA VAULT & COSMETICS: 'vault' / 'fragments' / 'frags' (open Decryption Vault)", LogType.INFO)
                 addLog("SYSTEM: 'status'/'stats', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>' (e.g. 'hack 2 3')", LogType.INFO)
             }
@@ -3846,6 +4144,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     addLog("ERROR: Interaction command only valid during active exploration.", LogType.ERROR)
                 }
+            }
+            "vault", "fragments", "frags", "datavault" -> {
+                enterDataVaultScreen()
             }
             "status", "stats", "info", "xp", "level", "lvl" -> {
                 addLog("--- RUNNER INTEGRITY PROFILE ---", LogType.SUCCESS)
