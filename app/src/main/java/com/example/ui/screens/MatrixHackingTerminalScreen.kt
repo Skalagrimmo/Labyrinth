@@ -151,7 +151,10 @@ fun MatrixHackingTerminalScreen(
             "help" -> {
                 addLog("=== MATRIX HACKING TERMINAL COMMAND MANUAL ===", LogLevel.INFO)
                 addLog("  scan       : Scan target node open ports & active ICE", LogLevel.INFO)
-                addLog("  hack       : Launch pattern-matching mini-game to breach node", LogLevel.INFO)
+                addLog("  pattern    : Launch visual node grid pattern-matching minigame", LogLevel.INFO)
+                addLog("  hack / hex : Launch row/col hex matrix breach protocol", LogLevel.INFO)
+                addLog("  tuner      : Launch oscilloscope signal tuner minigame", LogLevel.INFO)
+                addLog("  router     : Launch conduit relay circuit router minigame", LogLevel.INFO)
                 addLog("  bypass     : Inject counter-ICE algorithm to lower firewall", LogLevel.INFO)
                 addLog("  bruteforce : Attempt brute-force key generation", LogLevel.INFO)
                 addLog("  inject     : Buffer overflow attack to dump encryption keys", LogLevel.INFO)
@@ -209,7 +212,12 @@ fun MatrixHackingTerminalScreen(
                     addLog("PAYLOAD EXECUTED. DUMPED 4096 BYTES OF ENCRYPTED MEMORY.", LogLevel.SUCCESS)
                 }
             }
-            "hack", "pattern" -> {
+            "pattern", "lock", "node" -> {
+                addLog("LAUNCHING VISUAL NODE GRID PATTERN-MATCHING MINI-GAME...", LogLevel.INFO)
+                initialSuiteMode = HackingMinigameMode.PATTERN_MATCH
+                isPatternMiniGameActive = true
+            }
+            "hack", "hex" -> {
                 addLog("LAUNCHING HIGH-SECURITY HEX MATRIX BREACH MINI-GAME...", LogLevel.INFO)
                 initialSuiteMode = HackingMinigameMode.HEX_BREACH
                 isPatternMiniGameActive = true

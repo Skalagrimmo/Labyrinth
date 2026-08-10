@@ -209,6 +209,26 @@ object SvdagWorldBuilder {
     }
 
     /**
+     * Generates a multi-floor grid-based cyberpunk openworld sector (Sewers, Streets, MegaTowers, Skywalks)
+     * combining Sparse Voxel DAG & LOD systems for first-person view exploration.
+     */
+    fun generateMultiFloorOpenWorldSector(
+        targetDepth: Int = 6, // 64x64x64 or 128x128x128
+        district: CyberEnvironmentDistrict = CyberEnvironmentDistrict.CORPORATE_CORE_DISTRICT,
+        seed: Long = System.currentTimeMillis()
+    ): ProceduralWorldResult {
+        val config = MultiFloorWorldConfig(
+            district = district,
+            targetDepth = targetDepth,
+            sewerHeight = 12,
+            streetHeight = 16,
+            buildingFloorHeight = 8,
+            seed = seed
+        )
+        return ProceduralCyberWorldGenerator.generateMultiFloorWorld(config)
+    }
+
+    /**
      * Benchmark DDA Raycasting speed on the Sparse Voxel DAG.
      */
     fun benchmarkRaycastPerformance(dag: SparseVoxelDag, iterations: Int = 500): Double {

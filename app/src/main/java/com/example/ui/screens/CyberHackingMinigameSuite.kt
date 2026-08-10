@@ -92,6 +92,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.audio.CyberSoundEffectsManager
+import com.example.audio.CyberVibrationManager
 import com.example.ui.theme.CyberAmber
 import com.example.ui.theme.CyberCardBg
 import com.example.ui.theme.CyberCyan
@@ -112,7 +113,8 @@ import kotlin.random.Random
 enum class HackingMinigameMode(val title: String, val subtitle: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     HEX_BREACH("HEX MATRIX BREACH", "Row/Col Buffer Protocol", Icons.Default.Lock),
     SIGNAL_TUNER("FREQUENCY TUNER", "Oscilloscope Wave Form Lock", Icons.Default.Refresh),
-    CIRCUIT_ROUTER("CIRCUIT RELAY", "Conduit Network Pathing", Icons.Default.Build)
+    CIRCUIT_ROUTER("CIRCUIT RELAY", "Conduit Network Pathing", Icons.Default.Build),
+    PATTERN_MATCH("PATTERN LOCK", "Visual Node Grid Sequence", Icons.Default.PlayArrow)
 }
 
 /**
@@ -321,6 +323,20 @@ fun CyberHackingMinigameSuite(
                             }
                         )
                     }
+                    HackingMinigameMode.PATTERN_MATCH -> {
+                        VisualPatternLockGameView(
+                            securityLevel = securityLevel,
+                            soundManager = soundManager,
+                            onComplete = { reward ->
+                                totalCreditsEarned += reward
+                                onSuccess(totalCreditsEarned)
+                            },
+                            onFail = {
+                                globalTraceLevel = (globalTraceLevel + 0.25f).coerceAtMost(1f)
+                                onFailed()
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -374,15 +390,22 @@ private fun HexMatrixBreachGameView(
         )
     }
 
+    val context = LocalContext.current
+    val vibrationManager = remember(context) { CyberVibrationManager(context) }
+
     // Timer loop
     LaunchedEffect(isGameOver) {
         if (!isGameOver) {
             while (timeRemaining > 0 && !isGameOver) {
                 delay(1000)
                 timeRemaining--
+                if (timeRemaining <= 5 && timeRemaining > 0) {
+                    vibrationManager.triggerLowTimerPulse()
+                }
             }
             if (timeRemaining <= 0 && !isGameOver) {
                 isGameOver = true
+                vibrationManager.triggerIceTraceWarning()
                 soundManager.playHackingErrorSound()
                 onFail()
             }
@@ -769,14 +792,21 @@ private fun FrequencySignalTunerGameView(
         resonancePercent = ((1.0f - totalDiff) * 100).toInt().coerceIn(0, 100)
     }
 
+    val context = LocalContext.current
+    val vibrationManager = remember(context) { CyberVibrationManager(context) }
+
     // Timer loop
     LaunchedEffect(isLockedIn) {
         if (!isLockedIn) {
             while (timeRemaining > 0 && !isLockedIn) {
                 delay(1000)
                 timeRemaining--
+                if (timeRemaining <= 5 && timeRemaining > 0) {
+                    vibrationManager.triggerLowTimerPulse()
+                }
             }
             if (timeRemaining <= 0 && !isLockedIn) {
+                vibrationManager.triggerIceTraceWarning()
                 soundManager.playHackingErrorSound()
                 onFail()
             }
@@ -1103,14 +1133,21 @@ private fun CircuitRelayRouterGameView(
         }
     }
 
+    val context = LocalContext.current
+    val vibrationManager = remember(context) { CyberVibrationManager(context) }
+
     // Timer loop
     LaunchedEffect(isSolved) {
         if (!isSolved) {
             while (timeRemaining > 0 && !isSolved) {
                 delay(1000)
                 timeRemaining--
+                if (timeRemaining <= 5 && timeRemaining > 0) {
+                    vibrationManager.triggerLowTimerPulse()
+                }
             }
             if (timeRemaining <= 0 && !isSolved) {
+                vibrationManager.triggerIceTraceWarning()
                 soundManager.playHackingErrorSound()
                 onFail()
             }
@@ -1242,6 +1279,446 @@ private fun ConduitTileCanvas(
                 ConduitDirection.WEST -> Offset(0f, h / 2f)
             }
             drawLine(color = pipeColor, start = center, end = endPoint, strokeWidth = strokeW)
+        }
+    }
+}
+
+/**
+ * Visual Pattern-Matching Node Grid Game View.
+ * Scales grid size (3x3 up to 5x5) and sequence length based on node security level.
+ */
+@Composable
+fun VisualPatternLockGameView(
+    securityLevel: Int = 3,
+    soundManager: CyberSoundEffectsManager,
+    onComplete: (rewardCredits: Int) -> Unit,
+    onFail: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val view = LocalView.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // Difficulty scaling
+    val gridSize = when {
+        securityLevel <= 2 -> 3
+        securityLevel <= 4 -> 4
+        else -> 5
+    }
+    val sequenceLength = (3 + securityLevel).coerceAtMost(7)
+    val totalNodes = gridSize * gridSize
+    val initialTime = (35 - securityLevel * 3).coerceAtLeast(15)
+
+    val nodeGlyphs = remember(gridSize) {
+        listOf(
+            "◈", "⬡", "❖", "⬢", "✦", "⚙", "⚡", "❇",
+            "🛡", "▲", "■", "●", "★", "◆", "✶", "⚛",
+            "🌀", "🛰", "🌌", "🔮", "🧿", "💠", "🪐", "💎", "🎯"
+        ).take(totalNodes)
+    }
+
+    // Generate random unique target sequence of nodes
+    val targetSequence = remember(securityLevel, gridSize) {
+        val list = mutableListOf<Int>()
+        var lastNode = -1
+        while (list.size < sequenceLength) {
+            val candidate = Random.nextInt(totalNodes)
+            if (candidate != lastNode) {
+                list.add(candidate)
+                lastNode = candidate
+            }
+        }
+        list
+    }
+
+    var playerPath by remember { mutableStateOf(listOf<Int>()) }
+    var timeRemaining by remember { mutableIntStateOf(initialTime) }
+    var tracePercent by remember { mutableFloatStateOf(0f) }
+    var isSuccess by remember { mutableStateOf(false) }
+    var isFailed by remember { mutableStateOf(false) }
+    var isPreviewActive by remember { mutableStateOf(false) }
+    var activePreviewStep by remember { mutableIntStateOf(-1) }
+
+    var hintedNextNode by remember { mutableStateOf<Int?>(null) }
+    var overclockCount by remember { mutableIntStateOf(1) }
+    var timeBonusCount by remember { mutableIntStateOf(1) }
+    var tracePurgeCount by remember { mutableIntStateOf(1) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    val context = LocalContext.current
+    val vibrationManager = remember(context) { CyberVibrationManager(context) }
+
+    // Countdown Timer Loop
+    LaunchedEffect(isSuccess, isFailed, isPreviewActive) {
+        if (!isSuccess && !isFailed && !isPreviewActive) {
+            while (timeRemaining > 0) {
+                delay(1000L)
+                timeRemaining -= 1
+                if (timeRemaining <= 5 && timeRemaining > 0) {
+                    vibrationManager.triggerLowTimerPulse()
+                }
+                if (timeRemaining <= 0) {
+                    isFailed = true
+                    vibrationManager.triggerIceTraceWarning()
+                    soundManager.playHackingErrorSound()
+                    onFail()
+                    break
+                }
+            }
+        }
+    }
+
+    // Preview sequence animation on start or button trigger
+    fun triggerPreviewAnimation() {
+        coroutineScope.launch {
+            isPreviewActive = true
+            soundManager.playTerminalCommandSound()
+            targetSequence.forEachIndexed { index, _ ->
+                activePreviewStep = index
+                soundManager.playTerminalKeyPressSound()
+                delay(400L)
+            }
+            delay(200L)
+            activePreviewStep = -1
+            isPreviewActive = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        triggerPreviewAnimation()
+    }
+
+    // Handle node selection
+    fun onNodeClicked(nodeIndex: Int) {
+        if (isSuccess || isFailed || isPreviewActive) return
+
+        val currentStep = playerPath.size
+        val expectedNode = targetSequence[currentStep]
+
+        if (nodeIndex == expectedNode) {
+            // Correct node tapped!
+            soundManager.playHackingSuccessSound()
+            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            val newPath = playerPath + nodeIndex
+            playerPath = newPath
+            hintedNextNode = null
+            errorMessage = null
+
+            // Check if full sequence matched
+            if (newPath.size == targetSequence.size) {
+                isSuccess = true
+                val reward = 150 * securityLevel + (timeRemaining * 10)
+                soundManager.playLootCollectionSound()
+                onComplete(reward)
+            }
+        } else {
+            // Wrong node tapped!
+            soundManager.playHackingErrorSound()
+            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+            tracePercent = (tracePercent + 0.20f).coerceAtMost(1f)
+            errorMessage = "❌ PATTERN MISMATCH! TRACE +20%. PATTERN RESET."
+            playerPath = emptyList()
+
+            if (tracePercent >= 1.0f) {
+                isFailed = true
+                onFail()
+            }
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(8.dp)
+    ) {
+        // Top Header Info
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberDark),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
+            shape = CutCornerShape(4.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "NODE SEC-LEVEL: 0$securityLevel [GRID $gridSize x $gridSize]",
+                        color = CyberCyan,
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = TerminalFontFamily
+                    )
+                    OutlinedButton(
+                        onClick = { if (!isPreviewActive) triggerPreviewAnimation() },
+                        enabled = !isPreviewActive && !isSuccess && !isFailed,
+                        border = BorderStroke(1.dp, CyberAmber),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .height(26.dp)
+                            .testTag("btn_replay_pattern_preview")
+                    ) {
+                        Text(
+                            text = if (isPreviewActive) "PREVIEWING..." else "REPLAY PATTERN",
+                            color = CyberAmber,
+                            fontSize = 9.5.sp,
+                            fontFamily = TerminalFontFamily
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Target Pattern Sequence Chips
+                Text(
+                    text = "TARGET SEQUENCE [${playerPath.size}/${sequenceLength} MATCHED]:",
+                    color = CyberGreen,
+                    fontSize = 9.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = TerminalFontFamily
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    targetSequence.forEachIndexed { idx, targetNode ->
+                        val isCurrentStep = playerPath.size == idx
+                        val isMatchedStep = playerPath.size > idx
+                        val isPreviewStep = activePreviewStep == idx
+
+                        val chipBg = when {
+                            isMatchedStep -> CyberGreen
+                            isPreviewStep -> CyberAmber
+                            isCurrentStep -> CyberCyan
+                            else -> CyberCardBg
+                        }
+                        val chipText = when {
+                            isMatchedStep || isPreviewStep -> CyberDark
+                            isCurrentStep -> CyberDark
+                            else -> CyberCyan
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(chipBg)
+                                .border(BorderStroke(1.dp, if (isCurrentStep) CyberCyan else CyberCyan.copy(alpha = 0.3f)), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 3.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${idx + 1}.${nodeGlyphs[targetNode]}",
+                                color = chipText,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = TerminalFontFamily
+                            )
+                        }
+                        if (idx < targetSequence.size - 1) {
+                            Text(text = "›", color = CyberCyan.copy(alpha = 0.5f), fontSize = 10.sp)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // Timer and Trace Progress Indicators
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "TIME LOCK: ${timeRemaining}s",
+                    color = if (timeRemaining <= 5) CyberPink else CyberAmber,
+                    fontSize = 9.5.sp,
+                    fontFamily = TerminalFontFamily
+                )
+                LinearProgressIndicator(
+                    progress = { timeRemaining.toFloat() / initialTime.toFloat() },
+                    color = if (timeRemaining <= 5) CyberPink else CyberAmber,
+                    trackColor = CyberCardBg,
+                    modifier = Modifier.fillMaxWidth().height(4.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "ICE TRACE: ${(tracePercent * 100).toInt()}%",
+                    color = if (tracePercent >= 0.7f) CyberPink else CyberGreen,
+                    fontSize = 9.5.sp,
+                    fontFamily = TerminalFontFamily
+                )
+                LinearProgressIndicator(
+                    progress = { tracePercent },
+                    color = if (tracePercent >= 0.7f) CyberPink else CyberGreen,
+                    trackColor = CyberCardBg,
+                    modifier = Modifier.fillMaxWidth().height(4.dp)
+                )
+            }
+        }
+
+        errorMessage?.let { msg ->
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = msg,
+                color = CyberPink,
+                fontSize = 9.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = TerminalFontFamily
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Main Node Grid View
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .background(CyberCardBg, CutCornerShape(4.dp))
+                .border(BorderStroke(1.dp, CyberCyan.copy(alpha = 0.4f)), CutCornerShape(4.dp))
+                .padding(8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(gridSize),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(totalNodes) { index ->
+                    val isMatchedInPath = playerPath.contains(index)
+                    val isNextExpected = playerPath.size < targetSequence.size && targetSequence[playerPath.size] == index
+                    val isHinted = hintedNextNode == index
+                    val isPreviewing = activePreviewStep >= 0 && targetSequence[activePreviewStep] == index
+
+                    val r = index / gridSize
+                    val c = index % gridSize
+
+                    val btnBg = when {
+                        isMatchedInPath -> CyberGreen
+                        isPreviewing -> CyberAmber
+                        isHinted -> CyberCyan
+                        else -> CyberDark
+                    }
+
+                    val borderColor = when {
+                        isMatchedInPath -> CyberGreen
+                        isPreviewing -> CyberAmber
+                        isNextExpected && playerPath.isNotEmpty() -> CyberCyan
+                        isHinted -> CyberCyan
+                        else -> CyberCyan.copy(alpha = 0.25f)
+                    }
+
+                    val glyphColor = when {
+                        isMatchedInPath || isPreviewing || isHinted -> CyberDark
+                        else -> CyberCyan
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clip(CutCornerShape(6.dp))
+                            .background(btnBg)
+                            .border(BorderStroke(1.5.dp, borderColor), CutCornerShape(6.dp))
+                            .clickable {
+                                view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                onNodeClicked(index)
+                            }
+                            .testTag("node_grid_$index"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = nodeGlyphs[index],
+                                color = glyphColor,
+                                fontSize = if (gridSize <= 3) 20.sp else if (gridSize == 4) 16.sp else 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = TerminalFontFamily
+                            )
+                            Text(
+                                text = "[$r,$c]",
+                                color = glyphColor.copy(alpha = 0.7f),
+                                fontSize = 8.sp,
+                                fontFamily = TerminalFontFamily
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        // Cyber Assists Bar
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Button(
+                onClick = {
+                    if (overclockCount > 0 && playerPath.size < targetSequence.size) {
+                        overclockCount -= 1
+                        hintedNextNode = targetSequence[playerPath.size]
+                        soundManager.playTerminalCommandSound()
+                    }
+                },
+                enabled = overclockCount > 0 && playerPath.size < targetSequence.size,
+                colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
+                border = BorderStroke(1.dp, CyberAmber),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(34.dp)
+                    .testTag("btn_pattern_assist_overclock")
+            ) {
+                Text(text = "⚡ REVEAL (${overclockCount})", color = CyberAmber, fontSize = 9.sp, fontFamily = TerminalFontFamily)
+            }
+
+            Button(
+                onClick = {
+                    if (timeBonusCount > 0) {
+                        timeBonusCount -= 1
+                        timeRemaining += 5
+                        soundManager.playTerminalCommandSound()
+                    }
+                },
+                enabled = timeBonusCount > 0,
+                colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
+                border = BorderStroke(1.dp, CyberCyan),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(34.dp)
+                    .testTag("btn_pattern_assist_time")
+            ) {
+                Text(text = "⏱️ +5s (${timeBonusCount})", color = CyberCyan, fontSize = 9.sp, fontFamily = TerminalFontFamily)
+            }
+
+            Button(
+                onClick = {
+                    if (tracePurgeCount > 0 && tracePercent > 0f) {
+                        tracePurgeCount -= 1
+                        tracePercent = (tracePercent - 0.20f).coerceAtLeast(0f)
+                        soundManager.playTerminalCommandSound()
+                    }
+                },
+                enabled = tracePurgeCount > 0 && tracePercent > 0f,
+                colors = ButtonDefaults.buttonColors(containerColor = CyberDark),
+                border = BorderStroke(1.dp, CyberGreen),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(34.dp)
+                    .testTag("btn_pattern_assist_purge")
+            ) {
+                Text(text = "🛡️ PURGE (${tracePurgeCount})", color = CyberGreen, fontSize = 9.sp, fontFamily = TerminalFontFamily)
+            }
         }
     }
 }

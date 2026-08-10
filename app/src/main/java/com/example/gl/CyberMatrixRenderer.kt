@@ -16,6 +16,8 @@ import javax.microedition.khronos.opengles.GL10
  * OpenGL ES 3.0 GLSurfaceView.Renderer for rendering a 3D Cyberpunk Matrix environment.
  * Features:
  * - GLSL ES 3.0 Shaders (#version 300 es)
+ * - Interleaved Vertex Attributes & Compact Data Types (GL_SHORT, GL_BYTE, GL_UNSIGNED_BYTE)
+ *   for optimal GPU cache performance and reduced memory bandwidth.
  * - 3D Perspective Projection & View Matrix Transformations
  * - 3D Cyber Grid Floor with glowing neon scanlines & distance fog
  * - Animated 3D Cyber Data Cubes & Nodes with vertex attribute buffers (VBO/VAO)
@@ -168,7 +170,8 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
             val b = 0.9f
             GLES30.glUniform4f(cubeColorHandle, r, g, b, 0.85f)
 
-            GLES30.glDrawElements(GLES30.GL_TRIANGLES, cubeIndexCount, GLES30.GL_UNSIGNED_SHORT, 0)
+            // Draw using compact GL_UNSIGNED_BYTE indices
+            GLES30.glDrawElements(GLES30.GL_TRIANGLES, cubeIndexCount, GLES30.GL_UNSIGNED_BYTE, 0)
         }
 
         GLES30.glBindVertexArray(0)
@@ -177,27 +180,28 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
     private fun setupGridBuffers() {
         val size = 20.0f
         val step = 1.0f
-        val gridLines = ArrayList<Float>()
+        val gridLines = ArrayList<Short>()
 
         var x = -size
         while (x <= size) {
-            gridLines.add(x); gridLines.add(0.0f); gridLines.add(-size)
-            gridLines.add(x); gridLines.add(0.0f); gridLines.add(size)
+            gridLines.add(x.toInt().toShort()); gridLines.add(0.toShort()); gridLines.add((-size).toInt().toShort())
+            gridLines.add(x.toInt().toShort()); gridLines.add(0.toShort()); gridLines.add(size.toInt().toShort())
             x += step
         }
 
         var z = -size
         while (z <= size) {
-            gridLines.add(-size); gridLines.add(0.0f); gridLines.add(z)
-            gridLines.add(size); gridLines.add(0.0f); gridLines.add(z)
+            gridLines.add((-size).toInt().toShort()); gridLines.add(0.toShort()); gridLines.add(z.toInt().toShort())
+            gridLines.add(size.toInt().toShort()); gridLines.add(0.toShort()); gridLines.add(z.toInt().toShort())
             z += step
         }
 
         gridVertexCount = gridLines.size / 3
-        val vertexBuffer = ByteBuffer.allocateDirect(gridLines.size * 4)
+        val shortArray = gridLines.toShortArray()
+        val vertexBuffer = ByteBuffer.allocateDirect(shortArray.size * 2)
             .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-        vertexBuffer.put(gridLines.toFloatArray())
+            .asShortBuffer()
+        vertexBuffer.put(shortArray)
         vertexBuffer.position(0)
 
         GLES30.glGenVertexArrays(1, vao, 0)
@@ -207,18 +211,19 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo[0])
         GLES30.glBufferData(
             GLES30.GL_ARRAY_BUFFER,
-            gridLines.size * 4,
+            shortArray.size * 2,
             vertexBuffer,
             GLES30.GL_STATIC_DRAW
         )
 
+        // Interleaved Position Attribute: 3 x GL_SHORT (6 bytes per vertex)
         GLES30.glEnableVertexAttribArray(gridPositionHandle)
         GLES30.glVertexAttribPointer(
             gridPositionHandle,
             3,
-            GLES30.GL_FLOAT,
+            GLES30.GL_SHORT,
             false,
-            3 * 4,
+            3 * 2,
             0
         )
 
@@ -227,41 +232,70 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
     }
 
     private fun setupCubeBuffers() {
-        // 3D Cube vertices and normals
-        val cubeVertices = floatArrayOf(
-            // Position          // Normal
-            -0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-             0.5f, -0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-             0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
-            -0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,
+        // Compact Interleaved Vertex Layout:
+        // Position (3 x GL_SHORT, normalized = true) + Normal (3 x GL_BYTE, normalized = true) + Padding (3 x Byte)
+        // Total Stride = 12 bytes per vertex (50% memory reduction vs 24 floats)
+        val posNeg = (-16384).toShort()
+        val posPos = 16384.toShort()
+        val normNeg = (-127).toByte()
+        val normPos = 127.toByte()
+        val zeroS = 0.toShort()
+        val zeroB = 0.toByte()
 
-            -0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-            -0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-             0.5f,  0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
-             0.5f, -0.5f, -0.5f,  0.0f,  0.0f, -1.0f,
+        val vertexByteBuffer = ByteBuffer.allocateDirect(24 * 12).order(ByteOrder.nativeOrder())
 
-            -0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
-            -0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-             0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,
-             0.5f,  0.5f, -0.5f,  0.0f,  1.0f,  0.0f,
+        fun putVertex(px: Short, py: Short, pz: Short, nx: Byte, ny: Byte, nz: Byte) {
+            vertexByteBuffer.putShort(px)
+            vertexByteBuffer.putShort(py)
+            vertexByteBuffer.putShort(pz)
+            vertexByteBuffer.put(nx)
+            vertexByteBuffer.put(ny)
+            vertexByteBuffer.put(nz)
+            vertexByteBuffer.put(zeroB) // pad0
+            vertexByteBuffer.put(zeroB) // pad1
+            vertexByteBuffer.put(zeroB) // pad2
+        }
 
-            -0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-             0.5f, -0.5f, -0.5f,  0.0f, -1.0f,  0.0f,
-             0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
-            -0.5f, -0.5f,  0.5f,  0.0f, -1.0f,  0.0f,
+        // Front Face (+Z)
+        putVertex(posNeg, posNeg, posPos, zeroB, zeroB, normPos)
+        putVertex(posPos, posNeg, posPos, zeroB, zeroB, normPos)
+        putVertex(posPos, posPos, posPos, zeroB, zeroB, normPos)
+        putVertex(posNeg, posPos, posPos, zeroB, zeroB, normPos)
 
-             0.5f, -0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-             0.5f,  0.5f, -0.5f,  1.0f,  0.0f,  0.0f,
-             0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
-             0.5f, -0.5f,  0.5f,  1.0f,  0.0f,  0.0f,
+        // Back Face (-Z)
+        putVertex(posNeg, posNeg, posNeg, zeroB, zeroB, normNeg)
+        putVertex(posNeg, posPos, posNeg, zeroB, zeroB, normNeg)
+        putVertex(posPos, posPos, posNeg, zeroB, zeroB, normNeg)
+        putVertex(posPos, posNeg, posNeg, zeroB, zeroB, normNeg)
 
-            -0.5f, -0.5f, -0.5f, -1.0f,  0.0f,  0.0f,
-            -0.5f, -0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-            -0.5f,  0.5f,  0.5f, -1.0f,  0.0f,  0.0f,
-            -0.5f,  0.5f, -0.5f, -1.0f,  0.0f,  0.0f
-        )
+        // Top Face (+Y)
+        putVertex(posNeg, posPos, posNeg, zeroB, normPos, zeroB)
+        putVertex(posNeg, posPos, posPos, zeroB, normPos, zeroB)
+        putVertex(posPos, posPos, posPos, zeroB, normPos, zeroB)
+        putVertex(posPos, posPos, posNeg, zeroB, normPos, zeroB)
 
-        val cubeIndices = shortArrayOf(
+        // Bottom Face (-Y)
+        putVertex(posNeg, posNeg, posNeg, zeroB, normNeg, zeroB)
+        putVertex(posPos, posNeg, posNeg, zeroB, normNeg, zeroB)
+        putVertex(posPos, posNeg, posPos, zeroB, normNeg, zeroB)
+        putVertex(posNeg, posNeg, posPos, zeroB, normNeg, zeroB)
+
+        // Right Face (+X)
+        putVertex(posPos, posNeg, posNeg, normPos, zeroB, zeroB)
+        putVertex(posPos, posPos, posNeg, normPos, zeroB, zeroB)
+        putVertex(posPos, posPos, posPos, normPos, zeroB, zeroB)
+        putVertex(posPos, posNeg, posPos, normPos, zeroB, zeroB)
+
+        // Left Face (-X)
+        putVertex(posNeg, posNeg, posNeg, normNeg, zeroB, zeroB)
+        putVertex(posNeg, posNeg, posPos, normNeg, zeroB, zeroB)
+        putVertex(posNeg, posPos, posPos, normNeg, zeroB, zeroB)
+        putVertex(posNeg, posPos, posNeg, normNeg, zeroB, zeroB)
+
+        vertexByteBuffer.position(0)
+
+        // Compact indices: GL_UNSIGNED_BYTE (36 bytes total)
+        val cubeIndices = byteArrayOf(
             0, 1, 2, 0, 2, 3,
             4, 5, 6, 4, 6, 7,
             8, 9, 10, 8, 10, 11,
@@ -269,20 +303,12 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
             16, 17, 18, 16, 18, 19,
             20, 21, 22, 20, 22, 23
         )
-
         cubeIndexCount = cubeIndices.size
 
-        val vertexBuffer: FloatBuffer = ByteBuffer.allocateDirect(cubeVertices.size * 4)
+        val indexByteBuffer = ByteBuffer.allocateDirect(cubeIndices.size)
             .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
-            .put(cubeVertices)
-        vertexBuffer.position(0)
-
-        val indexBuffer: ShortBuffer = ByteBuffer.allocateDirect(cubeIndices.size * 2)
-            .order(ByteOrder.nativeOrder())
-            .asShortBuffer()
             .put(cubeIndices)
-        indexBuffer.position(0)
+        indexByteBuffer.position(0)
 
         GLES30.glGenVertexArrays(1, vao, 1)
         GLES30.glGenBuffers(1, vbo, 1)
@@ -293,41 +319,41 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo[1])
         GLES30.glBufferData(
             GLES30.GL_ARRAY_BUFFER,
-            cubeVertices.size * 4,
-            vertexBuffer,
+            24 * 12,
+            vertexByteBuffer,
             GLES30.GL_STATIC_DRAW
         )
 
         GLES30.glBindBuffer(GLES30.GL_ELEMENT_ARRAY_BUFFER, ebo[0])
         GLES30.glBufferData(
             GLES30.GL_ELEMENT_ARRAY_BUFFER,
-            cubeIndices.size * 2,
-            indexBuffer,
+            cubeIndices.size,
+            indexByteBuffer,
             GLES30.GL_STATIC_DRAW
         )
 
-        val stride = 6 * 4 // 6 floats per vertex (3 pos, 3 norm)
+        val stride = 12 // 12 bytes interleaved stride
 
-        // Position Attribute
+        // Interleaved Position Attribute (3 x GL_SHORT, normalized = true, offset = 0)
         GLES30.glEnableVertexAttribArray(cubePositionHandle)
         GLES30.glVertexAttribPointer(
             cubePositionHandle,
             3,
-            GLES30.GL_FLOAT,
-            false,
+            GLES30.GL_SHORT,
+            true,
             stride,
             0
         )
 
-        // Normal Attribute
+        // Interleaved Normal Attribute (3 x GL_BYTE, normalized = true, offset = 6)
         GLES30.glEnableVertexAttribArray(cubeNormalHandle)
         GLES30.glVertexAttribPointer(
             cubeNormalHandle,
             3,
-            GLES30.GL_FLOAT,
-            false,
+            GLES30.GL_BYTE,
+            true,
             stride,
-            3 * 4
+            6
         )
 
         GLES30.glBindVertexArray(0)
@@ -335,20 +361,26 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
     }
 
     private fun setupOverlayBuffers() {
-        // Fullscreen Quad NDC (-1 to 1) with UVs (0 to 1)
-        val overlayVertices = floatArrayOf(
-            // Position (X, Y)  // TexCoord (U, V)
-            -1.0f, -1.0f,      0.0f, 0.0f,
-             1.0f, -1.0f,      1.0f, 0.0f,
-             1.0f,  1.0f,      1.0f, 1.0f,
-            -1.0f, -1.0f,      0.0f, 0.0f,
-             1.0f,  1.0f,      1.0f, 1.0f,
-            -1.0f,  1.0f,      0.0f, 1.0f
+        // Compact Interleaved Fullscreen Quad:
+        // Position (2 x GL_BYTE, normalized = true) + TexCoord (2 x GL_UNSIGNED_BYTE, normalized = true)
+        // Stride = 4 bytes per vertex (75% memory reduction)
+        val bNeg = (-127).toByte()
+        val bPos = 127.toByte()
+        val uZero = 0.toByte()
+        val uOne = 255.toByte()
+
+        val overlayVertices = byteArrayOf(
+            // PosX, PosY, TexU, TexV
+            bNeg, bNeg, uZero, uZero,
+            bPos, bNeg, uOne,  uZero,
+            bPos, bPos, uOne,  uOne,
+            bNeg, bNeg, uZero, uZero,
+            bPos, bPos, uOne,  uOne,
+            bNeg, bPos, uZero, uOne
         )
 
-        val vertexBuffer: FloatBuffer = ByteBuffer.allocateDirect(overlayVertices.size * 4)
+        val vertexBuffer: ByteBuffer = ByteBuffer.allocateDirect(overlayVertices.size)
             .order(ByteOrder.nativeOrder())
-            .asFloatBuffer()
             .put(overlayVertices)
         vertexBuffer.position(0)
 
@@ -359,20 +391,20 @@ class CyberMatrixRenderer : GLSurfaceView.Renderer {
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, vbo[2])
         GLES30.glBufferData(
             GLES30.GL_ARRAY_BUFFER,
-            overlayVertices.size * 4,
+            overlayVertices.size,
             vertexBuffer,
             GLES30.GL_STATIC_DRAW
         )
 
-        val stride = 4 * 4 // 4 floats per vertex
+        val stride = 4 // 4 bytes interleaved stride
 
-        // Position Attribute
+        // Interleaved Position Attribute (2 x GL_BYTE, normalized = true, offset = 0)
         GLES30.glEnableVertexAttribArray(0)
-        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, stride, 0)
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_BYTE, true, stride, 0)
 
-        // TexCoord Attribute
+        // Interleaved TexCoord Attribute (2 x GL_UNSIGNED_BYTE, normalized = true, offset = 2)
         GLES30.glEnableVertexAttribArray(1)
-        GLES30.glVertexAttribPointer(1, 2, GLES30.GL_FLOAT, false, stride, 2 * 4)
+        GLES30.glVertexAttribPointer(1, 2, GLES30.GL_UNSIGNED_BYTE, true, stride, 2)
 
         GLES30.glBindVertexArray(0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)

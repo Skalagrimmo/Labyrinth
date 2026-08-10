@@ -192,6 +192,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Cybernetic Implants System
         val selectedStartingImplant: com.example.data.CyberwareImplant = com.example.data.CyberwareImplantRegistry.STARTER_IMPLANTS[0],
         val installedImplants: Map<com.example.data.ImplantBodySlot, com.example.data.CyberwareImplant?> = emptyMap(),
+        val storedImplants: List<com.example.data.CyberwareImplant> = emptyList(),
+        val showCyberwareInventoryOverlay: Boolean = false,
+        val selectedOverlayTab: String = "EQUIPPED", // "EQUIPPED", "STORED", "STATS"
+        val selectedOverlaySlotFilter: com.example.data.ImplantBodySlot? = null,
         val hasUsedEmergencyRebootThisRun: Boolean = false,
         val kineticShieldActiveThisCombat: Boolean = true,
         val naniteStepCounter: Int = 0,
@@ -341,21 +345,153 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         return true
     }
 
+    fun toggleCyberwareInventoryOverlay(show: Boolean? = null) {
+        _uiState.update { state ->
+            val next = show ?: !state.showCyberwareInventoryOverlay
+            state.copy(showCyberwareInventoryOverlay = next)
+        }
+    }
+
+    fun setSelectedOverlayTab(tab: String) {
+        _uiState.update { it.copy(selectedOverlayTab = tab) }
+    }
+
+    fun setSelectedOverlaySlotFilter(slot: com.example.data.ImplantBodySlot?) {
+        _uiState.update { it.copy(selectedOverlaySlotFilter = slot) }
+    }
+
+    fun equipImplantFromInventory(implant: com.example.data.CyberwareImplant): Boolean {
+        val state = _uiState.value
+        val storedList = state.storedImplants.toMutableList()
+        val index = storedList.indexOfFirst { it.id == implant.id }
+        if (index != -1) {
+            storedList.removeAt(index)
+        }
+
+        val currentSlotImplant = state.installedImplants[implant.slot]
+        if (currentSlotImplant != null) {
+            storedList.add(currentSlotImplant)
+            addLog("🔄 SWAPPED: Returned ${currentSlotImplant.name} to storage core.", LogType.INFO)
+        }
+
+        val newMaxHp = (state.maxIntegrity - (currentSlotImplant?.integrityBonus ?: 0) + implant.integrityBonus).coerceAtLeast(10)
+        val newHp = (state.integrity + implant.integrityBonus).coerceIn(1, newMaxHp)
+        val newMaxRam = (state.maxRam - (currentSlotImplant?.ramBonus ?: 0) + implant.ramBonus).coerceAtLeast(2)
+        val newRam = (state.ram + implant.ramBonus).coerceIn(1, newMaxRam)
+        val newRecovery = (state.ramRecoveryRate - (currentSlotImplant?.recoveryBonus ?: 0) + implant.recoveryBonus).coerceAtLeast(1)
+        val newDmg = (state.damageBonus - (currentSlotImplant?.damageBonus ?: 0) + implant.damageBonus).coerceAtLeast(0)
+        val newDef = (state.defenseBonus - (currentSlotImplant?.defenseBonus ?: 0) + implant.defenseBonus).coerceAtLeast(0)
+
+        val updatedInstalled = state.installedImplants.toMutableMap()
+        updatedInstalled[implant.slot] = implant
+
+        _uiState.update {
+            it.copy(
+                installedImplants = updatedInstalled,
+                storedImplants = storedList,
+                maxIntegrity = newMaxHp,
+                integrity = newHp,
+                maxRam = newMaxRam,
+                ram = newRam,
+                ramRecoveryRate = newRecovery,
+                damageBonus = newDmg,
+                defenseBonus = newDef
+            )
+        }
+
+        addLog("🦾 EQUIPPED: Fitted ${implant.name} into [${implant.slot.displayName.uppercase()}].", LogType.SUCCESS)
+        if (implant.passiveAbility != null) {
+            addLog("  └ PASSIVE ONLINE: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}", LogType.INFO)
+        }
+        soundManager.playCyberwareInstallSound()
+        saveGame()
+        return true
+    }
+
+    fun unequipImplantToInventory(slot: com.example.data.ImplantBodySlot): Boolean {
+        val state = _uiState.value
+        val implant = state.installedImplants[slot] ?: return false
+
+        val newMaxHp = (state.maxIntegrity - implant.integrityBonus).coerceAtLeast(10)
+        val newHp = state.integrity.coerceAtMost(newMaxHp)
+        val newMaxRam = (state.maxRam - implant.ramBonus).coerceAtLeast(2)
+        val newRam = state.ram.coerceAtMost(newMaxRam)
+        val newRecovery = (state.ramRecoveryRate - implant.recoveryBonus).coerceAtLeast(1)
+        val newDmg = (state.damageBonus - implant.damageBonus).coerceAtLeast(0)
+        val newDef = (state.defenseBonus - implant.defenseBonus).coerceAtLeast(0)
+
+        val updatedInstalled = state.installedImplants.toMutableMap()
+        updatedInstalled.remove(slot)
+
+        val updatedStored = state.storedImplants.toMutableList()
+        updatedStored.add(implant)
+
+        _uiState.update {
+            it.copy(
+                installedImplants = updatedInstalled,
+                storedImplants = updatedStored,
+                maxIntegrity = newMaxHp,
+                integrity = newHp,
+                maxRam = newMaxRam,
+                ram = newRam,
+                ramRecoveryRate = newRecovery,
+                damageBonus = newDmg,
+                defenseBonus = newDef
+            )
+        }
+
+        addLog("📦 STORED: Unfitted ${implant.name} from [${slot.displayName.uppercase()}] to storage core.", LogType.ALERT)
+        saveGame()
+        return true
+    }
+
+    fun scavengeSampleImplant() {
+        val all = com.example.data.CyberwareImplantRegistry.ALL_IMPLANTS
+        val randomImplant = all.random()
+        val updatedStored = _uiState.value.storedImplants + randomImplant
+        _uiState.update { it.copy(storedImplants = updatedStored) }
+        addLog("🎁 SCAVENGED CYBERWARE: Acquired ${randomImplant.name} [${randomImplant.rarity.displayName}].", LogType.SUCCESS)
+        saveGame()
+    }
+
     // ----------------------------------------------------
     // State Modification & Character Creation
     // ----------------------------------------------------
 
-    fun createCharacter(name: String, selectedClass: NetrunnerClass, startingImplant: com.example.data.CyberwareImplant? = null) {
+    fun createCharacter(
+        name: String,
+        selectedClass: NetrunnerClass,
+        startingImplant: com.example.data.CyberwareImplant? = null,
+        allocatedHpPoints: Int = 0,
+        allocatedRamPoints: Int = 0,
+        allocatedReflexPoints: Int = 0,
+        allocatedArmorPoints: Int = 0,
+        allocatedFundPoints: Int = 0,
+        starterKit: String = "STANDARD"
+    ) {
         val cleanName = name.ifBlank { "Runner_${Random.nextInt(1000, 9999)}" }
         val baseProg = GameEngine.getStartingPrograms(selectedClass)
-        val initialCredits = if (selectedClass == NetrunnerClass.SCRIPT_KIDDIE) 350 else 100
-        val startInv = if (selectedClass == NetrunnerClass.SCRIPT_KIDDIE) {
-            listOf("NanoMed.sys", "RAMBoost.exe", "Decryptor.pkg", "AntiShield.bin", "FirewallBuffer.pkg")
-        } else {
-            listOf("NanoMed.sys", "RAMBoost.exe")
+        
+        var baseCredits = when (selectedClass) {
+            NetrunnerClass.TECHIE, NetrunnerClass.SCRIPT_KIDDIE -> 300
+            NetrunnerClass.NETRUNNER -> 150
+            NetrunnerClass.STREET_SAMURAI -> 100
+            else -> 100
+        }
+        baseCredits += (allocatedFundPoints * 50)
+        if (starterKit == "SCAVENGER") baseCredits += 150
+
+        val startInv = when (starterKit) {
+            "HACKER" -> mutableListOf("NanoMed.sys", "RAMBoost.exe", "Decryptor.pkg", "AntiShield.bin", "FirewallBuffer.pkg")
+            "COMBAT" -> mutableListOf("NanoMed.sys", "NanoMed.sys", "RAMBoost.exe", "FirewallBuffer.pkg", "NanoShield.pkg")
+            "SCAVENGER" -> mutableListOf("NanoMed.sys", "RAMBoost.exe", "Decryptor.pkg", "EMPGrenade.bin")
+            else -> mutableListOf("NanoMed.sys", "RAMBoost.exe")
         }
 
         val weaponName = when (selectedClass) {
+            NetrunnerClass.NETRUNNER -> "Militech Optical Cyberdeck Blade"
+            NetrunnerClass.STREET_SAMURAI -> "Mono-Molecular Cyber-Katana"
+            NetrunnerClass.TECHIE -> "Kiroshi Pulse-Solderer"
             NetrunnerClass.CODE_SLASHER -> "Daedric Cyber-Katana"
             NetrunnerClass.CYBER_SHIELD -> "Aegis Shock-Mace"
             NetrunnerClass.SCRIPT_KIDDIE -> "Glass Cyber-Dagger"
@@ -364,12 +500,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         val chosenImplant = startingImplant ?: _uiState.value.selectedStartingImplant
         val initialImplantsMap = mapOf(chosenImplant.slot to chosenImplant)
+        val starterStoredImplants = com.example.data.CyberwareImplantRegistry.STARTER_IMPLANTS.filter { it.slot != chosenImplant.slot }.take(2)
 
-        val initMaxHp = selectedClass.baseIntegrity + chosenImplant.integrityBonus
-        val initMaxRam = selectedClass.baseRam + chosenImplant.ramBonus
-        val initRecovery = 2 + chosenImplant.recoveryBonus
-        val initDamage = chosenImplant.damageBonus
-        val initDefense = chosenImplant.defenseBonus
+        val initMaxHp = selectedClass.baseIntegrity + chosenImplant.integrityBonus + (allocatedHpPoints * 10)
+        val initMaxRam = selectedClass.baseRam + chosenImplant.ramBonus + (allocatedRamPoints * 2)
+        val initRecovery = (if (selectedClass == NetrunnerClass.NETRUNNER) 3 else 2) + chosenImplant.recoveryBonus
+        val initDamage = chosenImplant.damageBonus + allocatedReflexPoints
+        val initDefense = (if (selectedClass == NetrunnerClass.TECHIE) 5 else 0) + chosenImplant.defenseBonus + allocatedArmorPoints
+
+        val startShieldMax = if (selectedClass == NetrunnerClass.STREET_SAMURAI || selectedClass == NetrunnerClass.CYBER_SHIELD) 75 else 50
+        val startShieldCurrent = if (selectedClass == NetrunnerClass.STREET_SAMURAI || selectedClass == NetrunnerClass.CYBER_SHIELD) 25 else 10
 
         _uiState.update { state ->
             state.copy(
@@ -378,17 +518,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 runnerClass = selectedClass,
                 selectedStartingImplant = chosenImplant,
                 installedImplants = initialImplantsMap,
+                storedImplants = starterStoredImplants,
                 maxIntegrity = initMaxHp,
                 integrity = initMaxHp,
-                playerMaxShield = if (selectedClass == NetrunnerClass.CYBER_SHIELD) 75 else 50,
-                playerShield = if (selectedClass == NetrunnerClass.CYBER_SHIELD) 25 else 10,
+                playerMaxShield = startShieldMax,
+                playerShield = startShieldCurrent,
                 maxRam = initMaxRam,
                 ram = initMaxRam,
                 ramRecoveryRate = initRecovery,
                 damageBonus = initDamage,
                 defenseBonus = initDefense,
-                credits = initialCredits,
-                totalCreditsEarned = initialCredits,
+                credits = baseCredits,
+                totalCreditsEarned = baseCredits,
                 installedPrograms = baseProg,
                 inventory = startInv,
                 level = 1,
@@ -409,8 +550,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             runnerName = cleanName,
             runnerClass = selectedClass.name,
             level = 1,
-            credits = initialCredits,
-            totalCreditsEarned = initialCredits,
+            credits = baseCredits,
+            totalCreditsEarned = baseCredits,
             maxIntegrity = initMaxHp,
             maxRam = initMaxRam,
             nodesHackedCount = 0
@@ -4575,6 +4716,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             putString("installedCyberware", state.installedCyberware.joinToString(",") { it.id })
             putString("installedPrograms", state.installedPrograms.joinToString(",") { it.id })
             putString("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
+            putString("storedImplantsCsv", state.storedImplants.joinToString(",") { it.id })
             putString("exploredCells", serializeExploredCells(state.exploredCells))
             
             // Weather
@@ -4833,6 +4975,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
 
+            val storedImplantsStr = sharedPrefs.getString("storedImplantsCsv", "") ?: ""
+            val storedImplantsList = if (storedImplantsStr.isEmpty()) emptyList() else storedImplantsStr.split(",").mapNotNull { com.example.data.CyberwareImplantRegistry.getImplantById(it) }
+
             // Logs
             val logStr = sharedPrefs.getString("logFeed", "") ?: ""
             val logFeed = if (logStr.isEmpty()) emptyList() else logStr.split("$$").mapNotNull { line ->
@@ -4904,6 +5049,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     installedCyberware = installedCyberware,
                     installedPrograms = installedPrograms,
                     installedImplants = installedImplantsMap,
+                    storedImplants = storedImplantsList,
                     exploredCells = exploredCells,
                     activeWeather = activeWeather,
                     weatherTurnsLeft = sharedPrefs.getInt("weatherTurnsLeft", 0),

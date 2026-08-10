@@ -16,11 +16,17 @@ private val DarkColorScheme = darkColorScheme(
     onSecondaryContainer = CyberCyan,
     tertiary = CyberPink,
     onTertiary = CyberDark,
+    tertiaryContainer = CyberSurfaceVariant,
+    onTertiaryContainer = CyberPink,
+    error = CyberCrimson,
+    onError = CyberDark,
+    errorContainer = CyberSurfaceVariant,
+    onErrorContainer = CyberCrimson,
     background = CyberDark,
     onBackground = CyberGreen,
     surface = CyberCardBg,
     onSurface = CyberBrightGreen,
-    surfaceVariant = CyberGrey,
+    surfaceVariant = CyberSurfaceVariant,
     onSurfaceVariant = CyberMutedText,
     outline = CyberBorder,
     outlineVariant = CyberBorderLight
@@ -42,3 +48,4 @@ fun MyApplicationTheme(
         content = content
     )
 }
+

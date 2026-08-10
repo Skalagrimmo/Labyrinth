@@ -1471,6 +1471,17 @@ object GameEngine {
             Program("glitch", "glitch_payload.bin", "Scramble target sensors. Glitches target (-50% damage output for 2 turns).", ramCost = 2, statusEffectToApply = StatusEffectType.WEAKENED, statusEffectTurns = 2)
         )
         when (runnerClass) {
+            NetrunnerClass.NETRUNNER -> {
+                base.add(Program("overflow", "exploit.sh", "Pierces defenses, dealing 25 raw damage.", ramCost = 3, damage = 25, piercesDefense = true))
+                base.add(Program("kill9", "kill-9.bin", "Force shutdown. Deals 35 heavy payload damage.", ramCost = 4, damage = 35))
+            }
+            NetrunnerClass.STREET_SAMURAI -> {
+                base.add(Program("katana_strike", "katana_slash.exe", "Lethal blade strike. Deals 40 physical payload damage.", ramCost = 3, damage = 40))
+            }
+            NetrunnerClass.TECHIE -> {
+                base.add(Program("sandbox", "sandbox.sys", "Isolate threats. Restore 40 Integrity.", ramCost = 3, heal = 40))
+                base.add(Program("custom_payload", "utility.exe", "Unpredictable script. Deals 20 damage, restores 15 Integrity.", ramCost = 2, damage = 20, heal = 15))
+            }
             NetrunnerClass.CODE_SLASHER -> {
                 base.add(Program("kill9", "kill-9.bin", "Force shutdown. Deals 35 heavy payload damage.", ramCost = 4, damage = 35))
             }

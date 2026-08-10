@@ -131,6 +131,9 @@ object CyberwareImplantRegistry {
 
     fun getStarterImplantForClass(runnerClass: NetrunnerClass): CyberwareImplant {
         return when (runnerClass) {
+            NetrunnerClass.NETRUNNER -> STARTER_IMPLANTS.first { it.id == "starter_neural_link" }
+            NetrunnerClass.STREET_SAMURAI -> STARTER_IMPLANTS.first { it.id == "starter_subdermal" }
+            NetrunnerClass.TECHIE -> STARTER_IMPLANTS.first { it.id == "starter_ocular_hud" }
             NetrunnerClass.CODE_SLASHER -> STARTER_IMPLANTS.first { it.id == "starter_ocular_hud" }
             NetrunnerClass.CYBER_SHIELD -> STARTER_IMPLANTS.first { it.id == "starter_subdermal" }
             NetrunnerClass.BUFFER_OVERFLOW -> STARTER_IMPLANTS.first { it.id == "starter_neural_link" }

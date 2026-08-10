@@ -23,6 +23,8 @@ import kotlin.random.Random
  */
 class CyberSoundEffectsManager private constructor(context: Context) {
 
+    private val soundPoolManager = CyberSoundPoolManager.getInstance(context)
+
     enum class MusicMode(val displayName: String, val bpm: Int) {
         EXPLORATION("Dark Cyber Drone", 85),
         COMBAT("Overclocked Synthwave", 130),
@@ -358,61 +360,56 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue when executing terminal commands.
      */
     fun playTerminalCommandSound() {
-        playTone(880.0, 80)
+        soundPoolManager.playTerminalBeep(0.8f)
     }
 
     /**
      * Audio cue for terminal keyboard typing input.
      */
     fun playTerminalKeyPressSound() {
-        playTone(1200.0, 30, 0.25f)
+        soundPoolManager.playTerminalKeyPress(0.5f)
     }
 
     /**
      * Cybernetic step movement sound effect.
      */
     fun playStepSound() {
-        playTone(180.0, 30, 0.2f)
+        soundPoolManager.playFootstep(CyberSoundPoolManager.SurfaceMaterial.CONCRETE, 0.7f)
+    }
+
+    /**
+     * Environmental footstep sound with surface material.
+     */
+    fun playFootstep(material: CyberSoundPoolManager.SurfaceMaterial = CyberSoundPoolManager.SurfaceMaterial.CONCRETE, volume: Float = 0.7f) {
+        soundPoolManager.playFootstep(material, volume)
     }
 
     /**
      * Door open/close pneumatic sound effect.
      */
     fun playDoorSound() {
-        scope.launch {
-            playTone(220.0, 60)
-            delay(70)
-            playTone(440.0, 50)
-        }
+        soundPoolManager.playDoorSound(0.8f)
     }
 
     /**
      * Elevator / sector lift transition sound.
      */
     fun playElevatorSound() {
-        scope.launch {
-            playTone(523.25, 80)
-            delay(90)
-            playTone(659.25, 100)
-        }
+        soundPoolManager.playElevatorSound(0.8f)
     }
 
     /**
      * Audio cue for standard combat damage hit.
      */
     fun playCombatHitSound() {
-        playTone(180.0, 120, 0.5f)
+        soundPoolManager.playCombatHit(1.0f)
     }
 
     /**
      * Audio cue for critical combat impact or heavy attack.
      */
     fun playCombatCritSound() {
-        scope.launch {
-            playTone(300.0, 90, 0.5f)
-            delay(90)
-            playTone(800.0, 120, 0.6f)
-        }
+        soundPoolManager.playCombatCrit(1.0f)
     }
 
     /**
@@ -533,9 +530,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
     }
 
     /**
-     * Release synth resources.
+     * Release synth and SoundPool resources.
      */
     fun release() {
+        soundPoolManager.release()
         bgmJob?.cancel()
         audioTrack?.stop()
         audioTrack?.release()

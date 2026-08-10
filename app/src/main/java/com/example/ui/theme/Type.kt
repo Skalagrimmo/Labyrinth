@@ -9,11 +9,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 
 // Authentic Cyberpunk Terminal Monospace Font Family
-val TerminalFontFamily = FontFamily(
-    Font(R.font.terminal_mono, FontWeight.Normal),
-    Font(R.font.terminal_mono, FontWeight.Medium),
-    Font(R.font.terminal_mono, FontWeight.Bold)
-)
+val TerminalFontFamily = FontFamily.Monospace
 
 // High-density Cyberpunk Monospace Typography Scheme
 val Typography = Typography(

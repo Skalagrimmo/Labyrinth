@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import android.view.HapticFeedbackConstants
+import com.example.audio.CyberVibrationManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +53,7 @@ import com.example.ui.components.VisualTurnIndicator
 import com.example.ui.components.CombatHackingMinigameView
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.components.AnimatedCyberHudConsole
+import com.example.gl.CyberCharacterGLView
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -136,6 +138,39 @@ fun TerminalScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val highScores by viewModel.runRecords.collectAsStateWithLifecycle()
     val view = LocalView.current
+    val context = LocalContext.current
+    val vibrationManager = remember(context) { CyberVibrationManager(context) }
+
+    // Haptic vibration feedback for proximity to active ICE nodes & threat hosts
+    LaunchedEffect(uiState.gridX, uiState.gridY, uiState.maze) {
+        val px = uiState.gridX
+        val py = uiState.gridY
+        val maze = uiState.maze
+        if (maze.isNotEmpty() && py in maze.indices && px in maze[0].indices) {
+            var minDistance = 99.0
+            val searchRadius = 3
+            for (dy in -searchRadius..searchRadius) {
+                for (dx in -searchRadius..searchRadius) {
+                    val nx = px + dx
+                    val ny = py + dy
+                    if (ny in maze.indices && nx in maze[0].indices) {
+                        val cell = maze[ny][nx]
+                        if (cell == com.example.data.CellType.VIRUS_NODE ||
+                            cell == com.example.data.CellType.ENCRYPTED_PORTAL ||
+                            cell == com.example.data.CellType.HACKABLE_TERMINAL) {
+                            val dist = Math.hypot(dx.toDouble(), dy.toDouble())
+                            if (dist < minDistance) {
+                                minDistance = dist
+                            }
+                        }
+                    }
+                }
+            }
+            if (minDistance <= 3.0) {
+                vibrationManager.triggerIceProximityVibration(minDistance)
+            }
+        }
+    }
 
     val toastHostState = rememberCyberToastHostState()
 
@@ -176,7 +211,7 @@ fun TerminalScreen(
 
     // Interactive name text state for creation screen
     var runnerNameInput by remember { mutableStateOf("") }
-    var selectedClass by remember { mutableStateOf(NetrunnerClass.CODE_SLASHER) }
+    var selectedClass by remember { mutableStateOf(NetrunnerClass.NETRUNNER) }
 
     // Focus management for hardware keys
     val focusRequester = remember { FocusRequester() }
@@ -323,7 +358,19 @@ fun TerminalScreen(
                                 onClassSelected = { selectedClass = it },
                                 selectedImplant = uiState.selectedStartingImplant,
                                 onImplantSelected = { viewModel.selectStartingImplant(it) },
-                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass, uiState.selectedStartingImplant) }
+                                onStartGameCustomized = { hpPts, ramPts, reflexPts, armorPts, fundPts, kit ->
+                                    viewModel.createCharacter(
+                                        name = runnerNameInput,
+                                        selectedClass = selectedClass,
+                                        startingImplant = uiState.selectedStartingImplant,
+                                        allocatedHpPoints = hpPts,
+                                        allocatedRamPoints = ramPts,
+                                        allocatedReflexPoints = reflexPts,
+                                        allocatedArmorPoints = armorPts,
+                                        allocatedFundPoints = fundPts,
+                                        starterKit = kit
+                                    )
+                                }
                             )
                         }
                         GameViewModel.ActiveScreen.CYBERWARE_CLINIC -> {
@@ -435,7 +482,8 @@ fun TerminalScreen(
                     TerminalHeader(
                         uiState = uiState,
                         onLeaderboardClick = { viewModel.viewLeaderboard() },
-                        onMenuClick = { viewModel.returnToStartMenu() }
+                        onMenuClick = { viewModel.returnToStartMenu() },
+                        onCyberwareClick = { viewModel.toggleCyberwareInventoryOverlay(true) }
                     )
 
                     if (uiState.screen != GameViewModel.ActiveScreen.START_MENU &&
@@ -463,7 +511,8 @@ fun TerminalScreen(
                 TerminalHeader(
                     uiState = uiState,
                     onLeaderboardClick = { viewModel.viewLeaderboard() },
-                    onMenuClick = { viewModel.returnToStartMenu() }
+                    onMenuClick = { viewModel.returnToStartMenu() },
+                    onCyberwareClick = { viewModel.toggleCyberwareInventoryOverlay(true) }
                 )
 
                 if (uiState.screen != GameViewModel.ActiveScreen.START_MENU &&
@@ -504,7 +553,19 @@ fun TerminalScreen(
                                 onClassSelected = { selectedClass = it },
                                 selectedImplant = uiState.selectedStartingImplant,
                                 onImplantSelected = { viewModel.selectStartingImplant(it) },
-                                onStartGame = { viewModel.createCharacter(runnerNameInput, selectedClass, uiState.selectedStartingImplant) }
+                                onStartGameCustomized = { hpPts, ramPts, reflexPts, armorPts, fundPts, kit ->
+                                    viewModel.createCharacter(
+                                        name = runnerNameInput,
+                                        selectedClass = selectedClass,
+                                        startingImplant = uiState.selectedStartingImplant,
+                                        allocatedHpPoints = hpPts,
+                                        allocatedRamPoints = ramPts,
+                                        allocatedReflexPoints = reflexPts,
+                                        allocatedArmorPoints = armorPts,
+                                        allocatedFundPoints = fundPts,
+                                        starterKit = kit
+                                    )
+                                }
                             )
                         }
                         GameViewModel.ActiveScreen.CYBERWARE_CLINIC -> {
@@ -629,6 +690,14 @@ fun TerminalScreen(
             hostState = toastHostState,
             modifier = Modifier.align(Alignment.TopCenter)
         )
+
+        if (uiState.showCyberwareInventoryOverlay) {
+            CyberwareInventoryOverlay(
+                uiState = uiState,
+                viewModel = viewModel,
+                onDismiss = { viewModel.toggleCyberwareInventoryOverlay(false) }
+            )
+        }
     }
 }
 
@@ -681,7 +750,8 @@ fun HighDensityProgressBar(
 fun TerminalHeader(
     uiState: GameViewModel.GameUiState,
     onLeaderboardClick: () -> Unit,
-    onMenuClick: () -> Unit
+    onMenuClick: () -> Unit,
+    onCyberwareClick: () -> Unit = {}
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = CyberCardBg),
@@ -764,6 +834,18 @@ fun TerminalHeader(
             ) {
                 if (uiState.screen != GameViewModel.ActiveScreen.START_MENU) {
                     IconButton(
+                        onClick = onCyberwareClick,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("cyberware_inventory_button")
+                    ) {
+                        Text(
+                            text = "🔌",
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    IconButton(
                         onClick = onMenuClick,
                         modifier = Modifier
                             .size(24.dp)
@@ -822,16 +904,61 @@ fun CharacterCreationView(
     onClassSelected: (NetrunnerClass) -> Unit,
     selectedImplant: CyberwareImplant,
     onImplantSelected: (CyberwareImplant) -> Unit,
-    onStartGame: () -> Unit
+    onStartGameCustomized: (
+        allocatedHpPoints: Int,
+        allocatedRamPoints: Int,
+        allocatedReflexPoints: Int,
+        allocatedArmorPoints: Int,
+        allocatedFundPoints: Int,
+        starterKit: String
+    ) -> Unit
 ) {
+    // Customization state
+    var allocatedHpPoints by remember { mutableIntStateOf(2) }
+    var allocatedRamPoints by remember { mutableIntStateOf(2) }
+    var allocatedReflexPoints by remember { mutableIntStateOf(2) }
+    var allocatedArmorPoints by remember { mutableIntStateOf(2) }
+    var allocatedFundPoints by remember { mutableIntStateOf(2) }
+    var selectedStarterKit by remember { mutableStateOf("HACKER") }
+    var showAllArchetypes by remember { mutableStateOf(false) }
+
+    val totalPointsAllocated = allocatedHpPoints + allocatedRamPoints + allocatedReflexPoints + allocatedArmorPoints + allocatedFundPoints
+    val pointsRemaining = (10 - totalPointsAllocated).coerceAtLeast(0)
+
+    // Calculate dynamic live preview stats
+    val calcMaxHp = selectedClass.baseIntegrity + selectedImplant.integrityBonus + (allocatedHpPoints * 10)
+    val calcMaxRam = selectedClass.baseRam + selectedImplant.ramBonus + (allocatedRamPoints * 2)
+    val calcRamRecovery = (if (selectedClass == NetrunnerClass.NETRUNNER) 3 else 2) + selectedImplant.recoveryBonus
+    val calcDamageBonus = selectedImplant.damageBonus + allocatedReflexPoints
+    val calcDefense = (if (selectedClass == NetrunnerClass.TECHIE) 5 else 0) + selectedImplant.defenseBonus + allocatedArmorPoints
+    var calcCredits = when (selectedClass) {
+        NetrunnerClass.TECHIE, NetrunnerClass.SCRIPT_KIDDIE -> 300
+        NetrunnerClass.NETRUNNER -> 150
+        NetrunnerClass.STREET_SAMURAI -> 100
+        else -> 100
+    }
+    calcCredits += (allocatedFundPoints * 50) + (if (selectedStarterKit == "SCAVENGER") 150 else 0)
+
+    // GL Preview Color
+    val (hueR, hueG, hueB) = when (selectedClass) {
+        NetrunnerClass.NETRUNNER -> Triple(0.0f, 1.0f, 0.85f)
+        NetrunnerClass.STREET_SAMURAI -> Triple(1.0f, 0.15f, 0.4f)
+        NetrunnerClass.TECHIE -> Triple(1.0f, 0.7f, 0.0f)
+        NetrunnerClass.CODE_SLASHER -> Triple(0.2f, 1.0f, 0.3f)
+        NetrunnerClass.CYBER_SHIELD -> Triple(0.1f, 0.6f, 1.0f)
+        NetrunnerClass.BUFFER_OVERFLOW -> Triple(0.9f, 0.2f, 1.0f)
+        NetrunnerClass.SCRIPT_KIDDIE -> Triple(1.0f, 0.9f, 0.2f)
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(8.dp),
+            .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Top
     ) {
+        // Top ASCII Header & Status
         Text(
             text = """
      _  _  ____ ____  ___  ____   __   _  _  __    ____ ____ 
@@ -844,27 +971,93 @@ fun CharacterCreationView(
             fontSize = 9.sp,
             lineHeight = 10.sp,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 12.dp)
+            modifier = Modifier.padding(bottom = 6.dp)
         )
 
         Text(
-            text = "--- INITIALIZE NETRUNNER CYBERNET INTERRUPT ---",
-            color = CyberGreen,
+            text = "--- CHARACTER CUSTOMIZATION TERMINAL ---",
+            color = CyberCyan,
             fontFamily = FontFamily.Monospace,
-            fontSize = 12.sp,
+            fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 16.dp)
+            modifier = Modifier.padding(bottom = 12.dp)
         )
 
-        // Name input field
+        // 3D Hologram Preview Container
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCardBg),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.6f)),
+            shape = RoundedCornerShape(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier.padding(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "⚡ 3D NEURAL HOLOGRAM PREVIEW",
+                        color = CyberCyan,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "ARCHETYPE: ${selectedClass.title.uppercase()}",
+                        color = CyberPink,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(140.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .border(1.dp, CyberBorderLight, RoundedCornerShape(8.dp))
+                        .background(Color.Black)
+                ) {
+                    CyberCharacterGLView(
+                        modifier = Modifier.fillMaxSize(),
+                        hueR = hueR,
+                        hueG = hueG,
+                        hueB = hueB
+                    )
+
+                    Text(
+                        text = "LIVE RENDER // 60 FPS",
+                        color = CyberBrightGreen.copy(alpha = 0.8f),
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(6.dp)
+                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+
+        // 1. Runner Handle Name Input
         OutlinedTextField(
             value = runnerName,
             onValueChange = onNameChange,
-            label = { Text("Runner Handle Name", color = CyberCyan, fontFamily = FontFamily.Monospace) },
-            textStyle = LocalTextStyle.current.copy(color = CyberCyan, fontFamily = FontFamily.Monospace),
+            label = { Text("Runner Handle / ID Tag", color = CyberCyan, fontFamily = FontFamily.Monospace) },
+            textStyle = LocalTextStyle.current.copy(color = CyberCyan, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold),
             colors = TextFieldDefaults.colors(
-                focusedContainerColor = Color.Transparent,
-                unfocusedContainerColor = Color.Transparent,
+                focusedContainerColor = CyberCardBg,
+                unfocusedContainerColor = CyberCardBg,
                 focusedIndicatorColor = CyberCyan,
                 unfocusedIndicatorColor = CyberBorder,
                 focusedLabelColor = CyberCyan,
@@ -873,29 +1066,44 @@ fun CharacterCreationView(
             singleLine = true,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
                 .testTag("runner_name_input")
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "CHOOSE CLASS ARCHETYPE:",
-            color = CyberCyan,
-            fontFamily = FontFamily.Monospace,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.Start).padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
-        )
+        // 2. Cyberpunk Archetype Selection Header
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "SELECT CYBERPUNK ARCHETYPE:",
+                color = CyberCyan,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            TextButton(
+                onClick = { showAllArchetypes = !showAllArchetypes },
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    text = if (showAllArchetypes) "Show Primary [3]" else "All Classes [7]",
+                    color = CyberPink,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp
+                )
+            }
+        }
 
-        // Grid of classes
+        val displayedClasses = if (showAllArchetypes) NetrunnerClass.VALUES.toList() else NetrunnerClass.PRIMARY_ARCHETYPES
+
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            NetrunnerClass.VALUES.forEach { classType ->
+            displayedClasses.forEach { classType ->
                 val isSelected = classType == selectedClass
                 Card(
                     onClick = { onClassSelected(classType) },
@@ -906,12 +1114,12 @@ fun CharacterCreationView(
                         width = if (isSelected) 2.dp else 1.dp,
                         color = if (isSelected) CyberCyan else CyberBorder
                     ),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("class_card_${classType.name}")
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
+                    Column(modifier = Modifier.padding(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -924,13 +1132,19 @@ fun CharacterCreationView(
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 13.sp
                             )
-                            Row {
+                            Surface(
+                                color = if (isSelected) CyberCyan.copy(alpha = 0.2f) else Color.Transparent,
+                                shape = RoundedCornerShape(4.dp),
+                                border = BorderStroke(1.dp, if (isSelected) CyberCyan else CyberBorder)
+                            ) {
                                 Text(
-                                    text = "${classType.baseIntegrity}HP / ${classType.baseRam}RAM",
+                                    text = "${classType.baseIntegrity} HP | ${classType.baseRam} RAM",
                                     color = CyberCyan,
                                     fontFamily = FontFamily.Monospace,
-                                    fontSize = 11.sp
-                               )
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(4.dp))
@@ -939,16 +1153,23 @@ fun CharacterCreationView(
                             color = CyberBrightGreen,
                             fontFamily = FontFamily.Monospace,
                             fontSize = 10.sp,
-                            lineHeight = 12.sp
+                            lineHeight = 13.sp
                         )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "PASSIVE: ${classType.passiveDesc}",
-                            color = CyberPink,
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "⚡ ${classType.passiveDesc}",
+                                color = CyberPink,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
                 }
             }
@@ -956,19 +1177,108 @@ fun CharacterCreationView(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // 3. Attribute Point Allocation
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCardBg),
+            border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.5f)),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "ALLOCATE ATTRIBUTE POINTS",
+                        color = CyberCyan,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "POINTS REMAINING: $pointsRemaining",
+                        color = if (pointsRemaining > 0) CyberAmber else CyberGreen,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                AttributeAllocationRow(
+                    label = "Integrity Core (HP)",
+                    subText = "+10 Max HP per point",
+                    points = allocatedHpPoints,
+                    canDecrease = allocatedHpPoints > 0,
+                    canIncrease = pointsRemaining > 0,
+                    onDecrease = { allocatedHpPoints-- },
+                    onIncrease = { allocatedHpPoints++ },
+                    bonusText = "+${allocatedHpPoints * 10} HP"
+                )
+
+                AttributeAllocationRow(
+                    label = "RAM Capacity",
+                    subText = "+2 Max RAM per point",
+                    points = allocatedRamPoints,
+                    canDecrease = allocatedRamPoints > 0,
+                    canIncrease = pointsRemaining > 0,
+                    onDecrease = { allocatedRamPoints-- },
+                    onIncrease = { allocatedRamPoints++ },
+                    bonusText = "+${allocatedRamPoints * 2} RAM"
+                )
+
+                AttributeAllocationRow(
+                    label = "Cyber-Reflexes",
+                    subText = "+1 Weapon Dmg / Crit per point",
+                    points = allocatedReflexPoints,
+                    canDecrease = allocatedReflexPoints > 0,
+                    canIncrease = pointsRemaining > 0,
+                    onDecrease = { allocatedReflexPoints-- },
+                    onIncrease = { allocatedReflexPoints++ },
+                    bonusText = "+${allocatedReflexPoints} Dmg"
+                )
+
+                AttributeAllocationRow(
+                    label = "Subdermal Armor",
+                    subText = "+1 Armor & Shield per point",
+                    points = allocatedArmorPoints,
+                    canDecrease = allocatedArmorPoints > 0,
+                    canIncrease = pointsRemaining > 0,
+                    onDecrease = { allocatedArmorPoints-- },
+                    onIncrease = { allocatedArmorPoints++ },
+                    bonusText = "+${allocatedArmorPoints} Armor"
+                )
+
+                AttributeAllocationRow(
+                    label = "Scavenger Capital",
+                    subText = "+50 Starting Credits per point",
+                    points = allocatedFundPoints,
+                    canDecrease = allocatedFundPoints > 0,
+                    canIncrease = pointsRemaining > 0,
+                    onDecrease = { allocatedFundPoints-- },
+                    onIncrease = { allocatedFundPoints++ },
+                    bonusText = "+${allocatedFundPoints * 50} ₡"
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 4. Starter Cybernetic Implant Selection
         Text(
             text = "SELECT STARTER CYBERNETIC IMPLANT:",
             color = CyberCyan,
             fontFamily = FontFamily.Monospace,
             fontSize = 11.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.Start).padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+            modifier = Modifier.align(Alignment.Start).padding(bottom = 6.dp)
         )
 
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             CyberwareImplantRegistry.STARTER_IMPLANTS.forEach { implant ->
@@ -982,7 +1292,7 @@ fun CharacterCreationView(
                         width = if (isSelected) 2.dp else 1.dp,
                         color = if (isSelected) CyberCyan else CyberBorder
                     ),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("implant_card_${implant.id}")
@@ -1029,26 +1339,218 @@ fun CharacterCreationView(
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // Compile Button
+        // 5. Starter Utility Loadout Selection
+        Text(
+            text = "CHOOSE STARTER UTILITY KIT:",
+            color = CyberCyan,
+            fontFamily = FontFamily.Monospace,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.Start).padding(bottom = 6.dp)
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            val kits = listOf(
+                Triple("HACKER", "Hacker Deck", "RAM Boost + Decryptor + AntiShield"),
+                Triple("COMBAT", "Combat Merc", "NanoMeds x2 + Armor Plating"),
+                Triple("SCAVENGER", "Scavenger", "+150 Credits + EMP Grenade")
+            )
+
+            kits.forEach { (kitKey, kitName, kitDesc) ->
+                val isSelected = selectedStarterKit == kitKey
+                Card(
+                    onClick = { selectedStarterKit = kitKey },
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isSelected) CyberMutedGreen else CyberCardBg
+                    ),
+                    border = BorderStroke(
+                        width = if (isSelected) 2.dp else 1.dp,
+                        color = if (isSelected) CyberCyan else CyberBorder
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = kitName,
+                            color = if (isSelected) CyberCyan else CyberBrightGreen,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = kitDesc,
+                            color = CyberMutedText,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 8.sp,
+                            lineHeight = 10.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // 6. Live Stat Sheet Summary Card
+        Card(
+            colors = CardDefaults.cardColors(containerColor = Color.Black),
+            border = BorderStroke(1.dp, CyberCyan),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Text(
+                    text = "--- FINALIZED RUNNER SPECIFICATIONS ---",
+                    color = CyberCyan,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("• Integrity (HP): $calcMaxHp", color = CyberGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        Text("• Max RAM: $calcMaxRam", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        Text("• RAM Recover: ${calcRamRecovery}/turn", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("• Weapon Dmg: +$calcDamageBonus", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        Text("• Armor/Defense: +$calcDefense", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                        Text("• Credits: $calcCredits ₡", color = CyberGreen, fontFamily = FontFamily.Monospace, fontSize = 10.sp)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // Compile & Inject Button
         Button(
-            onClick = onStartGame,
+            onClick = {
+                onStartGameCustomized(
+                    allocatedHpPoints,
+                    allocatedRamPoints,
+                    allocatedReflexPoints,
+                    allocatedArmorPoints,
+                    allocatedFundPoints,
+                    selectedStarterKit
+                )
+            },
             colors = ButtonDefaults.buttonColors(containerColor = CyberCyan),
-            shape = RoundedCornerShape(12.dp),
+            shape = RoundedCornerShape(10.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(48.dp)
-                .padding(horizontal = 16.dp)
                 .testTag("compile_profile_button")
         ) {
             Text(
-                text = "COMPILE PROFILE AND INJECT DATA",
+                text = "COMPILE PROFILE & INJECT DATA",
                 color = Color.Black,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold,
                 fontSize = 12.sp
             )
+        }
+    }
+}
+
+@Composable
+private fun AttributeAllocationRow(
+    label: String,
+    subText: String,
+    points: Int,
+    canDecrease: Boolean,
+    canIncrease: Boolean,
+    onDecrease: () -> Unit,
+    onIncrease: () -> Unit,
+    bonusText: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                color = CyberBrightGreen,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = subText,
+                color = CyberMutedText,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 8.sp
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = bonusText,
+                color = CyberPink,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(60.dp),
+                textAlign = TextAlign.End
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (canDecrease) CyberMutedGreen else Color.DarkGray)
+                    .clickable(enabled = canDecrease, onClick = onDecrease),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("-", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
+
+            Text(
+                text = "$points",
+                color = CyberCyan,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.width(18.dp),
+                textAlign = TextAlign.Center
+            )
+
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (canIncrease) CyberCyan else Color.DarkGray)
+                    .clickable(enabled = canIncrease, onClick = onIncrease),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("+", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            }
         }
     }
 }
@@ -5091,6 +5593,23 @@ fun HackingMinigableView(
                         fontSize = 11.sp
                     )
                 }
+
+                Box(
+                    modifier = Modifier
+                        .clip(CutCornerShape(4.dp))
+                        .background(if (hackModeTab == 2) CyberCyan else CyberDark)
+                        .border(BorderStroke(1.dp, CyberCyan), CutCornerShape(4.dp))
+                        .clickable { hackModeTab = 2 }
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = "PATTERN LOCK",
+                        color = if (hackModeTab == 2) CyberDark else CyberCyan,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
             }
 
             Text(
@@ -5105,6 +5624,15 @@ fun HackingMinigableView(
         if (hackModeTab == 0) {
             MatrixHackingTerminalScreen(
                 onExit = onCancel,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else if (hackModeTab == 2) {
+            CyberHackingMinigameSuite(
+                initialMode = HackingMinigameMode.PATTERN_MATCH,
+                securityLevel = (puzzle.grid.size - 2).coerceAtLeast(1),
+                onSuccess = { onCancel() },
+                onFailed = { onCancel() },
+                onClose = onCancel,
                 modifier = Modifier.fillMaxSize()
             )
         } else {

@@ -2,6 +2,7 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
+// Standard Material Colors Mapping
 val Purple80 = Color(0xFF00FF66)
 val PurpleGrey80 = Color(0xFF00CC52)
 val Pink80 = Color(0xFF00FF99)
@@ -10,20 +11,33 @@ val Purple40 = Color(0xFF00B347)
 val PurpleGrey40 = Color(0xFF008033)
 val Pink40 = Color(0xFF009940)
 
-// Cyberpunk Terminal Palette - High-Contrast Neon Green on Black
-val CyberDark = Color(0xFF000000)             // Pure Black background
-val CyberTerminalBg = Color(0xFF000000)       // Deep terminal black
-val CyberCardBg = Color(0xFF030A04)           // Pitch dark surface with subtle green tint
-val CyberMutedGreen = Color(0xFF002A0E)      // Secondary dark green panel
-val CyberBorder = Color(0xFF00FF66)          // High contrast Neon Green border
-val CyberBorderLight = Color(0xFF009933)     // Secondary border
+// Neon-Drenched Cyberpunk Color Palette
+// Dark Canvas & Surfaces
+val CyberDark = Color(0xFF000000)             // Absolute Pitch Black Canvas
+val CyberTerminalBg = Color(0xFF020604)       // Deep Matrix Void
+val CyberCardBg = Color(0xFF050E08)           // High contrast Dark Surface with subtle emerald glow
+val CyberSurfaceVariant = Color(0xFF0D1A12)   // Secondary dark panel / card elevation
+val CyberMutedGreen = Color(0xFF002D12)      // Primary Container fill
 
-val CyberGreen = Color(0xFF00FF66)           // Primary theme color: High-contrast Electric Neon Green
-val CyberBrightGreen = Color(0xFF39FF14)     // Bright accent Neon Green
-val CyberCyan = Color(0xFF00FFCC)            // High-contrast Neon Cyan accent
-val CyberPink = Color(0xFFFF007F)            // Accent Cyber Pink
-val CyberAmber = Color(0xFFFFCC00)           // Accent Amber / Warning
-val CyberGrey = Color(0xFF08120A)            // Dark terminal panel
-val CyberMutedText = Color(0xFF00B33C)       // High contrast readable green secondary text
-val CyberBlueGradientEnd = Color(0xFF00FF88) // Neon Green gradient accent
+// High-Voltage Neon Accents
+val CyberGreen = Color(0xFF00FF66)           // Primary: Electric Neon Matrix Green
+val CyberBrightGreen = Color(0xFF39FF14)     // Bright Hyper-Green Accent
+val CyberCyan = Color(0xFF00F0FF)            // Secondary: High-Voltage Cyber Cyan
+val CyberPink = Color(0xFFFF007F)            // Tertiary: Neon Hot Pink / Magenta
+val CyberAmber = Color(0xFFFFEA00)           // Warning / Attention: Electric Yellow-Amber
+val CyberCrimson = Color(0xFFFF0055)         // Error / Critical: Neon Crimson Red
+val CyberPurple = Color(0xFFB026FF)          // Accent: Acid Purple
+
+// Panel Borders & Grid Elements
+val CyberBorder = Color(0xFF00FF66)          // Primary High-Contrast Neon Green Border
+val CyberBorderLight = Color(0xFF009933)     // Secondary Dim Green Border
+val CyberCyanBorder = Color(0xFF00F0FF)      // Cyber Cyan Border Accent
+val CyberPinkBorder = Color(0xFFFF007F)      // Neon Pink Border Accent
+
+// Text & Content Highlights
+val CyberTextPrimary = Color(0xFFE0FFE9)     // High-Contrast Bright Mint-White Primary Text
+val CyberMutedText = Color(0xFF00CC52)       // High-Contrast Neon Green Secondary Text
+val CyberGrey = Color(0xFF08140B)            // Panel Container Background
+val CyberBlueGradientEnd = Color(0xFF00FF88) // Matrix Gradient Transition Color
+
 

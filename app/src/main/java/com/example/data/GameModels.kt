@@ -10,6 +10,24 @@ enum class NetrunnerClass(
     val baseRam: Int,
     val passiveDesc: String
 ) {
+    NETRUNNER(
+        "Netrunner",
+        "Infiltration & Matrix Specialist with high-frequency RAM pools, fast overclock recovery, and instant firewall bypasses.",
+        90, 22,
+        "Matrix Mastery: +50% RAM recovery rate & +25% Hacking Success Rate"
+    ),
+    STREET_SAMURAI(
+        "Street Samurai",
+        "Heavy frontline mercenary equipped with subdermal plating, reflex boosters, and deadly melee critical strikes.",
+        160, 8,
+        "Chrome & Reflexes: Starts with 30% Shield, +25% Crit Rate & 2.0x Crit Damage"
+    ),
+    TECHIE(
+        "Techie",
+        "Master hardware engineer and scavenger specializing in military-grade utilities, automated drones, and heavy starter funding.",
+        120, 14,
+        "Hardware Scavenger: Starts with 300 credits, bonus utility items, and +5 Defense"
+    ),
     CODE_SLASHER(
         "Code Slasher",
         "An aggressive infiltrator utilizing optimized scripts to slice through firewalls and files.",
@@ -36,6 +54,7 @@ enum class NetrunnerClass(
     );
 
     companion object {
+        val PRIMARY_ARCHETYPES = listOf(NETRUNNER, STREET_SAMURAI, TECHIE)
         val VALUES = values()
     }
 }
