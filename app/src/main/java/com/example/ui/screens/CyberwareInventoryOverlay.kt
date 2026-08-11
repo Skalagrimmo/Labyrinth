@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -23,6 +24,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,27 +70,32 @@ fun CyberwareInventoryOverlay(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.88f))
-            .clickable(onClick = { /* Intercept clicks on background backdrop */ })
-            .padding(12.dp),
+            .clickable(onClick = { /* Intercept clicks on background backdrop */ }),
         contentAlignment = Alignment.Center
     ) {
+        val isNarrow = maxWidth < 380.dp
+        val isShortHeight = maxHeight < 500.dp
+
         Card(
             colors = CardDefaults.cardColors(containerColor = CyberCardBg),
             border = BorderStroke(1.5.dp, CyberCyan),
             shape = RoundedCornerShape(16.dp),
             modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight(0.92f)
+                .fillMaxWidth(if (maxWidth > 720.dp) 0.85f else 0.96f)
+                .widthIn(max = 720.dp)
+                .fillMaxHeight(if (isShortHeight) 0.98f else 0.92f)
+                .heightIn(max = 840.dp)
+                .padding(if (isNarrow) 4.dp else 10.dp)
                 .testTag("cyberware_inventory_overlay")
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(12.dp)
+                    .padding(if (isNarrow) 8.dp else 12.dp)
             ) {
                 // Header Bar
                 Row(
@@ -99,10 +106,10 @@ fun CyberwareInventoryOverlay(
                     Column(modifier = Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "🔌 CYBERWARE INVENTORY & CHASSIS",
+                                text = if (isNarrow) "🔌 CYBERWARE & CHASSIS" else "🔌 CYBERWARE INVENTORY & CHASSIS",
                                 color = CyberCyan,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 14.sp,
+                                fontSize = if (isNarrow) 12.sp else 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -110,7 +117,7 @@ fun CyberwareInventoryOverlay(
                             text = "AUGMENTATION MATRIX // STORAGE & EQUIPMENT SYSTEM",
                             color = CyberMutedText,
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 8.5.sp
+                            fontSize = if (isNarrow) 7.5.sp else 8.5.sp
                         )
                     }
 
@@ -128,9 +135,9 @@ fun CyberwareInventoryOverlay(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (isShortHeight) 4.dp else 8.dp))
                 HorizontalDivider(color = CyberBorder, thickness = 1.dp)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (isShortHeight) 4.dp else 8.dp))
 
                 // Overclock Stats Quick HUD
                 val totalHp = uiState.installedImplants.values.sumOf { it?.integrityBonus ?: 0 }
@@ -148,29 +155,31 @@ fun CyberwareInventoryOverlay(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 8.dp, vertical = if (isShortHeight) 4.dp else 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (isNarrow) 8.dp else 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("💖 HP +$totalHp", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text("⚡ RAM +$totalRam", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text("🔋 REC +$totalRec/t", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text("🗡️ DMG +$totalDmg", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text("🛡️ DEF +$totalDef%", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                        val statFontSize = if (isNarrow) 8.sp else 9.sp
+                        Text("💖 HP +$totalHp", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = statFontSize, fontWeight = FontWeight.Bold)
+                        Text("⚡ RAM +$totalRam", color = CyberPink, fontFamily = FontFamily.Monospace, fontSize = statFontSize, fontWeight = FontWeight.Bold)
+                        Text("🔋 REC +$totalRec/t", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = statFontSize, fontWeight = FontWeight.Bold)
+                        Text("🗡️ DMG +$totalDmg", color = CyberBrightGreen, fontFamily = FontFamily.Monospace, fontSize = statFontSize, fontWeight = FontWeight.Bold)
+                        Text("🛡️ DEF +$totalDef%", color = CyberCyan, fontFamily = FontFamily.Monospace, fontSize = statFontSize, fontWeight = FontWeight.Bold)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(if (isShortHeight) 4.dp else 8.dp))
 
                 // Navigation Tabs Bar
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val tabs = listOf(
-                        "EQUIPPED" to "⚡ EQUIPPED CHASSIS",
-                        "STORED" to "🎒 STORAGE (${uiState.storedImplants.size})",
-                        "STATS" to "📊 STAT MATRIX"
+                        "EQUIPPED" to if (isNarrow) "⚡ CHASSIS" else "⚡ EQUIPPED CHASSIS",
+                        "STORED" to if (isNarrow) "🎒 STORED (${uiState.storedImplants.size})" else "🎒 STORAGE (${uiState.storedImplants.size})",
+                        "STATS" to if (isNarrow) "📊 STATS" else "📊 STAT MATRIX"
                     )
 
                     tabs.forEach { (tabKey, label) ->
@@ -183,16 +192,16 @@ fun CyberwareInventoryOverlay(
                             ),
                             border = BorderStroke(1.dp, if (isSelected) CyberCyan else CyberBorder),
                             shape = RoundedCornerShape(8.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            contentPadding = PaddingValues(horizontal = if (isNarrow) 4.dp else 8.dp, vertical = 2.dp),
                             modifier = Modifier
                                 .weight(1f)
-                                .height(34.dp)
+                                .height(if (isShortHeight) 28.dp else 34.dp)
                                 .testTag("tab_${tabKey.lowercase()}")
                         ) {
                             Text(
                                 text = label,
                                 fontFamily = FontFamily.Monospace,
-                                fontSize = 9.5.sp,
+                                fontSize = if (isNarrow) 8.sp else 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1
                             )

@@ -98,12 +98,17 @@ fun CombatHackingMinigameView(
             .fillMaxWidth()
             .testTag("combat_hacking_minigame_view")
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        FlickeringCrtScanlineTerminalOverlay(
+            enabled = true,
+            flickerIntensity = 0.25f,
+            showControlToggle = false
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             // --- HEADER TITLE & TIMER ---
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -367,4 +372,5 @@ fun CombatHackingMinigameView(
             }
         }
     }
+}
 }

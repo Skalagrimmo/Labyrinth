@@ -71,6 +71,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.theme.CyberAmber
 import com.example.ui.theme.CyberCardBg
 import com.example.ui.theme.CyberCyan
@@ -260,11 +261,16 @@ fun MatrixHackingTerminalScreen(
             .testTag("matrix_terminal_screen"),
         color = CyberDark
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            // Matrix Digital Background Animation Canvas
-            MatrixRainCanvas(
-                modifier = Modifier.fillMaxSize()
-            )
+        FlickeringCrtScanlineTerminalOverlay(
+            enabled = true,
+            showControlToggle = true,
+            flickerIntensity = 0.35f
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                // Matrix Digital Background Animation Canvas
+                MatrixRainCanvas(
+                    modifier = Modifier.fillMaxSize()
+                )
 
             Column(
                 modifier = Modifier
@@ -451,6 +457,7 @@ fun MatrixHackingTerminalScreen(
             }
         }
     }
+}
 }
 
 @Composable

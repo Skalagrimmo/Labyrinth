@@ -26,6 +26,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -743,15 +744,17 @@ fun AnimatedCyberHudConsole(
             enter = slideInVertically { -it } + fadeIn(),
             exit = slideOutVertically { -it } + fadeOut()
         ) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CyberDark.copy(alpha = 0.96f)),
-                border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.6f)),
-                shape = CutCornerShape(6.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(130.dp)
-                    .padding(top = 4.dp)
-            ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val drawerHeight = if (maxHeight < 400.dp) 95.dp else 130.dp
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = CyberDark.copy(alpha = 0.96f)),
+                    border = BorderStroke(1.dp, CyberCyan.copy(alpha = 0.6f)),
+                    shape = CutCornerShape(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(drawerHeight)
+                        .padding(top = 4.dp)
+                ) {
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
@@ -862,4 +865,5 @@ fun AnimatedCyberHudConsole(
             }
         }
     }
+}
 }

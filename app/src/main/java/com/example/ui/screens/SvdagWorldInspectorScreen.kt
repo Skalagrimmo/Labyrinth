@@ -49,6 +49,11 @@ fun SvdagWorldInspectorScreen(
     iceEntities: List<IceEntity> = emptyList(),
     playerPos: Triple<Int, Int, Int> = Triple(2, 2, 3),
     playerHideStatus: PlayerHideStatus? = null,
+    multiFloorLevel: com.example.data.MultiFloorGridLevel? = null,
+    activeFloorIndex: Int = 0,
+    onSelectFloor: ((Int) -> Unit)? = null,
+    onUseConnector: ((com.example.data.VerticalConnector) -> Unit)? = null,
+    onRegenerateMultiFloorLevel: ((Int) -> Unit)? = null,
     onTriggerScan: ((ox: Int, oy: Int, oz: Int, radius: Int) -> Unit)? = null,
     onTickIceAI: (() -> Unit)? = null,
     onMovePlayer: ((dx: Int, dy: Int, dz: Int) -> Unit)? = null,
@@ -58,6 +63,7 @@ fun SvdagWorldInspectorScreen(
     modifier: Modifier = Modifier
 ) {
     val view = LocalView.current
+    var showMultiFloorInspector by remember { mutableStateOf(false) }
     var selectedDepth by remember(currentDag) { mutableStateOf(currentDag.maxDepth) }
     var selectedLodLevel by remember { mutableIntStateOf(currentStats.currentLodLevel) }
     var sliceAxis by remember { mutableStateOf("XY") } // "XY", "XZ", "YZ"
@@ -176,6 +182,64 @@ fun SvdagWorldInspectorScreen(
                         fontFamily = FontFamily.Monospace,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
+                }
+            }
+        }
+
+        // --- 1B. MULTI-FLOOR REACHABLE LEVEL GENERATOR CARD ---
+        Card(
+            colors = CardDefaults.cardColors(containerColor = cyberCardBg),
+            border = BorderStroke(1.dp, cyberCyan.copy(alpha = 0.8f)),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+        ) {
+            Column(modifier = Modifier.padding(12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "🌐 PROCEDURAL MULTI-FLOOR LEVEL SYSTEM",
+                            color = cyberCyan,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = if (multiFloorLevel != null)
+                                "${multiFloorLevel.sectorName} • ${multiFloorLevel.floors.size} Floors • 100% Guaranteed Reachability"
+                            else "Grid-Based Multi-Floor Cyberpunk World Generator",
+                            color = Color.LightGray,
+                            fontSize = 9.5.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    Button(
+                        onClick = {
+                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                            if (multiFloorLevel == null) {
+                                onRegenerateMultiFloorLevel?.invoke(4)
+                            }
+                            showMultiFloorInspector = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = cyberCyan),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("btn_open_multifloor_inspector")
+                    ) {
+                        Text(
+                            text = if (multiFloorLevel != null) "INSPECT MAP" else "GENERATE",
+                            color = Color.Black,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }
@@ -1278,6 +1342,19 @@ fun SvdagWorldInspectorScreen(
                 }
             }
         }
+    }
+
+    if (showMultiFloorInspector) {
+        MultiFloorLevelInspectorOverlay(
+            multiFloorLevel = multiFloorLevel,
+            activeFloorIndex = activeFloorIndex,
+            playerX = playerPos.first,
+            playerY = playerPos.second,
+            onSelectFloor = { onSelectFloor?.invoke(it) },
+            onUseConnector = { onUseConnector?.invoke(it) },
+            onRegenerateLevel = { onRegenerateMultiFloorLevel?.invoke(it) },
+            onDismiss = { showMultiFloorInspector = false }
+        )
     }
 }
 

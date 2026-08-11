@@ -93,6 +93,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.audio.CyberSoundEffectsManager
 import com.example.audio.CyberVibrationManager
+import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.theme.CyberAmber
 import com.example.ui.theme.CyberCardBg
 import com.example.ui.theme.CyberCyan
@@ -169,11 +170,16 @@ fun CyberHackingMinigameSuite(
             .testTag("cyber_hacking_suite_root"),
         color = CyberDark
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(10.dp)
+        FlickeringCrtScanlineTerminalOverlay(
+            enabled = true,
+            showControlToggle = true,
+            flickerIntensity = 0.30f
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(10.dp)
+            ) {
             // Header Title Bar
             Row(
                 modifier = Modifier
@@ -341,6 +347,7 @@ fun CyberHackingMinigameSuite(
             }
         }
     }
+}
 }
 
 // ============================================================================

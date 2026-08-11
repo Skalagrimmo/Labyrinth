@@ -220,7 +220,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val unlockedPrompts: Set<String> = setOf("DEFAULT"),
         val activePromptStyle: String = "DEFAULT",
         val unlockedBuffs: Set<String> = emptySet(),
-        val activeBuffs: Set<String> = emptySet()
+        val activeBuffs: Set<String> = emptySet(),
+
+        // Procedural Multi-Floor Grid Reachable Level System
+        val currentMultiFloorLevel: com.example.data.MultiFloorGridLevel? = null,
+        val activeFloorIndex: Int = 0
     )
 
     enum class ActiveScreen {
@@ -843,6 +847,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val maze = withContext(Dispatchers.Default) {
                 GameEngine.generateMaze(size, size, level)
             }
+            val multiFloorLevel = withContext(Dispatchers.Default) {
+                com.example.data.ProceduralMultiFloorLevelGenerator.generateMultiFloorLevel(
+                    levelNumber = level,
+                    numFloors = 4,
+                    widthPerFloor = 14,
+                    heightPerFloor = 14
+                )
+            }
             val perspective = withContext(Dispatchers.Default) {
                 GameEngine.render3DPerspective(maze, 1, 1, Direction.EAST)
             }
@@ -850,6 +862,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { state ->
                 state.copy(
                     maze = maze,
+                    currentMultiFloorLevel = multiFloorLevel,
+                    activeFloorIndex = 0,
                     gridX = 1,
                     gridY = 1,
                     direction = Direction.EAST,
@@ -859,6 +873,65 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             revealCellsAround(1, 1)
         }
+    }
+
+    fun generateProceduralMultiFloorLevel(numFloors: Int = 4, width: Int = 14, height: Int = 14) {
+        viewModelScope.launch {
+            val levelNum = _uiState.value.level
+            val multiFloor = withContext(Dispatchers.Default) {
+                com.example.data.ProceduralMultiFloorLevelGenerator.generateMultiFloorLevel(
+                    levelNumber = levelNum,
+                    numFloors = numFloors,
+                    widthPerFloor = width,
+                    heightPerFloor = height
+                )
+            }
+            _uiState.update { state ->
+                val activeGrid = multiFloor.floors.firstOrNull()?.grid ?: state.maze
+                state.copy(
+                    currentMultiFloorLevel = multiFloor,
+                    activeFloorIndex = 0,
+                    maze = activeGrid,
+                    gridX = multiFloor.spawnPoint.second,
+                    gridY = multiFloor.spawnPoint.third
+                )
+            }
+            addLog("LEVEL GENERATION: Multi-Floor ${multiFloor.sectorName} constructed. Reachability 100% verified across ${multiFloor.floors.size} floors.", LogType.SUCCESS)
+        }
+    }
+
+    fun setActiveFloorIndex(floorIndex: Int) {
+        val state = _uiState.value
+        val level = state.currentMultiFloorLevel ?: return
+        val targetFloor = level.floors.getOrNull(floorIndex) ?: return
+
+        _uiState.update {
+            it.copy(
+                activeFloorIndex = floorIndex,
+                maze = targetFloor.grid
+            )
+        }
+        addLog("SECTOR ELEVATOR: Navigated to ${targetFloor.floorName} [Security Level ${targetFloor.securityLevel}].", LogType.INFO)
+    }
+
+    fun navigateVerticalConnector(connector: com.example.data.VerticalConnector) {
+        val state = _uiState.value
+        val currentFloor = state.activeFloorIndex
+        val targetFloorIdx = if (currentFloor == connector.fromFloor) connector.toFloor else connector.fromFloor
+        val targetPos = if (currentFloor == connector.fromFloor) connector.toPos else connector.fromPos
+
+        val level = state.currentMultiFloorLevel ?: return
+        val targetGridFloor = level.floors.getOrNull(targetFloorIdx) ?: return
+
+        _uiState.update {
+            it.copy(
+                activeFloorIndex = targetFloorIdx,
+                maze = targetGridFloor.grid,
+                gridX = targetPos.first,
+                gridY = targetPos.second
+            )
+        }
+        addLog("TRANSIT CONNECTED: ${connector.name} used. Transferred to ${targetGridFloor.floorName}.", LogType.SUCCESS)
     }
 
     fun revealCellsAround(x: Int, y: Int) {

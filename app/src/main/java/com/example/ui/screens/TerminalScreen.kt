@@ -51,6 +51,7 @@ import com.example.ui.components.CyberToastType
 import com.example.ui.components.rememberCyberToastHostState
 import com.example.ui.components.VisualTurnIndicator
 import com.example.ui.components.CombatHackingMinigameView
+import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.components.AnimatedCyberHudConsole
 import com.example.gl.CyberCharacterGLView
@@ -448,6 +449,11 @@ fun TerminalScreen(
                                     iceEntities = uiState.svdagIceEntities,
                                     playerPos = uiState.svdagPlayerPos,
                                     playerHideStatus = uiState.svdagPlayerHideStatus,
+                                    multiFloorLevel = uiState.currentMultiFloorLevel,
+                                    activeFloorIndex = uiState.activeFloorIndex,
+                                    onSelectFloor = { viewModel.setActiveFloorIndex(it) },
+                                    onUseConnector = { viewModel.navigateVerticalConnector(it) },
+                                    onRegenerateMultiFloorLevel = { viewModel.generateProceduralMultiFloorLevel(it) },
                                     onTriggerScan = { ox, oy, oz, radius -> viewModel.triggerSvdagScan(ox, oy, oz, radius) },
                                     onTickIceAI = { viewModel.tickSvdagIceAI() },
                                     onMovePlayer = { dx, dy, dz -> viewModel.moveSvdagPlayer(dx, dy, dz) },
@@ -643,6 +649,11 @@ fun TerminalScreen(
                                     iceEntities = uiState.svdagIceEntities,
                                     playerPos = uiState.svdagPlayerPos,
                                     playerHideStatus = uiState.svdagPlayerHideStatus,
+                                    multiFloorLevel = uiState.currentMultiFloorLevel,
+                                    activeFloorIndex = uiState.activeFloorIndex,
+                                    onSelectFloor = { viewModel.setActiveFloorIndex(it) },
+                                    onUseConnector = { viewModel.navigateVerticalConnector(it) },
+                                    onRegenerateMultiFloorLevel = { viewModel.generateProceduralMultiFloorLevel(it) },
                                     onTriggerScan = { ox, oy, oz, radius -> viewModel.triggerSvdagScan(ox, oy, oz, radius) },
                                     onTickIceAI = { viewModel.tickSvdagIceAI() },
                                     onMovePlayer = { dx, dy, dz -> viewModel.moveSvdagPlayer(dx, dy, dz) },
@@ -5549,9 +5560,14 @@ fun HackingMinigableView(
 
     var hackModeTab by remember { mutableStateOf(0) } // 0 = MATRIX COMMAND TERMINAL, 1 = BREACH PROTOCOL GRID
 
-    Column(
-        modifier = Modifier.fillMaxSize()
+    FlickeringCrtScanlineTerminalOverlay(
+        enabled = true,
+        showControlToggle = true,
+        flickerIntensity = 0.32f
     ) {
+        Column(
+            modifier = Modifier.fillMaxSize()
+        ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -5833,7 +5849,7 @@ fun HackingMinigableView(
         }
     }
 }
-
+}
 }
 
 // ==========================================
