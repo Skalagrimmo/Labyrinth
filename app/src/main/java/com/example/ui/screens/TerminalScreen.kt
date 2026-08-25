@@ -381,29 +381,13 @@ fun TerminalScreen(
                                 onCloseClinic = { viewModel.closeCyberwareClinic() }
                             )
                         }
-                        GameViewModel.ActiveScreen.EXPLORATION -> {
+                        GameViewModel.ActiveScreen.EXPLORATION,
+                        GameViewModel.ActiveScreen.COMBAT -> {
                             ExplorationView(
                                 uiState = uiState,
                                 viewModel = viewModel,
                                 onShopClick = { viewModel.enterShop() },
                                 onSafeDisconnect = { viewModel.disconnectRunSuccessfully() }
-                            )
-                        }
-                        GameViewModel.ActiveScreen.COMBAT -> {
-                            CombatView(
-                                uiState = uiState,
-                                onExecuteProgram = { viewModel.executeCombatProgram(it) },
-                                onFlee = { viewModel.fleeCombat() },
-                                onAttack = { viewModel.combatAttack() },
-                                onSetCombatStyle = { viewModel.setCombatStyle(it) },
-                                onDefend = { viewModel.combatDefend() },
-                                onHack = { viewModel.combatHack() },
-                                onScan = { viewModel.combatScan() },
-                                onUseItem = { viewModel.useInventoryItem(it) },
-                                onEndTurn = { viewModel.endTurn() },
-                                onSelectSymbol = { viewModel.selectCombatHackSymbol(it) },
-                                onClearHackBuffer = { viewModel.clearCombatHackBuffer() },
-                                onAbortHack = { viewModel.abortCombatHack() }
                             )
                         }
                         GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
@@ -581,29 +565,13 @@ fun TerminalScreen(
                                 onCloseClinic = { viewModel.closeCyberwareClinic() }
                             )
                         }
-                        GameViewModel.ActiveScreen.EXPLORATION -> {
+                        GameViewModel.ActiveScreen.EXPLORATION,
+                        GameViewModel.ActiveScreen.COMBAT -> {
                             ExplorationView(
                                 uiState = uiState,
                                 viewModel = viewModel,
                                 onShopClick = { viewModel.enterShop() },
                                 onSafeDisconnect = { viewModel.disconnectRunSuccessfully() }
-                            )
-                        }
-                        GameViewModel.ActiveScreen.COMBAT -> {
-                            CombatView(
-                                uiState = uiState,
-                                onExecuteProgram = { viewModel.executeCombatProgram(it) },
-                                onFlee = { viewModel.fleeCombat() },
-                                onAttack = { viewModel.combatAttack() },
-                                onSetCombatStyle = { viewModel.setCombatStyle(it) },
-                                onDefend = { viewModel.combatDefend() },
-                                onHack = { viewModel.combatHack() },
-                                onScan = { viewModel.combatScan() },
-                                onUseItem = { viewModel.useInventoryItem(it) },
-                                onEndTurn = { viewModel.endTurn() },
-                                onSelectSymbol = { viewModel.selectCombatHackSymbol(it) },
-                                onClearHackBuffer = { viewModel.clearCombatHackBuffer() },
-                                onAbortHack = { viewModel.abortCombatHack() }
                             )
                         }
                         GameViewModel.ActiveScreen.HACKING_MINIGAME -> {
@@ -1995,6 +1963,7 @@ fun ExplorationView(
                                     combatTurn = uiState.combatTurn,
                                     isCombatInputEnabled = uiState.isCombatInputEnabled,
                                     bannerMessage = uiState.showCombatBanner,
+                                    combatRound = uiState.combatRound,
                                     compactMode = true
                                 )
 
@@ -4818,6 +4787,7 @@ fun CombatView(
                     combatTurn = uiState.combatTurn,
                     isCombatInputEnabled = uiState.isCombatInputEnabled,
                     bannerMessage = uiState.showCombatBanner,
+                    combatRound = uiState.combatRound,
                     compactMode = false
                 )
             }
@@ -5062,47 +5032,19 @@ fun CombatView(
                     .padding(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Stance Selector Row (Slash / Chop / Thrust)
+                // Single Unified Stance Indicator
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "STANCE:",
+                        text = "COMBAT STANCE: UNIFIED STRIKE PROTOCOL",
                         color = CyberAmber,
                         fontFamily = FontFamily.Monospace,
                         fontWeight = FontWeight.Bold,
                         fontSize = 9.sp
                     )
-
-                    listOf("Slash", "Chop", "Thrust").forEach { style ->
-                        val isSelected = uiState.selectedCombatStyle == style
-                        val borderCol = if (isSelected) CyberCyan else CyberBorder
-                        val bgCol = if (isSelected) CyberMutedGreen else CyberDark
-                        val textCol = if (isSelected) CyberCyan else CyberBrightGreen.copy(alpha = 0.7f)
-
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 36.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(bgCol)
-                                .border(1.dp, borderCol, RoundedCornerShape(6.dp))
-                                .clickable { onSetCombatStyle(style) }
-                                .padding(vertical = 6.dp)
-                                .testTag("btn_combat_stance_${style.lowercase()}"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = style.uppercase(),
-                                color = textCol,
-                                fontFamily = FontFamily.Monospace,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 9.sp
-                            )
-                        }
-                    }
                 }
 
                 // Sub-Deck Toggle Bar (COMMANDS vs DAEMONS vs ITEMS)
@@ -5312,7 +5254,7 @@ fun CombatView(
                                         .testTag("btn_combat_attack")
                                 ) {
                                     Text(
-                                        text = "⚔️ STRIKE (${uiState.selectedCombatStyle.uppercase()})",
+                                        text = "⚔️ STRIKE ATTACK",
                                         color = CyberPink,
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Bold,
@@ -6996,8 +6938,8 @@ fun HighDensityBottomNavigation(
                 }
 
                 // Tab 2: NODES
-                val isNodesActive = currentScreen == GameViewModel.ActiveScreen.COMBAT || 
-                                    currentScreen == GameViewModel.ActiveScreen.HACKING_MINIGAME
+                val isNodesActive = currentScreen == GameViewModel.ActiveScreen.HACKING_MINIGAME || 
+                                    viewModel.uiState.value.gameState != GameState.EXPLORATION
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier

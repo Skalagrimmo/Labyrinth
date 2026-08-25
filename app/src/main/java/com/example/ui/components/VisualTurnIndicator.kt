@@ -62,6 +62,7 @@ fun VisualTurnIndicator(
     combatTurn: CombatTurn,
     isCombatInputEnabled: Boolean,
     bannerMessage: String? = null,
+    combatRound: Int = 1,
     compactMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
@@ -194,8 +195,8 @@ fun VisualTurnIndicator(
                     AnimatedContent(
                         targetState = when {
                             bannerMessage != null -> bannerMessage
-                            isPlayerActive -> "◀ YOUR TURN"
-                            isEnemyActive -> "HOSTILE ▶"
+                            isPlayerActive -> if (compactMode) "R$combatRound ◀" else "RND $combatRound ◀ YOUR TURN"
+                            isEnemyActive -> if (compactMode) "▶ R$combatRound" else "HOSTILE ▶ RND $combatRound"
                             else -> "⚡ BUSY"
                         },
                         transitionSpec = {

@@ -97,9 +97,15 @@ interface InventoryItemDao {
         RunRecord::class,
         CharacterProfileEntity::class,
         GameSaveProgressEntity::class,
-        InventoryItemEntity::class
+        InventoryItemEntity::class,
+        FloorMapEntity::class,
+        FloorObstacleEntity::class,
+        PlayerMapPositionEntity::class,
+        GridMapStateEntity::class,
+        GridEntityCoordinateEntity::class,
+        PlayerEntity::class
     ],
-    version = 3,
+    version = 6,
     exportSchema = false
 )
 abstract class GameDatabase : RoomDatabase() {
@@ -107,6 +113,13 @@ abstract class GameDatabase : RoomDatabase() {
     abstract fun characterProfileDao(): CharacterProfileDao
     abstract fun gameSaveProgressDao(): GameSaveProgressDao
     abstract fun inventoryItemDao(): InventoryItemDao
+    abstract fun floorMapDao(): FloorMapDao
+    abstract fun floorObstacleDao(): FloorObstacleDao
+    abstract fun playerMapPositionDao(): PlayerMapPositionDao
+    abstract fun gridMapStateDao(): GridMapStateDao
+    abstract fun gridEntityCoordinateDao(): GridEntityCoordinateDao
+    abstract fun playerDao(): PlayerDao
+    abstract fun playerNpcCoordinatesDao(): PlayerNpcCoordinatesDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -193,6 +206,30 @@ abstract class GameDatabase : RoomDatabase() {
                 INSTANCE = instance
                 instance
             }
+        }
+
+        fun getFloorMapRepository(context: Context): FloorMapRepository {
+            val db = getDatabase(context)
+            return FloorMapRepository(
+                floorMapDao = db.floorMapDao(),
+                floorObstacleDao = db.floorObstacleDao(),
+                playerMapPositionDao = db.playerMapPositionDao()
+            )
+        }
+
+        fun getGridGameStateRepository(context: Context): GridGameStateRepository {
+            val db = getDatabase(context)
+            return GridGameStateRepository(
+                gridMapStateDao = db.gridMapStateDao(),
+                gridEntityCoordinateDao = db.gridEntityCoordinateDao()
+            )
+        }
+
+        fun getPlayerRepository(context: Context): PlayerRepository {
+            val db = getDatabase(context)
+            return PlayerRepository(
+                playerDao = db.playerDao()
+            )
         }
     }
 }

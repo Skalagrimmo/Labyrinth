@@ -50,7 +50,7 @@ data class CombatEngineState(
     val playerRam: Int = 12,
     val playerMaxRam: Int = 12,
     val playerLevel: Int = 1,
-    val playerStance: String = "Slash",
+    val playerStance: String = "Strike",
     val isPlayerDefending: Boolean = false,
     
     // Hostile Cyber-Enemy Stats
@@ -75,7 +75,7 @@ data class CombatEngineState(
  * Sealed class defining all valid player tactical inputs in turn-based combat.
  */
 sealed class PlayerCombatAction {
-    data class Strike(val stance: String = "Slash") : PlayerCombatAction()
+    data class Strike(val stance: String = "Strike") : PlayerCombatAction()
     object Defend : PlayerCombatAction()
     data class RunProgram(
         val programName: String,
@@ -128,13 +128,7 @@ object TurnBasedCombatEngine {
         // 1. Process player action
         when (action) {
             is PlayerCombatAction.Strike -> {
-                val stance = action.stance
-                val baseChance = when (stance) {
-                    "Slash" -> 70
-                    "Chop" -> 55
-                    "Thrust" -> 85
-                    else -> 70
-                }
+                val baseChance = 75
                 val hitChance = (baseChance + state.playerLevel * 2 + state.playerRam).coerceIn(25, 95)
                 val roll = Random.nextInt(100)
 
@@ -142,12 +136,7 @@ object TurnBasedCombatEngine {
                     wasMiss = true
                     logs.add("⚔️ STRIKE MISSED! Weapon swung wide [Roll: $roll vs Chance: $hitChance%].")
                 } else {
-                    val baseDmg = when (stance) {
-                        "Slash" -> 16
-                        "Chop" -> 24
-                        "Thrust" -> 11
-                        else -> 16
-                    }
+                    val baseDmg = 18
                     var rawDmg = baseDmg + (state.playerLevel * 3)
                     
                     // Crit check
@@ -170,7 +159,7 @@ object TurnBasedCombatEngine {
                     state = state.copy(
                         enemyShield = remShield,
                         enemyHealth = remHealth,
-                        playerStance = stance
+                        playerStance = "Strike"
                     )
 
                     logs.add("⚔️ HIT! Dealt $dmgToEnemy damage to ${state.enemyName}.")

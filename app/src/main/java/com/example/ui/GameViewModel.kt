@@ -145,6 +145,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         // Visual Turn-Based Combat State & Effects
         val combatTurn: CombatTurn = CombatTurn.PLAYER,
+        val combatRound: Int = 1,
+        val turnPhase: TurnPhase = TurnPhase.PLAYER_INPUT,
+        val playerActionHistory: List<TurnActionRecord> = emptyList(),
+        val enemyTurnHistory: List<TurnActionRecord> = emptyList(),
+        val allTurnActions: List<TurnActionRecord> = emptyList(),
+        val lastPlayerActionRecord: TurnActionRecord? = null,
+        val lastEnemyActionRecord: TurnActionRecord? = null,
+        val totalPlayerActionsCount: Int = 0,
+        val totalEnemyTurnsCount: Int = 0,
         val activeCombatHack: CombatHackingPatternState? = null,
         val combatFlashEnemy: Boolean = false,
         val combatFlashPlayer: Boolean = false,
@@ -177,7 +186,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val cityExplored: Map<Int, Set<Pair<Int, Int>>> = emptyMap(),
 
         // Morrowind Style System States
-        val selectedCombatStyle: String = "Slash", // "Slash", "Chop", "Thrust"
+        val selectedCombatStyle: String = "Strike", // Single unified combat style
         val equippedWeaponName: String = "Sparksteel Dagger",
         val equippedArmorName: String = "Basic Firewall Mesh",
         val equippedUtilityName: String = "None",
@@ -187,7 +196,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val selectedInventoryCategoryFilter: com.example.data.InventoryCategory? = null,
         val inventorySortOption: com.example.data.InventorySortOption = com.example.data.InventorySortOption.CATEGORY,
         val weaponSwingProgress: Float = 0f,
-        val weaponSwingType: String = "", // "Slash", "Chop", "Thrust"
+        val weaponSwingType: String = "Strike",
 
         // Cybernetic Implants System
         val selectedStartingImplant: com.example.data.CyberwareImplant = com.example.data.CyberwareImplantRegistry.STARTER_IMPLANTS[0],
@@ -1821,10 +1830,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun triggerCombatInline(targetX: Int, targetY: Int) {
-    if (_uiState.value.gameState != GameState.EXPLORATION) {
-        addLog("⚠️ ALREADY IN COMBAT: Cannot initiate new engagement.", LogType.ALERT)
-        return
-            }
+        if (_uiState.value.gameState != GameState.EXPLORATION) {
+            addLog("⚠️ ALREADY IN COMBAT: Cannot initiate new engagement.", LogType.ALERT)
+            return
+        }
         val level = _uiState.value.level
         val enemy = GameEngine.spawnEnemy(level)
 
@@ -1842,6 +1851,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 targetNodeY = targetY,
                 enemyCombatAction = "",
                 combatTurn = CombatTurn.PLAYER,
+                combatRound = 1,
+                turnPhase = TurnPhase.PLAYER_INPUT,
+                playerActionHistory = emptyList(),
+                enemyTurnHistory = emptyList(),
+                allTurnActions = emptyList(),
+                lastPlayerActionRecord = null,
+                lastEnemyActionRecord = null,
+                totalPlayerActionsCount = 0,
+                totalEnemyTurnsCount = 0,
                 showCombatBanner = "⚔️ SYSTEM OVERLOAD INTRUSION",
                 isCombatInputEnabled = false,
                 combatFlashEnemy = false,
@@ -1871,7 +1889,107 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         viewModelScope.launch {
             kotlinx.coroutines.delay(1200)
-            _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true, gameState = GameState.PLAYER_TURN) }
+            _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true, gameState = GameState.PLAYER_TURN, turnPhase = TurnPhase.PLAYER_INPUT) }
+        }
+    }
+
+    // ----------------------------------------------------
+    // Turn-Based Game Loop & Action Tracking System
+    // ----------------------------------------------------
+
+    fun recordPlayerAction(
+        actionType: CombatActionType,
+        summary: String,
+        damageDealt: Int = 0,
+        shieldAbsorbed: Int = 0,
+        healAmount: Int = 0,
+        isCrit: Boolean = false,
+        isMiss: Boolean = false,
+        statusApplied: String? = null
+    ): TurnActionRecord {
+        val currentRound = _uiState.value.combatRound
+        val record = TurnActionRecord(
+            roundNumber = currentRound,
+            actorName = if (_uiState.value.runnerName.isNotBlank()) _uiState.value.runnerName else "Player",
+            isPlayer = true,
+            actionType = actionType,
+            summary = summary,
+            damageDealt = damageDealt,
+            shieldAbsorbed = shieldAbsorbed,
+            healAmount = healAmount,
+            isCrit = isCrit,
+            isMiss = isMiss,
+            statusApplied = statusApplied
+        )
+
+        _uiState.update { state ->
+            val updatedPlayerHistory = state.playerActionHistory + record
+            val updatedAllActions = state.allTurnActions + record
+            state.copy(
+                playerActionHistory = updatedPlayerHistory,
+                allTurnActions = updatedAllActions,
+                lastPlayerActionRecord = record,
+                totalPlayerActionsCount = state.totalPlayerActionsCount + 1,
+                turnPhase = TurnPhase.PLAYER_RESOLVING
+            )
+        }
+        return record
+    }
+
+    fun recordEnemyAction(
+        actionType: CombatActionType,
+        summary: String,
+        damageDealt: Int = 0,
+        shieldAbsorbed: Int = 0,
+        healAmount: Int = 0,
+        isCrit: Boolean = false,
+        isMiss: Boolean = false,
+        statusApplied: String? = null
+    ): TurnActionRecord {
+        val currentRound = _uiState.value.combatRound
+        val enemyName = _uiState.value.activeEnemy?.name ?: "Hostile Entity"
+        val record = TurnActionRecord(
+            roundNumber = currentRound,
+            actorName = enemyName,
+            isPlayer = false,
+            actionType = actionType,
+            summary = summary,
+            damageDealt = damageDealt,
+            shieldAbsorbed = shieldAbsorbed,
+            healAmount = healAmount,
+            isCrit = isCrit,
+            isMiss = isMiss,
+            statusApplied = statusApplied
+        )
+
+        _uiState.update { state ->
+            val updatedEnemyHistory = state.enemyTurnHistory + record
+            val updatedAllActions = state.allTurnActions + record
+            state.copy(
+                enemyTurnHistory = updatedEnemyHistory,
+                allTurnActions = updatedAllActions,
+                lastEnemyActionRecord = record,
+                totalEnemyTurnsCount = state.totalEnemyTurnsCount + 1,
+                turnPhase = TurnPhase.ENEMY_RESOLVING
+            )
+        }
+        return record
+    }
+
+    fun processTurnMaintenance() {
+        _uiState.update { state ->
+            val nextRound = state.combatRound + 1
+            val regenRam = minOf(state.maxRam, state.ram + state.ramRecoveryRate)
+            state.copy(
+                combatRound = nextRound,
+                ram = regenRam,
+                defenseBonus = 0,
+                activeFirewallTimeLeft = 0,
+                turnPhase = TurnPhase.PLAYER_INPUT,
+                combatTurn = CombatTurn.PLAYER,
+                isCombatInputEnabled = true,
+                gameState = GameState.PLAYER_TURN
+            )
         }
     }
 
@@ -1948,8 +2066,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setCombatStyle(style: String) {
-        _uiState.update { it.copy(selectedCombatStyle = style) }
-        addLog("COMBAT STANCE: Switched to $style stance.", LogType.INFO)
+        _uiState.update { it.copy(selectedCombatStyle = "Strike") }
+        addLog("COMBAT STANCE: Single unified Strike stance active.", LogType.INFO)
     }
 
     fun combatAttack() {
@@ -1960,13 +2078,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         // Check if player is stunned
         if (processPlayerTurnStatusEffects()) {
             addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
+            recordPlayerAction(
+                actionType = CombatActionType.PASS,
+                summary = "Turn skipped due to STUN effect"
+            )
             executeEnemyCombatTurnInline()
             return
         }
 
         // Start weapon swing animation in UI thread
         viewModelScope.launch {
-            _uiState.update { it.copy(weaponSwingProgress = 0.2f, weaponSwingType = state.selectedCombatStyle) }
+            _uiState.update { it.copy(weaponSwingProgress = 0.2f, weaponSwingType = "Strike") }
             delay(60)
             _uiState.update { it.copy(weaponSwingProgress = 0.7f) }
             delay(60)
@@ -1978,15 +2100,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
-            addLog("> Swinging ${state.equippedWeaponName} (${state.selectedCombatStyle.uppercase()})...", LogType.INFO)
+            addLog("> Striking with ${state.equippedWeaponName}...", LogType.INFO)
 
-            // Hit chance calculation (Morrowind Dice Roll)
-            val baseHitChance = when (state.selectedCombatStyle) {
-                "Slash" -> 70
-                "Chop" -> 55
-                "Thrust" -> 85
-                else -> 70
-            }
+            // Hit chance calculation
+            val baseHitChance = 75
             // Add level bonus & luck/agility-like RAM factor
             val hitBonus = (state.level * 2) + (state.ram * 1)
             val finalHitChance = (baseHitChance + hitBonus).coerceIn(20, 95)
@@ -1995,6 +2112,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             if (roll >= finalHitChance) {
                 // MISS!
                 addLog("⚔️ MISS! Your weapon swung wide. [Rolled: $roll vs Chance: $finalHitChance%]", LogType.ALERT)
+                recordPlayerAction(
+                    actionType = CombatActionType.STRIKE,
+                    summary = "Strike swung wide and missed",
+                    isMiss = true
+                )
                 _uiState.update { stateNow ->
                     stateNow.copy(
                         enemyDamagePopup = "MISS",
@@ -2009,12 +2131,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
 
             // HIT! Calculate Damage
-            val baseDmg = when (state.selectedCombatStyle) {
-                "Slash" -> 16
-                "Chop" -> 24
-                "Thrust" -> 11
-                else -> 16
-            }
+            val baseDmg = 18
             val statPower = (state.level * 2) + state.damageBonus
             var rawPlayerDamage = baseDmg + statPower
 
@@ -2075,6 +2192,14 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             enemy.shield = enemyRemShield
             enemy.integrity = enemyRemIntegrity
 
+            recordPlayerAction(
+                actionType = CombatActionType.STRIKE,
+                summary = "Strike dealt $finalDmg damage (Shield: -$shieldDmg, HP: -$bodyDmg)",
+                damageDealt = finalDmg,
+                shieldAbsorbed = shieldDmg,
+                isCrit = isCrit
+            )
+
             if (isCrit) {
                 soundManager.playCombatCritSound()
                 addLog("💥 CRITICAL HIT! Double damage bypassed ${effectiveArmor} hostile armor!", LogType.SUCCESS)
@@ -2095,7 +2220,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
 
             if (enemy.integrity <= 0) {
-                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false, turnPhase = TurnPhase.COMBAT_VICTORY) }
                 delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
@@ -2112,12 +2237,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (processPlayerTurnStatusEffects()) {
             addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
+            recordPlayerAction(
+                actionType = CombatActionType.PASS,
+                summary = "Turn skipped due to STUN effect"
+            )
             executeEnemyCombatTurnInline()
             return
         }
 
+        val shieldHeal = 15 + (state.level * 3)
         _uiState.update { stateNow ->
-            val shieldHeal = 15 + (stateNow.level * 3)
             val newShield = minOf(stateNow.playerMaxShield, stateNow.playerShield + shieldHeal)
             stateNow.copy(
                 playerShield = newShield,
@@ -2127,6 +2256,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         applyStatusEffectToPlayer(com.example.data.StatusEffectType.FORTIFIED, turns = 1, source = "Defensive Firewall")
         addLog("🛡️ ACTIVE FIREWALL INITIATED: Damage incoming in the next turn reduced by 75%!", LogType.SUCCESS)
+
+        recordPlayerAction(
+            actionType = CombatActionType.DEFEND,
+            summary = "Active Firewall initiated (+$shieldHeal Shield, Fortified)",
+            shieldAbsorbed = shieldHeal,
+            statusApplied = "Fortified"
+        )
 
         viewModelScope.launch {
             kotlinx.coroutines.delay(600)
@@ -2288,11 +2424,19 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             applyStatusEffectToEnemy(com.example.data.StatusEffectType.STUNNED, turns = 1, source = "Breach Protocol")
 
+            recordPlayerAction(
+                actionType = CombatActionType.QUICK_HACK,
+                summary = "Breach exploit overrode firewall dealing $hackDmg damage & Stun",
+                damageDealt = hackDmg,
+                isCrit = true,
+                statusApplied = "Stunned"
+            )
+
             delay(500)
             _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
 
             if (enemy.integrity <= 0) {
-                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false, turnPhase = TurnPhase.COMBAT_VICTORY) }
                 delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
@@ -2323,11 +2467,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
                 addLog("Partial feedback breach dealt $fallbackDmg damage to ${enemy.name}.", LogType.ALERT)
 
+                recordPlayerAction(
+                    actionType = CombatActionType.QUICK_HACK,
+                    summary = "Partial exploit feedback dealt $fallbackDmg damage",
+                    damageDealt = fallbackDmg
+                )
+
                 delay(500)
                 _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null) }
 
                 if (enemy.integrity <= 0) {
-                    _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                    _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false, turnPhase = TurnPhase.COMBAT_VICTORY) }
                     delay(1200)
                     handleCombatVictoryInline(enemy)
                     _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
@@ -2353,6 +2503,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         applyStatusEffectToEnemy(com.example.data.StatusEffectType.WEAKENED, turns = 2, source = "Deep Telemetry Scan")
 
+        recordPlayerAction(
+            actionType = CombatActionType.SCAN,
+            summary = "Deep Telemetry Scan weakened ${enemy.name}",
+            statusApplied = "Weakened"
+        )
+
         viewModelScope.launch {
             _uiState.update { stateNow ->
                 stateNow.copy(
@@ -2372,6 +2528,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (!_uiState.value.isCombatInputEnabled) return
         val enemy = _uiState.value.activeEnemy ?: return
         addLog("PASSING TURN: Player manually terminated their phase.", LogType.INFO)
+        recordPlayerAction(
+            actionType = CombatActionType.PASS,
+            summary = "Manually terminated turn phase"
+        )
         executeEnemyCombatTurnInline()
     }
 
@@ -2382,6 +2542,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         if (processPlayerTurnStatusEffects()) {
             addLog("⚡ TURN SKIPPED: Player is STUNNED!", LogType.ALERT)
+            recordPlayerAction(
+                actionType = CombatActionType.PASS,
+                summary = "Turn skipped due to STUN effect"
+            )
             executeEnemyCombatTurnInline()
             return
         }
@@ -2461,6 +2625,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             enemy.shield = enemyRemShield
             enemy.integrity = enemyRemIntegrity
 
+            recordPlayerAction(
+                actionType = CombatActionType.PROGRAM,
+                summary = "Executed ${program.name} dealing $finalDmg damage (Shield: -$shieldDmg, HP: -$bodyDmg)",
+                damageDealt = finalDmg,
+                shieldAbsorbed = shieldDmg,
+                healAmount = program.heal,
+                isCrit = isCrit,
+                statusApplied = program.statusEffectToApply?.displayName
+            )
+
             addLog("[CALC]: Base:${baseDmg} + Stats:${statPower} = Raw:${baseDmg + statPower}", LogType.INFO)
             if (isCrit) {
                 addLog("CRITICAL HIT! [x${if (state.runnerClass == NetrunnerClass.CODE_SLASHER) "2.0" else "1.5"}] Armor bypassed: ${effectiveArmor}/${enemyArmor}", LogType.SUCCESS)
@@ -2515,7 +2689,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             _uiState.update { it.copy(combatFlashEnemy = false, enemyDamagePopup = null, showShieldEffect = false) }
 
             if (enemy.integrity <= 0) {
-                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false, turnPhase = TurnPhase.COMBAT_VICTORY) }
                 kotlinx.coroutines.delay(1200)
                 handleCombatVictoryInline(enemy)
                 _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
@@ -2528,7 +2702,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun executeEnemyCombatTurnInline(isScanStunned: Boolean = false) {
         viewModelScope.launch {
-            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY) }
+            _uiState.update { it.copy(combatTurn = CombatTurn.ENEMY, turnPhase = TurnPhase.ENEMY_RESOLVING) }
             val state = _uiState.value
             val enemy = state.activeEnemy ?: return@launch
 
@@ -2555,7 +2729,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         _uiState.update { it.copy(enemyDamagePopup = null, combatFlashEnemy = false) }
 
                         if (enemy.integrity <= 0) {
-                            _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false) }
+                            _uiState.update { it.copy(showCombatBanner = "🏆 VICTORY", isCombatInputEnabled = false, turnPhase = TurnPhase.COMBAT_VICTORY) }
                             delay(1000)
                             handleCombatVictoryInline(enemy)
                             _uiState.update { it.copy(showCombatBanner = null, isCombatInputEnabled = true) }
@@ -2582,15 +2756,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
             if (isEnemyStunned) {
                 addLog("⚡ ENEMY TURN SKIPPED: ${enemy.name} is paralyzed by STUN status!", LogType.SUCCESS)
+                recordEnemyAction(
+                    actionType = CombatActionType.PASS,
+                    summary = "${enemy.name} was stunned and skipped turn"
+                )
                 delay(600)
-                _uiState.update { stateNow ->
-                    stateNow.copy(
-                        ram = minOf(stateNow.maxRam, stateNow.ram + stateNow.ramRecoveryRate),
-                        combatTurn = CombatTurn.PLAYER,
-                        isCombatInputEnabled = true,
-                        gameState = GameState.PLAYER_TURN
-                    )
-                }
+                processTurnMaintenance()
                 return@launch
             }
 
@@ -2655,6 +2826,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 )
             }
 
+            recordEnemyAction(
+                actionType = CombatActionType.STRIKE,
+                summary = "${enemy.name} ran $selectedAction dealing $finalEnemyDmg damage",
+                damageDealt = finalEnemyDmg,
+                shieldAbsorbed = shieldDamage
+            )
+
             addLog("${enemy.name} executes $selectedAction...", LogType.ERROR)
             if (shieldDamage > 0) {
                 addLog("Player Shield absorbed $shieldDamage damage.", LogType.ALERT)
@@ -2677,13 +2855,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             kotlinx.coroutines.delay(600)
             _uiState.update { it.copy(combatFlashPlayer = false, combatScreenShake = false, playerDamagePopup = null) }
 
-            _uiState.update { stateNow ->
-                stateNow.copy(
-                    ram = minOf(stateNow.maxRam, stateNow.ram + stateNow.ramRecoveryRate),
-                    defenseBonus = 0
-                )
-            }
-
             if (newPlayerIntegrity <= 0) {
                 val hasEmergencyReboot = state.installedImplants.values.any { it?.passiveAbility == com.example.data.ImplantAbility.EMERGENCY_REBOOT }
                 if (hasEmergencyReboot && !state.hasUsedEmergencyRebootThisRun) {
@@ -2692,9 +2863,6 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                         it.copy(
                             integrity = revivedHp,
                             hasUsedEmergencyRebootThisRun = true,
-                            combatTurn = CombatTurn.PLAYER,
-                            isCombatInputEnabled = true,
-                            gameState = GameState.PLAYER_TURN,
                             showCombatBanner = "⚡ EMERGENCY REBOOT"
                         )
                     }
@@ -2702,17 +2870,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                     soundManager.playLootCollectionSound()
                     kotlinx.coroutines.delay(1000)
                     _uiState.update { it.copy(showCombatBanner = null) }
+                    processTurnMaintenance()
                     return@launch
                 }
 
-                _uiState.update { it.copy(showCombatBanner = "💀 DEFEAT") }
+                _uiState.update { it.copy(showCombatBanner = "💀 DEFEAT", turnPhase = TurnPhase.COMBAT_DEFEAT) }
                 kotlinx.coroutines.delay(1200)
                 handleGameOver("Destroyed by security process ${enemy.name}")
                 _uiState.update { it.copy(showCombatBanner = null) }
                 return@launch
             }
 
-            _uiState.update { it.copy(combatTurn = CombatTurn.PLAYER, isCombatInputEnabled = true, gameState = GameState.PLAYER_TURN) }
+            processTurnMaintenance()
         }
     }
 
@@ -3761,6 +3930,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
         val gs = _uiState.value.gameState
         if (gs == GameState.PLAYER_TURN || gs == GameState.COMBAT_START) {
+            recordPlayerAction(
+                actionType = CombatActionType.USE_ITEM,
+                summary = "Compiled $actualItemName utility",
+                healAmount = gameItem.healIntegrity,
+                statusApplied = gameItem.statusEffectToApply?.displayName
+            )
             executeEnemyCombatTurnInline()
         }
     }
@@ -4371,40 +4546,29 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("WEAPON: ${state.equippedWeaponName} | STANCE: ${state.selectedCombatStyle}", LogType.INFO)
                 addLog("ZONE: ${state.currentZone} | INVENTORY: ${state.inventory.joinToString(", ")}", LogType.INFO)
             }
-            "attack", "hit", "fight", "swing", "slash", "chop", "thrust" -> {
-                if (state.screen == ActiveScreen.COMBAT) {
-                    val isAction = mainCommand in listOf("slash", "chop", "thrust")
-                    if (isAction) {
-                        val properStyle = mainCommand.replaceFirstChar { it.uppercase() }
-                        setCombatStyle(properStyle)
-                    }
+            "attack", "hit", "fight", "swing", "strike" -> {
+                if (state.gameState != GameState.EXPLORATION) {
                     combatAttack()
                 } else {
                     addLog("ERROR: Combat actions are only valid during active hostile combat.", LogType.ERROR)
                 }
             }
             "defend", "block", "shield" -> {
-                if (state.screen == ActiveScreen.COMBAT) {
+                if (state.gameState != GameState.EXPLORATION) {
                     combatDefend()
                 } else {
                     addLog("ERROR: Combat actions are only valid during active hostile combat.", LogType.ERROR)
                 }
             }
             "flee", "run", "escape" -> {
-                if (state.screen == ActiveScreen.COMBAT) {
+                if (state.gameState != GameState.EXPLORATION) {
                     fleeCombat()
                 } else {
                     addLog("ERROR: Combat actions are only valid during active hostile combat.", LogType.ERROR)
                 }
             }
             "stance", "style" -> {
-                val style = parts.getOrNull(1)?.lowercase()
-                if (style in listOf("slash", "chop", "thrust")) {
-                    val properStyle = style!!.replaceFirstChar { it.uppercase() }
-                    setCombatStyle(properStyle)
-                } else {
-                    addLog("ERROR: Style must be 'slash', 'chop', or 'thrust'.", LogType.ERROR)
-                }
+                addLog("COMBAT STANCE: Single unified Strike stance active.", LogType.INFO)
             }
             "use" -> {
                 val itemName = parts.drop(1).joinToString(" ")
