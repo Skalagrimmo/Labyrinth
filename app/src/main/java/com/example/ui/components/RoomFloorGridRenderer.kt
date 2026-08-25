@@ -5,9 +5,13 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -29,6 +33,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -461,6 +466,33 @@ fun RoomFloorGridContent(
 
             Spacer(modifier = Modifier.height(10.dp))
 
+            val cellSizeDp = 28.dp
+            val cellSpacingDp = 2.dp
+            val totalCellStep = cellSizeDp + cellSpacingDp
+
+            val animatedPlayerX by animateDpAsState(
+                targetValue = totalCellStep * floorMap.playerX.coerceIn(0, width - 1),
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                label = "player_x_anim"
+            )
+            val animatedPlayerY by animateDpAsState(
+                targetValue = totalCellStep * floorMap.playerY.coerceIn(0, height - 1),
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+                label = "player_y_anim"
+            )
+            val targetRotation = when (floorMap.playerDirection) {
+                "NORTH" -> 270f
+                "SOUTH" -> 90f
+                "EAST" -> 0f
+                "WEST" -> 180f
+                else -> 0f
+            }
+            val animatedPlayerRotation by animateFloatAsState(
+                targetValue = targetRotation,
+                animationSpec = tween(durationMillis = 250, easing = FastOutSlowInEasing),
+                label = "player_rot_anim"
+            )
+
             // 2D Floor Map Grid Rendering Canvas / Matrix
             Box(
                 modifier = Modifier
@@ -472,56 +504,86 @@ fun RoomFloorGridContent(
                     .verticalScroll(rememberScrollState())
                     .testTag("room_grid_viewport")
             ) {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    for (y in 0 until height) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            for (x in 0 until width) {
-                                val cell = gridMatrix.getOrNull(y)?.getOrNull(x) ?: CellType.WALL
-                                val obstacleEntity = obstacleMap["${x}_${y}"]
-                                val isObstacle = obstacleEntity != null || isCellObstacle(cell)
-                                val isTraversable = !isObstacle || (obstacleEntity?.isPassable == true)
-                                val isPlayerHere = (x == floorMap.playerX && y == floorMap.playerY)
-                                val isSelected = selectedTileInfo?.x == x && selectedTileInfo?.y == y
+                Box {
+                    // Base Grid Layout
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(cellSpacingDp)
+                    ) {
+                        for (y in 0 until height) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(cellSpacingDp)
+                            ) {
+                                for (x in 0 until width) {
+                                    val cell = gridMatrix.getOrNull(y)?.getOrNull(x) ?: CellType.WALL
+                                    val obstacleEntity = obstacleMap["${x}_${y}"]
+                                    val isObstacle = obstacleEntity != null || isCellObstacle(cell)
+                                    val isTraversable = !isObstacle || (obstacleEntity?.isPassable == true)
+                                    val isPlayerHere = (x == floorMap.playerX && y == floorMap.playerY)
+                                    val isSelected = selectedTileInfo?.x == x && selectedTileInfo?.y == y
 
-                                val isDimmed = when (selectedFilter) {
-                                    GridFilterMode.ALL -> false
-                                    GridFilterMode.TRAVERSABLE_ONLY -> !isTraversable
-                                    GridFilterMode.OBSTACLES_ONLY -> !isObstacle
-                                    GridFilterMode.INTERACTIVE_ONLY -> !(isInteractiveCell(cell) || obstacleEntity != null)
-                                }
-
-                                RoomGridTileCell(
-                                    x = x,
-                                    y = y,
-                                    cellType = cell,
-                                    obstacleEntity = obstacleEntity,
-                                    isTraversable = isTraversable,
-                                    isObstacle = isObstacle,
-                                    isPlayerHere = isPlayerHere,
-                                    isSelected = isSelected,
-                                    isDimmed = isDimmed,
-                                    playerFacing = floorMap.playerDirection,
-                                    cellSize = 28.dp,
-                                    onClick = {
-                                        view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                                        val tileInfo = GridTileVisualInfo(
-                                            x = x,
-                                            y = y,
-                                            cellType = cell,
-                                            isTraversable = isTraversable,
-                                            isObstacle = isObstacle,
-                                            isPlayerHere = isPlayerHere,
-                                            obstacleEntity = obstacleEntity
-                                        )
-                                        selectedTileInfo = tileInfo
-                                        onTileClicked?.invoke(x, y, cell, obstacleEntity)
+                                    val isDimmed = when (selectedFilter) {
+                                        GridFilterMode.ALL -> false
+                                        GridFilterMode.TRAVERSABLE_ONLY -> !isTraversable
+                                        GridFilterMode.OBSTACLES_ONLY -> !isObstacle
+                                        GridFilterMode.INTERACTIVE_ONLY -> !(isInteractiveCell(cell) || obstacleEntity != null)
                                     }
-                                )
+
+                                    RoomGridTileCell(
+                                        x = x,
+                                        y = y,
+                                        cellType = cell,
+                                        obstacleEntity = obstacleEntity,
+                                        isTraversable = isTraversable,
+                                        isObstacle = isObstacle,
+                                        isPlayerHere = isPlayerHere,
+                                        isSelected = isSelected,
+                                        isDimmed = isDimmed,
+                                        playerFacing = floorMap.playerDirection,
+                                        cellSize = cellSizeDp,
+                                        onClick = {
+                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                            val tileInfo = GridTileVisualInfo(
+                                                x = x,
+                                                y = y,
+                                                cellType = cell,
+                                                isTraversable = isTraversable,
+                                                isObstacle = isObstacle,
+                                                isPlayerHere = isPlayerHere,
+                                                obstacleEntity = obstacleEntity
+                                            )
+                                            selectedTileInfo = tileInfo
+                                            onTileClicked?.invoke(x, y, cell, obstacleEntity)
+                                        }
+                                    )
+                                }
                             }
+                        }
+                    }
+
+                    // Smooth Floating Player Token with Spring Motion & Pulse
+                    Box(
+                        modifier = Modifier
+                            .offset(x = animatedPlayerX, y = animatedPlayerY)
+                            .size(cellSizeDp)
+                            .testTag("animated_player_token"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Pulsing outer aura ring
+                        Box(
+                            modifier = Modifier
+                                .size(cellSizeDp * 0.95f)
+                                .background(CyberCyan.copy(alpha = 0.25f), CircleShape)
+                                .border(1.5.dp, CyberCyan, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "Player Facing ${floorMap.playerDirection}",
+                                tint = CyberBrightGreen,
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .rotate(animatedPlayerRotation)
+                            )
                         }
                     }
                 }

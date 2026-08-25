@@ -6,9 +6,14 @@ import com.example.data.CellType
 import com.example.data.CombatActionType
 import com.example.data.CombatWinner
 import com.example.data.Direction
+import com.example.data.FloorMapDao
+import com.example.data.FloorObstacleDao
+import com.example.data.FloorObstacleEntity
 import com.example.data.GameEngine
 import com.example.data.GridEntityCoordinateEntity
 import com.example.data.PlayerEntity
+import com.example.data.PlayerMapPositionDao
+import com.example.data.PlayerMapPositionEntity
 import com.example.data.PlayerNpcCoordinatesDao
 import com.example.data.TurnActionRecord
 import com.example.data.TurnPhase
@@ -87,6 +92,7 @@ sealed interface TurnCombatEvent {
     data class MaintenanceTick(val turnNumber: Int, val ramRecovered: Int) : TurnCombatEvent
     data class EncounterFinished(val winner: CombatWinner, val totalTurns: Int) : TurnCombatEvent
     data class PlayerMoved(val fromX: Int, val fromY: Int, val toX: Int, val toY: Int) : TurnCombatEvent
+    data class PlayerBlocked(val targetX: Int, val targetY: Int, val reason: String) : TurnCombatEvent
     data class NpcMoved(val entityId: String, val toX: Int, val toY: Int) : TurnCombatEvent
 }
 
@@ -130,6 +136,7 @@ data class GameTurnUiState(
     val playerY: Int = 1,
     val playerFacing: String = "NORTH",
     val npcs: List<NpcPosition> = emptyList(),
+    val obstacles: List<FloorObstacleEntity> = emptyList(),
     val mapId: String = "current_save_L1_F0",
     val floorIndex: Int = 0,
     val levelNumber: Int = 1
@@ -138,11 +145,15 @@ data class GameTurnUiState(
 /**
  * GameTurnViewModel:
  * Dedicated controller managing the turn-based state machine, turn counter,
- * input locking during NPC execution cycles, 2D Array floor map structure,
- * and player/NPC coordinates synchronized with the Room database.
+ * input handling for player movement, input locking during NPC execution cycles,
+ * 2D Array floor map structure, obstacle collision verification, and player/NPC
+ * coordinates synchronized with the Room database.
  */
 class GameTurnViewModel(
-    private val playerNpcCoordinatesDao: PlayerNpcCoordinatesDao? = null
+    private val playerNpcCoordinatesDao: PlayerNpcCoordinatesDao? = null,
+    private val floorMapDao: FloorMapDao? = null,
+    private val floorObstacleDao: FloorObstacleDao? = null,
+    private val playerMapPositionDao: PlayerMapPositionDao? = null
 ) : ViewModel() {
 
     // 2D Array structure representing the active level floor map
@@ -254,11 +265,32 @@ class GameTurnViewModel(
     }
 
     /**
+     * Loads obstacles from Room floor_obstacles DAO for the current map.
+     */
+    fun loadObstaclesForMap(mapId: String) {
+        if (floorObstacleDao != null) {
+            viewModelScope.launch {
+                val obs = floorObstacleDao.getObstaclesForMapSync(mapId)
+                _turnUiState.update { it.copy(obstacles = obs) }
+            }
+        }
+    }
+
+    /**
      * Checks whether a tile is passable for movement.
+     * Restricts movement to non-obstacle tiles (no walls, virus nodes, impassable Room obstacles, or alive NPCs).
      */
     fun isTileWalkable(x: Int, y: Int): Boolean {
+        val width = _turnUiState.value.gridWidth
+        val height = _turnUiState.value.gridHeight
+        if (x !in 0 until width || y !in 0 until height) return false
+
         val cell = getCell(x, y) ?: return false
         if (cell == CellType.WALL || cell == CellType.VIRUS_NODE) return false
+
+        // Check if any Room database obstacle occupies this tile and is impassable (!isPassable)
+        val hasObstacle = _turnUiState.value.obstacles.any { it.gridX == x && it.gridY == y && !it.isPassable }
+        if (hasObstacle) return false
 
         // Check if an impassable NPC blocks the tile
         val hasImpassableNpc = _turnUiState.value.npcs.any { it.x == x && it.y == y && it.isAlive }
@@ -266,14 +298,31 @@ class GameTurnViewModel(
     }
 
     /**
-     * Moves the player by deltaX, deltaY across the 2D floor grid.
-     * Persists position updates to the Room database if DAO is available.
+     * Handles player directional movement input.
+     * Verifies turn state (must be PLAYER turn and input unlocked),
+     * checks that target coordinates are non-obstacle and traversable,
+     * updates coordinates in state and persists to Room database.
+     *
+     * @param deltaX Horizontal movement (-1, 0, 1)
+     * @param deltaY Vertical movement (-1, 0, 1)
+     * @return true if player moved successfully, false otherwise
      */
-    fun movePlayer(deltaX: Int, deltaY: Int): Boolean {
-        if (_turnUiState.value.isInputLocked) return false
+    fun handlePlayerMoveInput(deltaX: Int, deltaY: Int): Boolean {
+        // 1. Strict Turn State Check: Only allow movement during PLAYER turn
+        val currentState = _turnUiState.value
+        if (currentState.turnStateEnum != TurnStateEnum.PLAYER || currentState.isInputLocked) {
+            _turnEvents.tryEmit(
+                TurnCombatEvent.PlayerBlocked(
+                    targetX = currentState.playerX + deltaX,
+                    targetY = currentState.playerY + deltaY,
+                    reason = "Cannot move: Turn state is ${currentState.turnStateEnum} (InputLocked=${currentState.isInputLocked})"
+                )
+            )
+            return false
+        }
 
-        val currentX = _turnUiState.value.playerX
-        val currentY = _turnUiState.value.playerY
+        val currentX = currentState.playerX
+        val currentY = currentState.playerY
         val targetX = currentX + deltaX
         val targetY = currentY + deltaY
 
@@ -282,14 +331,23 @@ class GameTurnViewModel(
             deltaY > 0 -> "SOUTH"
             deltaX > 0 -> "EAST"
             deltaX < 0 -> "WEST"
-            else -> _turnUiState.value.playerFacing
+            else -> currentState.playerFacing
         }
 
+        // 2. Obstacle / Traversability Check: Restricted to non-obstacle tiles
         if (!isTileWalkable(targetX, targetY)) {
             _turnUiState.update { it.copy(playerFacing = facing) }
+            _turnEvents.tryEmit(
+                TurnCombatEvent.PlayerBlocked(
+                    targetX = targetX,
+                    targetY = targetY,
+                    reason = "Target tile ($targetX, $targetY) is blocked or impassable"
+                )
+            )
             return false
         }
 
+        // 3. Update Coordinates in UI State
         _turnUiState.update { state ->
             state.copy(
                 playerX = targetX,
@@ -300,7 +358,11 @@ class GameTurnViewModel(
 
         _turnEvents.tryEmit(TurnCombatEvent.PlayerMoved(currentX, currentY, targetX, targetY))
 
-        // Synchronize player coordinates to Room Database
+        // 4. Synchronize player coordinates to Room Database
+        val currentMapId = currentState.mapId
+        val lvlNum = currentState.levelNumber
+        val floorIdx = currentState.floorIndex
+
         if (playerNpcCoordinatesDao != null) {
             viewModelScope.launch {
                 playerNpcCoordinatesDao.updatePlayerPosition(
@@ -311,7 +373,43 @@ class GameTurnViewModel(
                 )
             }
         }
+
+        if (playerMapPositionDao != null) {
+            viewModelScope.launch {
+                playerMapPositionDao.insertPlayerPosition(
+                    PlayerMapPositionEntity(
+                        saveSlotId = "current_save",
+                        levelNumber = lvlNum,
+                        floorIndex = floorIdx,
+                        gridX = targetX,
+                        gridY = targetY,
+                        facingDirection = facing,
+                        lastMovedTimestamp = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
+        if (floorMapDao != null) {
+            viewModelScope.launch {
+                floorMapDao.updatePlayerCoordinates(
+                    mapId = currentMapId,
+                    playerX = targetX,
+                    playerY = targetY,
+                    playerFloor = floorIdx,
+                    direction = facing
+                )
+            }
+        }
+
         return true
+    }
+
+    /**
+     * Legacy alias for handlePlayerMoveInput across 2D floor grid.
+     */
+    fun movePlayer(deltaX: Int, deltaY: Int): Boolean {
+        return handlePlayerMoveInput(deltaX, deltaY)
     }
 
     /**
@@ -333,6 +431,10 @@ class GameTurnViewModel(
             )
         }
 
+        val currentMapId = _turnUiState.value.mapId
+        val lvlNum = _turnUiState.value.levelNumber
+        val floorIdx = _turnUiState.value.floorIndex
+
         if (playerNpcCoordinatesDao != null) {
             viewModelScope.launch {
                 playerNpcCoordinatesDao.updatePlayerPosition(
@@ -340,6 +442,34 @@ class GameTurnViewModel(
                     newX = clampedX,
                     newY = clampedY,
                     facingDirection = facing
+                )
+            }
+        }
+
+        if (playerMapPositionDao != null) {
+            viewModelScope.launch {
+                playerMapPositionDao.insertPlayerPosition(
+                    PlayerMapPositionEntity(
+                        saveSlotId = "current_save",
+                        levelNumber = lvlNum,
+                        floorIndex = floorIdx,
+                        gridX = clampedX,
+                        gridY = clampedY,
+                        facingDirection = facing,
+                        lastMovedTimestamp = System.currentTimeMillis()
+                    )
+                )
+            }
+        }
+
+        if (floorMapDao != null) {
+            viewModelScope.launch {
+                floorMapDao.updatePlayerCoordinates(
+                    mapId = currentMapId,
+                    playerX = clampedX,
+                    playerY = clampedY,
+                    playerFloor = floorIdx,
+                    direction = facing
                 )
             }
         }
@@ -429,6 +559,83 @@ class GameTurnViewModel(
         }
     }
 
+    /**
+     * Executes enemy movement logic during ENEMY turn state.
+     * Moves each active, alive enemy one step closer to the player's current coordinates,
+     * verifying grid boundaries and non-obstacle tiles before updating Room database.
+     */
+    fun moveEnemiesTowardsPlayer() {
+        val currentState = _turnUiState.value
+        val playerX = currentState.playerX
+        val playerY = currentState.playerY
+        val activeNpcs = currentState.npcs.filter { it.isAlive }
+
+        if (activeNpcs.isEmpty()) return
+
+        for (npc in activeNpcs) {
+            val currentNpcX = npc.x
+            val currentNpcY = npc.y
+
+            val diffX = playerX - currentNpcX
+            val diffY = playerY - currentNpcY
+
+            // If already on or adjacent to player, maintain position
+            if (diffX == 0 && diffY == 0) continue
+
+            val stepX = when {
+                diffX > 0 -> 1
+                diffX < 0 -> -1
+                else -> 0
+            }
+            val stepY = when {
+                diffY > 0 -> 1
+                diffY < 0 -> -1
+                else -> 0
+            }
+
+            // Prioritize movement along the axis with the greater distance
+            val candidates = mutableListOf<Pair<Int, Int>>()
+            if (kotlin.math.abs(diffX) >= kotlin.math.abs(diffY)) {
+                if (stepX != 0) candidates.add(Pair(currentNpcX + stepX, currentNpcY))
+                if (stepY != 0) candidates.add(Pair(currentNpcX, currentNpcY + stepY))
+            } else {
+                if (stepY != 0) candidates.add(Pair(currentNpcX, currentNpcY + stepY))
+                if (stepX != 0) candidates.add(Pair(currentNpcX + stepX, currentNpcY))
+            }
+
+            var chosenStep: Pair<Int, Int>? = null
+            for ((targetX, targetY) in candidates) {
+                val isOccupiedByOtherNpc = _turnUiState.value.npcs.any {
+                    it.entityId != npc.entityId && it.x == targetX && it.y == targetY && it.isAlive
+                }
+                val isOccupiedByPlayer = (targetX == playerX && targetY == playerY)
+
+                if (isTileWalkable(targetX, targetY) && !isOccupiedByOtherNpc && !isOccupiedByPlayer) {
+                    chosenStep = Pair(targetX, targetY)
+                    break
+                }
+            }
+
+            if (chosenStep != null) {
+                val (newX, newY) = chosenStep
+                val facing = when {
+                    newY < currentNpcY -> "NORTH"
+                    newY > currentNpcY -> "SOUTH"
+                    newX > currentNpcX -> "EAST"
+                    newX < currentNpcX -> "WEST"
+                    else -> npc.facing
+                }
+                updateNpcCoordinates(
+                    entityId = npc.entityId,
+                    x = newX,
+                    y = newY,
+                    facing = facing,
+                    alertLevel = "HOSTILE"
+                )
+            }
+        }
+    }
+
     // --- Turn State Transitions (PLAYER, ENEMY, PROCESSING) ---
 
     /**
@@ -471,6 +678,8 @@ class GameTurnViewModel(
                 _turnEvents.tryEmit(TurnCombatEvent.InputLocked("Enemy turn in progress"))
                 _turnEvents.tryEmit(TurnCombatEvent.EnemyCycleStarted(enemyName))
                 _turnEvents.tryEmit(TurnCombatEvent.PhaseChanged(TurnPhase.ENEMY_RESOLVING))
+                // Execute enemy movement step towards player coordinates
+                moveEnemiesTowardsPlayer()
             }
             TurnStateEnum.PROCESSING -> {
                 _turnUiState.update { state ->
