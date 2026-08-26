@@ -147,11 +147,11 @@ class SparseVoxelDag(val maxDepth: Int) {
         private set
 
     // Cached leaf node IDs for each VoxelType
-    private val leafIdsMap = IntArray(VoxelType.values().size) { -1 }
+    private val leafIdsMap = IntArray(VoxelType.entries.size) { -1 }
 
     init {
         // Pre-create canonical leaf nodes for all voxel types
-        for (vType in VoxelType.values()) {
+        for (vType in VoxelType.entries) {
             val leaf = SvdagNode.LeafNode(vType)
             val id = nodesList.size
             nodesList.add(leaf)

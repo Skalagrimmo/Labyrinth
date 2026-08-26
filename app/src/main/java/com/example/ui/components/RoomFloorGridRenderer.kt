@@ -417,7 +417,7 @@ fun RoomFloorGridContent(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                GridFilterMode.values().forEach { mode ->
+                GridFilterMode.entries.forEach { mode ->
                     FilterChip(
                         selected = selectedFilter == mode,
                         onClick = {

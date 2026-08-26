@@ -2,15 +2,6 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Standard Material Colors Mapping
-val Purple80 = Color(0xFF00FF66)
-val PurpleGrey80 = Color(0xFF00CC52)
-val Pink80 = Color(0xFF00FF99)
-
-val Purple40 = Color(0xFF00B347)
-val PurpleGrey40 = Color(0xFF008033)
-val Pink40 = Color(0xFF009940)
-
 // Neon-Drenched Cyberpunk Color Palette
 // Dark Canvas & Surfaces
 val CyberDark = Color(0xFF000000)             // Absolute Pitch Black Canvas

@@ -554,7 +554,7 @@ fun SvdagWorldInspectorScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(VoxelType.values()) { vType ->
+                    items(VoxelType.entries) { vType ->
                         val isSel = selectedVoxelType == vType
                         Surface(
                             color = if (isSel) Color(vType.colorHex).copy(alpha = 0.4f) else Color(0xFF1E293B),

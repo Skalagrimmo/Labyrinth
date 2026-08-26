@@ -35,7 +35,7 @@ private val DarkColorScheme = darkColorScheme(
 private val LightColorScheme = DarkColorScheme
 
 @Composable
-fun MyApplicationTheme(
+fun NetcrawlerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     content: @Composable () -> Unit

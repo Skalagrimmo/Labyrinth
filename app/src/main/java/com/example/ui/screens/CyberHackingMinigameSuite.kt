@@ -234,7 +234,7 @@ fun CyberHackingMinigameSuite(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                HackingMinigameMode.values().forEach { mode ->
+                HackingMinigameMode.entries.forEach { mode ->
                     val isSelected = currentMode == mode
                     Box(
                         modifier = Modifier

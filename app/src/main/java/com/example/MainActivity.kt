@@ -11,14 +11,14 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.GameViewModel
 import com.example.ui.screens.TerminalScreen
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.NetcrawlerTheme
 
 class MainActivity : ComponentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme {
+      NetcrawlerTheme {
         val viewModel: GameViewModel = viewModel()
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
           TerminalScreen(

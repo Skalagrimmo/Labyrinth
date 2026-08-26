@@ -5,7 +5,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
 import com.example.ui.GameViewModel
 import com.example.ui.screens.TerminalScreen
-import com.example.ui.theme.MyApplicationTheme
+import com.example.ui.theme.NetcrawlerTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -27,7 +27,7 @@ class GreetingScreenshotTest {
     val context = ApplicationProvider.getApplicationContext<android.app.Application>()
     val viewModel = GameViewModel(context)
     composeTestRule.setContent {
-      MyApplicationTheme {
+      NetcrawlerTheme {
         TerminalScreen(viewModel)
       }
     }

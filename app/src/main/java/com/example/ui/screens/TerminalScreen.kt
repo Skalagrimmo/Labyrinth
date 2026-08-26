@@ -1615,7 +1615,7 @@ fun CyberneticsClinicView(
         )
 
         // 5 Anatomical Slots Grid/List
-        ImplantBodySlot.values().forEach { slot ->
+        ImplantBodySlot.entries.forEach { slot ->
             val installed = uiState.installedImplants[slot]
             Card(
                 colors = CardDefaults.cardColors(containerColor = CyberCardBg),

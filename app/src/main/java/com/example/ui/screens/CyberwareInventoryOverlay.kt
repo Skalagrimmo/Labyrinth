@@ -259,7 +259,7 @@ private fun EquippedChassisTab(
             fontWeight = FontWeight.Bold
         )
 
-        ImplantBodySlot.values().forEach { slot ->
+        ImplantBodySlot.entries.forEach { slot ->
             val installed = uiState.installedImplants[slot]
             val matchingStoredImplants = uiState.storedImplants.filter { it.slot == slot }
 

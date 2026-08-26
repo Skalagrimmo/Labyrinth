@@ -83,7 +83,7 @@ class CyberSoundPoolManager private constructor(context: Context) {
         val cacheDir = File(appContext.cacheDir, "cyber_sfx")
         if (!cacheDir.exists()) cacheDir.mkdirs()
 
-        for (cue in SoundCue.values()) {
+        for (cue in SoundCue.entries) {
             try {
                 val wavFile = File(cacheDir, "${cue.name.lowercase()}.wav")
                 if (!wavFile.exists() || wavFile.length() < 44) {

@@ -263,7 +263,7 @@ private fun CosmeticThemesList(
     onEquipTheme: (String) -> Unit
 ) {
     val view = LocalView.current
-    val themes = CosmeticTheme.values()
+    val themes = CosmeticTheme.entries
 
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -389,7 +389,7 @@ private fun TerminalPromptsList(
     onEquipPrompt: (String) -> Unit
 ) {
     val view = LocalView.current
-    val prompts = TerminalPromptStyle.values()
+    val prompts = TerminalPromptStyle.entries
 
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -511,7 +511,7 @@ private fun PerformanceBuffsList(
     onToggleBuff: (String) -> Unit
 ) {
     val view = LocalView.current
-    val buffs = PerformanceBuff.values()
+    val buffs = PerformanceBuff.entries
 
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(10.dp),
