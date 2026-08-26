@@ -49,6 +49,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -230,12 +231,16 @@ fun FlickeringCrtScanlineTerminalOverlay(
 
                 // --- E. Glass Bezel Vignette & CRT Screen Corner Curvature ---
                 if (curvatureVignette) {
+                    val isCompactScreen = with(LocalDensity.current) {
+                        (size.height / density) < 700f
+                    }
+                    val vignetteAlpha = if (isCompactScreen) 0.35f else 0.82f
                     val radialVignette = Brush.radialGradient(
                         colors = listOf(
                             Color.Transparent,
                             Color.Transparent,
-                            Color.Black.copy(alpha = 0.4f),
-                            Color.Black.copy(alpha = 0.82f)
+                            Color.Black.copy(alpha = vignetteAlpha * 0.5f),
+                            Color.Black.copy(alpha = vignetteAlpha)
                         ),
                         center = Offset(width / 2f, height / 2f),
                         radius = (width.coerceAtLeast(height) * 0.72f)

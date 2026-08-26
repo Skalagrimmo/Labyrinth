@@ -1899,7 +1899,9 @@ fun ExplorationView(
                     colors = CardDefaults.cardColors(containerColor = CyberCardBg),
                     border = BorderStroke(1.dp, cardBorderColor),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 ) {
                     AnimatedContent(
                         targetState = uiState.gameState,
@@ -2729,7 +2731,7 @@ fun ExplorationView(
         }
     }
     }
-    if (fadeAlpha > 0f) {
+    if (fadeAlpha > 0.01f) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
