@@ -1,0 +1,707 @@
+package com.example.ui
+
+import android.app.Application
+import android.content.Context
+import com.example.data.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+
+class PersistenceManager(
+    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val application: Application,
+    private val repository: GameRepository,
+    private val scope: CoroutineScope,
+    private val onLog: (String, LogType) -> Unit,
+    private val onRestoreComplete: () -> Unit
+) {
+
+    private val uiState get() = _uiState.value
+
+    private var previousScreenBeforeMenu: ActiveScreen = ActiveScreen.CHARACTER_CREATION
+
+    // ----------------------------------------------------
+    // Serialization Helpers
+    // ----------------------------------------------------
+
+    private fun serializeMaze(maze: Array<Array<CellType>>): String {
+        return maze.joinToString(";") { row ->
+            row.joinToString(",") { it.name }
+        }
+    }
+
+    private fun deserializeMaze(str: String): Array<Array<CellType>> {
+        if (str.isEmpty()) return emptyArray()
+        val rows = str.split(";")
+        return rows.map { row ->
+            row.split(",").map { cellName ->
+                try {
+                    CellType.valueOf(cellName)
+                } catch (e: Exception) {
+                    CellType.WALL
+                }
+            }.toTypedArray()
+        }.toTypedArray()
+    }
+
+    private fun serializeExploredCells(cells: Set<Pair<Int, Int>>): String {
+        return cells.joinToString(";") { "${it.first},${it.second}" }
+    }
+
+    private fun deserializeExploredCells(str: String): Set<Pair<Int, Int>> {
+        if (str.isEmpty()) return emptySet()
+        return str.split(";").mapNotNull {
+            val parts = it.split(",")
+            if (parts.size == 2) {
+                val first = parts[0].toIntOrNull()
+                val second = parts[1].toIntOrNull()
+                if (first != null && second != null) {
+                    Pair(first, second)
+                } else null
+            } else null
+        }.toSet()
+    }
+
+    private fun serializeFloors(floors: Map<Int, Array<Array<CellType>>>): String {
+        return floors.map { (floor, maze) ->
+            "$floor:${serializeMaze(maze)}"
+        }.joinToString("|")
+    }
+
+    private fun deserializeFloors(str: String): Map<Int, Array<Array<CellType>>> {
+        if (str.isEmpty()) return emptyMap()
+        val map = mutableMapOf<Int, Array<Array<CellType>>>()
+        str.split("|").forEach { entry ->
+            val parts = entry.split(":", limit = 2)
+            if (parts.size == 2) {
+                val floor = parts[0].toIntOrNull()
+                if (floor != null) {
+                    map[floor] = deserializeMaze(parts[1])
+                }
+            }
+        }
+        return map
+    }
+
+    private fun serializeExploredMap(explored: Map<Int, Set<Pair<Int, Int>>>): String {
+        return explored.map { (floor, cells) ->
+            "$floor:${serializeExploredCells(cells)}"
+        }.joinToString("|")
+    }
+
+    private fun deserializeExploredMap(str: String): Map<Int, Set<Pair<Int, Int>>> {
+        if (str.isEmpty()) return emptyMap()
+        val map = mutableMapOf<Int, Set<Pair<Int, Int>>>()
+        str.split("|").forEach { entry ->
+            val parts = entry.split(":", limit = 2)
+            if (parts.size == 2) {
+                val floor = parts[0].toIntOrNull()
+                if (floor != null) {
+                    map[floor] = deserializeExploredCells(parts[1])
+                }
+            }
+        }
+        return map
+    }
+
+    // ----------------------------------------------------
+    // Lookup Helpers
+    // ----------------------------------------------------
+
+    private fun getProgramById(id: String): Program {
+        return when(id) {
+            "ping" -> Program("ping", "ping.exe", "Scan enemy process. Deals 10 payload damage.", ramCost = 1, damage = 10)
+            "firewall" -> Program("firewall", "firewall.sh", "Harden defences. Restore 25 shield points.", ramCost = 2, shield = 25)
+            "kill9" -> Program("kill9", "kill-9.bin", "Force shutdown. Deals 35 heavy payload damage.", ramCost = 4, damage = 35)
+            "sandbox" -> Program("sandbox", "sandbox.sys", "Isolate threats. Restore 40 Integrity.", ramCost = 3, heal = 40)
+            "overflow" -> Program("overflow", "exploit.sh", "Pierces defenses, dealing 25 raw damage.", ramCost = 3, damage = 25, piercesDefense = true)
+            "custom_payload" -> Program("custom_payload", "utility.exe", "Unpredictable script. Deals 20 damage, restores 15 Integrity.", ramCost = 2, damage = 20, heal = 15)
+            else -> Program("basic_slash", "Slasher.sys", "Deals baseline security breach damage.", 0, damage = 12)
+        }
+    }
+
+    private fun getCyberwareById(id: String): Cyberware {
+        return when(id) {
+            "cpu_oc" -> Cyberware("cpu_oc", "CPU Overclocker", "+2 RAM Recovery Rate", 200, recoveryBonus = 2)
+            "mem_exp" -> Cyberware("mem_exp", "RAM Rig Extension", "+4 Max RAM Allocation", 250, ramBonus = 4)
+            "armor_plt" -> Cyberware("armor_plt", "Sub-Dermal Firewall", "+30 System Integrity", 180, integrityBonus = 30)
+            "dmg_mod" -> Cyberware("dmg_mod", "Payload Amplifier", "+5 Attack Damage output", 300, damageBonus = 5)
+            "def_mod" -> Cyberware("def_mod", "Defensive Buffer", "+10% Armor Defense", 220, defenseBonus = 2)
+            else -> Cyberware("cpu_oc", "CPU Overclocker", "+2 RAM Recovery Rate", 200, recoveryBonus = 2)
+        }
+    }
+
+    // ----------------------------------------------------
+    // Game Lifecycle Methods
+    // ----------------------------------------------------
+
+    fun handleGameOver(cause: String) {
+        _uiState.update { it.copy(screen = ActiveScreen.GAME_OVER, runOutcome = cause) }
+        onLog("==========================================", LogType.ERROR)
+        onLog("SYSTEM CORE FAILURE! RETRANSMITTING DATA RECOVERY...", LogType.ERROR)
+        onLog("CRITICAL COLLAPSE CAUSE: $cause", LogType.ERROR)
+
+        val state = uiState
+        val record = RunRecord(
+            runnerName = state.runnerName,
+            runnerClass = state.runnerClass.title,
+            levelReached = state.level,
+            nodesHacked = state.nodesHackedCount,
+            creditsEarned = state.totalCreditsEarned,
+            outcome = "DECEASED"
+        )
+
+        scope.launch {
+            repository.insert(record)
+        }
+    }
+
+    fun disconnectRunSuccessfully() {
+        val state = uiState
+        if (state.integrity <= 0) return
+
+        onLog("VOLUNTARY EXTRACTION: UPLOADING RUN DATA...", LogType.SUCCESS)
+
+        val record = RunRecord(
+            runnerName = state.runnerName,
+            runnerClass = state.runnerClass.title,
+            levelReached = state.level,
+            nodesHacked = state.nodesHackedCount,
+            creditsEarned = state.totalCreditsEarned,
+            outcome = "DISCONNECTED"
+        )
+
+        scope.launch {
+            repository.insert(record)
+        }
+
+        _uiState.update { it.copy(screen = ActiveScreen.GAME_OVER, runOutcome = "Safe Connection Dissolution") }
+    }
+
+    fun restartGame() {
+        _uiState.update { GameViewModel.GameUiState(screen = ActiveScreen.START_MENU) }
+        onLog("REBOOTING TERMINAL CORE V8.91...", LogType.ALERT)
+        onLog("SELECT ARCHETYPE PROFILE TO COMPILE.", LogType.INFO)
+    }
+
+    fun startNewRun() {
+        _uiState.update { GameViewModel.GameUiState(screen = ActiveScreen.CHARACTER_CREATION) }
+        onLog("ESTABLISHING SECURE CONNECTION...", LogType.SUCCESS)
+        onLog("SELECT NETRUNNER ARCHETYPE PROFILE TO COMPILE.", LogType.INFO)
+    }
+
+    fun returnToStartMenu() {
+        val currentScreen = uiState.screen
+        if (currentScreen != ActiveScreen.START_MENU) {
+            previousScreenBeforeMenu = currentScreen
+        }
+        _uiState.update { it.copy(screen = ActiveScreen.START_MENU) }
+    }
+
+    fun resumeGame() {
+        _uiState.update { it.copy(screen = previousScreenBeforeMenu) }
+        onRestoreComplete()
+    }
+
+    fun viewLeaderboard() {
+        _uiState.update { it.copy(screen = ActiveScreen.LEADERBOARD) }
+        onLog("BROADCASTING MAIN HISTORIC RECORDS DATABASE...", LogType.SUCCESS)
+    }
+
+    fun exitLeaderboard() {
+        if (uiState.integrity <= 0) {
+            _uiState.update { it.copy(screen = ActiveScreen.GAME_OVER) }
+        } else if (uiState.runnerName.isEmpty()) {
+            _uiState.update { it.copy(screen = ActiveScreen.START_MENU) }
+        } else {
+            _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
+            onRestoreComplete()
+        }
+    }
+
+    fun clearHighScores() {
+        scope.launch {
+            repository.clearAll()
+            onLog("MAINFRAME LOGS PURGED SUCCESSFULLY.", LogType.ALERT)
+        }
+    }
+
+    // ----------------------------------------------------
+    // Save / Load
+    // ----------------------------------------------------
+
+    fun hasSavedGame(): Boolean {
+        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        return sharedPrefs.getBoolean("has_saved_game", false)
+    }
+
+    fun saveGame() {
+        val state = uiState
+        if (state.runnerName.isEmpty()) return
+
+        val profileEntity = CharacterProfileEntity(
+            profileId = "profile_${state.runnerName.lowercase().replace(" ", "_")}",
+            runnerName = state.runnerName,
+            runnerClass = state.runnerClass.name,
+            level = state.level,
+            credits = state.credits,
+            totalCreditsEarned = state.totalCreditsEarned,
+            maxIntegrity = state.maxIntegrity,
+            maxRam = state.maxRam,
+            nodesHackedCount = state.nodesHackedCount
+        )
+
+        val saveProgressEntity = GameSaveProgressEntity(
+            saveSlotId = "current_save",
+            runnerName = state.runnerName,
+            runnerClass = state.runnerClass.name,
+            level = state.level,
+            integrity = state.integrity,
+            maxIntegrity = state.maxIntegrity,
+            playerShield = state.playerShield,
+            playerMaxShield = state.playerMaxShield,
+            ram = state.ram,
+            maxRam = state.maxRam,
+            ramRecoveryRate = state.ramRecoveryRate,
+            credits = state.credits,
+            damageBonus = state.damageBonus,
+            defenseBonus = state.defenseBonus,
+            characterLevel = state.characterLevel,
+            characterXp = state.characterXp,
+            xpToNextLevel = state.xpToNextLevel,
+            gridX = state.gridX,
+            gridY = state.gridY,
+            direction = state.direction.name,
+            currentZone = state.currentZone.name,
+            buildingFloor = state.buildingFloor,
+            collectorsLevel = state.collectorsLevel,
+            cityDistrictIndex = state.cityDistrictIndex,
+            hasElevatorKeycard = state.hasElevatorKeycard,
+            activeWeather = state.activeWeather.name,
+            weatherTurnsLeft = state.weatherTurnsLeft,
+            stepsSinceLastEvent = state.stepsSinceLastEvent,
+            nextEventSteps = state.nextEventSteps,
+            predictedWeather = state.predictedWeather?.name ?: "",
+            nodesHackedCount = state.nodesHackedCount,
+            totalCreditsEarned = state.totalCreditsEarned,
+            inventoryCsv = state.inventory.joinToString(","),
+            installedCyberwareCsv = state.installedCyberware.joinToString(",") { it.id },
+            installedProgramsCsv = state.installedPrograms.joinToString(",") { it.id },
+            installedImplantsCsv = state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" },
+            exploredCellsCsv = serializeExploredCells(state.exploredCells),
+            mazeData = serializeMaze(state.maze),
+            originalMazeData = state.originalMaze?.let { serializeMaze(it) } ?: "",
+            buildingFloorsData = serializeFloors(state.buildingFloors),
+            buildingExploredData = serializeExploredMap(state.buildingExplored),
+            collectorsLevelsData = serializeFloors(state.collectorsLevels),
+            collectorsExploredData = serializeExploredMap(state.collectorsExplored),
+            cityDistrictsData = serializeFloors(state.cityDistricts),
+            cityExploredData = serializeExploredMap(state.cityExplored),
+            gameStateName = state.gameState.name,
+            logFeedSerialized = state.logFeed.joinToString("$$") { "${it.text}||${it.type.name}||${it.timestamp}" }
+        )
+
+        val inventoryEntities = state.inventory.map { item ->
+            InventoryItemEntity(
+                saveSlotId = "current_save",
+                itemName = item,
+                itemType = when {
+                    item.endsWith(".pkg") || item.endsWith(".bin") || item.endsWith(".exe") || item.endsWith(".sys") -> "PROGRAM/UTILITY"
+                    item.lowercase().contains("keycard") -> "KEYCARD"
+                    else -> "CONSUMABLE"
+                },
+                quantity = 1,
+                description = "Netrunner Item Payload: $item"
+            )
+        }
+
+        scope.launch {
+            repository.saveProfile(profileEntity)
+            repository.saveGameProgress(saveProgressEntity, inventoryEntities)
+        }
+
+        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        sharedPrefs.edit().apply {
+            putBoolean("has_saved_game", true)
+            putString("runnerName", state.runnerName)
+            putString("runnerClass", state.runnerClass.name)
+            putInt("maxIntegrity", state.maxIntegrity)
+            putInt("integrity", state.integrity)
+            putInt("playerMaxShield", state.playerMaxShield)
+            putInt("playerShield", state.playerShield)
+            putInt("maxRam", state.maxRam)
+            putInt("ram", state.ram)
+            putInt("ramRecoveryRate", state.ramRecoveryRate)
+            putInt("credits", state.credits)
+            putInt("damageBonus", state.damageBonus)
+            putInt("defenseBonus", state.defenseBonus)
+            putInt("characterLevel", state.characterLevel)
+            putInt("characterXp", state.characterXp)
+            putInt("xpToNextLevel", state.xpToNextLevel)
+            putInt("gridX", state.gridX)
+            putInt("gridY", state.gridY)
+            putString("direction", state.direction.name)
+            putInt("level", state.level)
+            putString("currentZone", state.currentZone.name)
+            putInt("buildingFloor", state.buildingFloor)
+            putInt("collectorsLevel", state.collectorsLevel)
+            putInt("cityDistrictIndex", state.cityDistrictIndex)
+            putBoolean("hasElevatorKeycard", state.hasElevatorKeycard)
+
+            putString("inventory", state.inventory.joinToString(","))
+            putString("installedCyberware", state.installedCyberware.joinToString(",") { it.id })
+            putString("installedPrograms", state.installedPrograms.joinToString(",") { it.id })
+            putString("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
+            putString("storedImplantsCsv", state.storedImplants.joinToString(",") { it.id })
+            putString("exploredCells", serializeExploredCells(state.exploredCells))
+
+            putString("activeWeather", state.activeWeather.name)
+            putInt("weatherTurnsLeft", state.weatherTurnsLeft)
+            putInt("stepsSinceLastEvent", state.stepsSinceLastEvent)
+            putInt("nextEventSteps", state.nextEventSteps)
+            putString("predictedWeather", state.predictedWeather?.name ?: "")
+
+            putInt("nodesHackedCount", state.nodesHackedCount)
+            putInt("totalCreditsEarned", state.totalCreditsEarned)
+
+            putString("maze", serializeMaze(state.maze))
+            putString("originalMaze", state.originalMaze?.let { serializeMaze(it) } ?: "")
+            putString("buildingFloors", serializeFloors(state.buildingFloors))
+            putString("buildingExplored", serializeExploredMap(state.buildingExplored))
+            putString("collectorsLevels", serializeFloors(state.collectorsLevels))
+            putString("collectorsExplored", serializeExploredMap(state.collectorsExplored))
+            putString("cityDistricts", serializeFloors(state.cityDistricts))
+            putString("cityExplored", serializeExploredMap(state.cityExplored))
+
+            putString("gameState", state.gameState.name)
+            putString("logFeed", state.logFeed.joinToString("$$") { "${it.text}||${it.type.name}||${it.timestamp}" })
+
+            apply()
+        }
+        onLog("COGNITIVE STATE PERSISTED TO ROOM DATABASE & CHIP STORAGE.", LogType.SUCCESS)
+    }
+
+    fun loadGame() {
+        scope.launch {
+            val roomProgress = repository.getSaveProgressSync("current_save")
+            if (roomProgress != null) {
+                try {
+                    val runnerClass = try {
+                        NetrunnerClass.valueOf(roomProgress.runnerClass)
+                    } catch (e: Exception) {
+                        NetrunnerClass.CODE_SLASHER
+                    }
+
+                    val direction = try {
+                        Direction.valueOf(roomProgress.direction)
+                    } catch (e: Exception) {
+                        Direction.EAST
+                    }
+
+                    val currentZone = try {
+                        Zone.valueOf(roomProgress.currentZone)
+                    } catch (e: Exception) {
+                        Zone.BUILDING
+                    }
+
+                    val activeWeather = try {
+                        CyberWeather.valueOf(roomProgress.activeWeather)
+                    } catch (e: Exception) {
+                        CyberWeather.CLEAR
+                    }
+
+                    val predictedWeather = if (roomProgress.predictedWeather.isNotEmpty()) {
+                        try {
+                            CyberWeather.valueOf(roomProgress.predictedWeather)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    } else null
+
+                    val gameState = try {
+                        GameState.valueOf(roomProgress.gameStateName)
+                    } catch (e: Exception) {
+                        GameState.EXPLORATION
+                    }
+
+                    val inventory = if (roomProgress.inventoryCsv.isEmpty()) emptyList() else roomProgress.inventoryCsv.split(",")
+                    val installedCyberware = if (roomProgress.installedCyberwareCsv.isEmpty()) emptyList() else roomProgress.installedCyberwareCsv.split(",").map { getCyberwareById(it) }
+                    val installedPrograms = if (roomProgress.installedProgramsCsv.isEmpty()) emptyList() else roomProgress.installedProgramsCsv.split(",").map { getProgramById(it) }
+
+                    val installedImplantsMap = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
+                    if (roomProgress.installedImplantsCsv.isNotEmpty()) {
+                        roomProgress.installedImplantsCsv.split(",").forEach { entry ->
+                            val parts = entry.split(":")
+                            if (parts.size == 2) {
+                                try {
+                                    val slot = ImplantBodySlot.valueOf(parts[0])
+                                    val implant = CyberwareImplantRegistry.getImplantById(parts[1])
+                                    if (implant != null) {
+                                        installedImplantsMap[slot] = implant
+                                    }
+                                } catch (e: Exception) {}
+                            }
+                        }
+                    }
+
+                    val logFeed = if (roomProgress.logFeedSerialized.isEmpty()) emptyList() else roomProgress.logFeedSerialized.split("$$").mapNotNull { line ->
+                        val parts = line.split("||")
+                        if (parts.size == 3) {
+                            val text = parts[0]
+                            val type = try { LogType.valueOf(parts[1]) } catch(e: Exception) { LogType.INFO }
+                            val ts = parts[2].toLongOrNull() ?: System.currentTimeMillis()
+                            LogMessage(text, type, ts)
+                        } else null
+                    }
+
+                    val maze = deserializeMaze(roomProgress.mazeData)
+                    val originalMaze = if (roomProgress.originalMazeData.isEmpty()) null else deserializeMaze(roomProgress.originalMazeData)
+                    val buildingFloors = deserializeFloors(roomProgress.buildingFloorsData)
+                    val buildingExplored = deserializeExploredMap(roomProgress.buildingExploredData)
+                    val collectorsLevels = deserializeFloors(roomProgress.collectorsLevelsData)
+                    val collectorsExplored = deserializeExploredMap(roomProgress.collectorsExploredData)
+                    val cityDistricts = deserializeFloors(roomProgress.cityDistrictsData)
+                    val cityExplored = deserializeExploredMap(roomProgress.cityExploredData)
+                    val exploredCells = deserializeExploredCells(roomProgress.exploredCellsCsv)
+
+                    _uiState.update {
+                        it.copy(
+                            screen = ActiveScreen.EXPLORATION,
+                            runnerName = roomProgress.runnerName,
+                            runnerClass = runnerClass,
+                            maxIntegrity = roomProgress.maxIntegrity,
+                            integrity = roomProgress.integrity,
+                            playerMaxShield = roomProgress.playerMaxShield,
+                            playerShield = roomProgress.playerShield,
+                            maxRam = roomProgress.maxRam,
+                            ram = roomProgress.ram,
+                            ramRecoveryRate = roomProgress.ramRecoveryRate,
+                            credits = roomProgress.credits,
+                            damageBonus = roomProgress.damageBonus,
+                            defenseBonus = roomProgress.defenseBonus,
+                            characterLevel = roomProgress.characterLevel,
+                            characterXp = roomProgress.characterXp,
+                            xpToNextLevel = roomProgress.xpToNextLevel,
+                            gridX = roomProgress.gridX,
+                            gridY = roomProgress.gridY,
+                            direction = direction,
+                            level = roomProgress.level,
+                            currentZone = currentZone,
+                            buildingFloor = roomProgress.buildingFloor,
+                            collectorsLevel = roomProgress.collectorsLevel,
+                            cityDistrictIndex = roomProgress.cityDistrictIndex,
+                            hasElevatorKeycard = roomProgress.hasElevatorKeycard,
+                            inventory = inventory,
+                            installedCyberware = installedCyberware,
+                            installedPrograms = installedPrograms,
+                            installedImplants = installedImplantsMap,
+                            exploredCells = exploredCells,
+                            activeWeather = activeWeather,
+                            weatherTurnsLeft = roomProgress.weatherTurnsLeft,
+                            stepsSinceLastEvent = roomProgress.stepsSinceLastEvent,
+                            nextEventSteps = roomProgress.nextEventSteps,
+                            predictedWeather = predictedWeather,
+                            nodesHackedCount = roomProgress.nodesHackedCount,
+                            totalCreditsEarned = roomProgress.totalCreditsEarned,
+                            maze = maze,
+                            originalMaze = originalMaze,
+                            buildingFloors = buildingFloors,
+                            buildingExplored = buildingExplored,
+                            collectorsLevels = collectorsLevels,
+                            collectorsExplored = collectorsExplored,
+                            cityDistricts = cityDistricts,
+                            cityExplored = cityExplored,
+                            gameState = gameState,
+                            logFeed = logFeed
+                        )
+                    }
+
+                    onLog("ROOM DB: RESTORED RUNNER COGNITIVE CHIP FROM LOCAL SQLITE.", LogType.SUCCESS)
+                    onLog("RE-LINKED AT GRID COORDINATES (${roomProgress.gridX}, ${roomProgress.gridY}).", LogType.INFO)
+                    onRestoreComplete()
+                    return@launch
+                } catch (e: Exception) {
+                    onLog("ROOM RESTORE ALERT: ${e.localizedMessage}, checking secondary storage...", LogType.ALERT)
+                }
+            }
+
+            loadFromSharedPreferences()
+        }
+    }
+
+    private fun loadFromSharedPreferences() {
+        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        if (!sharedPrefs.getBoolean("has_saved_game", false)) {
+            onLog("ERROR: NO RESTORE POINT FOUND.", LogType.ERROR)
+            return
+        }
+
+        try {
+            val runnerClass = try {
+                NetrunnerClass.valueOf(sharedPrefs.getString("runnerClass", "") ?: "CODE_SLASHER")
+            } catch (e: Exception) {
+                NetrunnerClass.CODE_SLASHER
+            }
+
+            val direction = try {
+                Direction.valueOf(sharedPrefs.getString("direction", "") ?: "EAST")
+            } catch (e: Exception) {
+                Direction.EAST
+            }
+
+            val currentZone = try {
+                Zone.valueOf(sharedPrefs.getString("currentZone", "") ?: "BUILDING")
+            } catch (e: Exception) {
+                Zone.BUILDING
+            }
+
+            val activeWeather = try {
+                CyberWeather.valueOf(sharedPrefs.getString("activeWeather", "") ?: "CLEAR")
+            } catch (e: Exception) {
+                CyberWeather.CLEAR
+            }
+
+            val predictedWeatherStr = sharedPrefs.getString("predictedWeather", "") ?: ""
+            val predictedWeather = if (predictedWeatherStr.isNotEmpty()) {
+                try {
+                    CyberWeather.valueOf(predictedWeatherStr)
+                } catch (e: Exception) {
+                    null
+                }
+            } else null
+
+            val gameState = try {
+                GameState.valueOf(sharedPrefs.getString("gameState", "") ?: "EXPLORATION")
+            } catch (e: Exception) {
+                GameState.EXPLORATION
+            }
+
+            val invStr = sharedPrefs.getString("inventory", "") ?: ""
+            val inventory = if (invStr.isEmpty()) emptyList() else invStr.split(",")
+
+            val cyberStr = sharedPrefs.getString("installedCyberware", "") ?: ""
+            val installedCyberware = if (cyberStr.isEmpty()) emptyList() else cyberStr.split(",").map { getCyberwareById(it) }
+
+            val progStr = sharedPrefs.getString("installedPrograms", "") ?: ""
+            val installedPrograms = if (progStr.isEmpty()) emptyList() else progStr.split(",").map { getProgramById(it) }
+
+            val implantsStr = sharedPrefs.getString("installedImplantsCsv", "") ?: ""
+            val installedImplantsMap = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
+            if (implantsStr.isNotEmpty()) {
+                implantsStr.split(",").forEach { entry ->
+                    val parts = entry.split(":")
+                    if (parts.size == 2) {
+                        try {
+                            val slot = ImplantBodySlot.valueOf(parts[0])
+                            val implant = CyberwareImplantRegistry.getImplantById(parts[1])
+                            if (implant != null) {
+                                installedImplantsMap[slot] = implant
+                            }
+                        } catch (e: Exception) {}
+                    }
+                }
+            }
+
+            val storedImplantsStr = sharedPrefs.getString("storedImplantsCsv", "") ?: ""
+            val storedImplantsList = if (storedImplantsStr.isEmpty()) emptyList() else storedImplantsStr.split(",").mapNotNull { CyberwareImplantRegistry.getImplantById(it) }
+
+            val logStr = sharedPrefs.getString("logFeed", "") ?: ""
+            val logFeed = if (logStr.isEmpty()) emptyList() else logStr.split("$$").mapNotNull { line ->
+                val parts = line.split("||")
+                if (parts.size == 3) {
+                    val text = parts[0]
+                    val type = try { LogType.valueOf(parts[1]) } catch(e: Exception) { LogType.INFO }
+                    val ts = parts[2].toLongOrNull() ?: System.currentTimeMillis()
+                    LogMessage(text, type, ts)
+                } else null
+            }
+
+            val mazeStr = sharedPrefs.getString("maze", "") ?: ""
+            val maze = deserializeMaze(mazeStr)
+
+            val originalMazeStr = sharedPrefs.getString("originalMaze", "") ?: ""
+            val originalMaze = if (originalMazeStr.isEmpty()) null else deserializeMaze(originalMazeStr)
+
+            val buildingFloorsStr = sharedPrefs.getString("buildingFloors", "") ?: ""
+            val buildingFloors = deserializeFloors(buildingFloorsStr)
+
+            val buildingExploredStr = sharedPrefs.getString("buildingExplored", "") ?: ""
+            val buildingExplored = deserializeExploredMap(buildingExploredStr)
+
+            val collectorsLevelsStr = sharedPrefs.getString("collectorsLevels", "") ?: ""
+            val collectorsLevels = deserializeFloors(collectorsLevelsStr)
+
+            val collectorsExploredStr = sharedPrefs.getString("collectorsExplored", "") ?: ""
+            val collectorsExplored = deserializeExploredMap(collectorsExploredStr)
+
+            val cityDistrictsStr = sharedPrefs.getString("cityDistricts", "") ?: ""
+            val cityDistricts = deserializeFloors(cityDistrictsStr)
+
+            val cityExploredStr = sharedPrefs.getString("cityExplored", "") ?: ""
+            val cityExplored = deserializeExploredMap(cityExploredStr)
+
+            val exploredCellsStr = sharedPrefs.getString("exploredCells", "") ?: ""
+            val exploredCells = deserializeExploredCells(exploredCellsStr)
+
+            _uiState.update {
+                it.copy(
+                    screen = ActiveScreen.EXPLORATION,
+                    runnerName = sharedPrefs.getString("runnerName", "") ?: "",
+                    runnerClass = runnerClass,
+                    maxIntegrity = sharedPrefs.getInt("maxIntegrity", 100),
+                    integrity = sharedPrefs.getInt("integrity", 100),
+                    playerMaxShield = sharedPrefs.getInt("playerMaxShield", 50),
+                    playerShield = sharedPrefs.getInt("playerShield", 10),
+                    maxRam = sharedPrefs.getInt("maxRam", 12),
+                    ram = sharedPrefs.getInt("ram", 12),
+                    ramRecoveryRate = sharedPrefs.getInt("ramRecoveryRate", 2),
+                    credits = sharedPrefs.getInt("credits", 100),
+                    damageBonus = sharedPrefs.getInt("damageBonus", 0),
+                    defenseBonus = sharedPrefs.getInt("defenseBonus", 0),
+                    characterLevel = sharedPrefs.getInt("characterLevel", 1),
+                    characterXp = sharedPrefs.getInt("characterXp", 0),
+                    xpToNextLevel = sharedPrefs.getInt("xpToNextLevel", 100),
+                    gridX = sharedPrefs.getInt("gridX", 1),
+                    gridY = sharedPrefs.getInt("gridY", 1),
+                    direction = direction,
+                    level = sharedPrefs.getInt("level", 1),
+                    currentZone = currentZone,
+                    buildingFloor = sharedPrefs.getInt("buildingFloor", 1),
+                    collectorsLevel = sharedPrefs.getInt("collectorsLevel", 1),
+                    cityDistrictIndex = sharedPrefs.getInt("cityDistrictIndex", 0),
+                    hasElevatorKeycard = sharedPrefs.getBoolean("hasElevatorKeycard", false),
+                    inventory = inventory,
+                    installedCyberware = installedCyberware,
+                    installedPrograms = installedPrograms,
+                    installedImplants = installedImplantsMap,
+                    storedImplants = storedImplantsList,
+                    exploredCells = exploredCells,
+                    activeWeather = activeWeather,
+                    weatherTurnsLeft = sharedPrefs.getInt("weatherTurnsLeft", 0),
+                    stepsSinceLastEvent = sharedPrefs.getInt("stepsSinceLastEvent", 0),
+                    nextEventSteps = sharedPrefs.getInt("nextEventSteps", 30),
+                    predictedWeather = predictedWeather,
+                    nodesHackedCount = sharedPrefs.getInt("nodesHackedCount", 0),
+                    totalCreditsEarned = sharedPrefs.getInt("totalCreditsEarned", 100),
+                    maze = maze,
+                    originalMaze = originalMaze,
+                    buildingFloors = buildingFloors,
+                    buildingExplored = buildingExplored,
+                    collectorsLevels = collectorsLevels,
+                    collectorsExplored = collectorsExplored,
+                    cityDistricts = cityDistricts,
+                    cityExplored = cityExplored,
+                    gameState = gameState,
+                    logFeed = logFeed
+                )
+            }
+
+            onLog("COGNITIVE RESTORE POINT ESTABLISHED (SECONDARY CHIP).", LogType.SUCCESS)
+            onRestoreComplete()
+
+        } catch (e: Exception) {
+            onLog("RESTORE ERROR: COMPILING CORRUPT SYSTEM CHIP - ${e.localizedMessage}", LogType.ERROR)
+        }
+    }
+}

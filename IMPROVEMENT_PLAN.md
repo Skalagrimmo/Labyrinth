@@ -1,0 +1,293 @@
+# Netcrawler — Improvement Plan
+
+## Overview
+This document outlines prioritized improvements for Netcrawler, a cyberpunk roguelike Android game built with Kotlin, Jetpack Compose, Room DB, OpenGL ES, and Gemini AI.
+
+---
+
+## Phase 1: Foundation & Stability (Weeks 1–2)
+
+### 1.1 Complete Firebase Integration
+- **Status:** `google-services.json` is missing; `googleServices.missing.passthrough=true` hides the error
+- **Action:** Generate `google-services.json` from Firebase Console, enable Analytics + Crashlytics
+- **Impact:** Crash reporting, user analytics, crash-free rate monitoring
+- **Effort:** 2–4 hours
+
+### 1.2 Add Release Signing Config
+- **Status:** No release keystore or signing block in `build.gradle.kts`
+- **Action:** Create upload keystore, configure `signingConfigs` for release builds, set up Play Console app listing
+- **Impact:** Required for Play Store deployment
+- **Effort:** 1–2 hours
+
+### 1.3 Database Migration Strategy
+- **Status:** Room entities exist but no visible `@Database` version migrations
+- **Action:** Add `Migration(1, 2, ...)` objects, test with `MigrationTestHelper`, handle `fallbackToDestructiveMigration` gracefully
+- **Impact:** Prevents data loss on app updates for existing users
+- **Effort:** 4–6 hours
+
+### 1.4 Remove Dead Code
+- **Status:** ~1,427 lines of dead composables removed during split (verified)
+- **Action:** Confirm no references remain, run `./gradlew lint` to catch any stragglers
+- **Impact:** Reduced APK size, cleaner codebase
+- **Effort:** 1 hour
+
+---
+
+## Phase 2: User Experience (Weeks 2–4)
+
+### 2.1 Onboarding / Tutorial Flow
+- **Status:** New players are dropped into a complex terminal UI with no guidance
+- **Action:** Create a 4-step interactive tutorial:
+  1. Movement (swipe/drag to navigate)
+  2. Interaction (tap to hack terminals, collect items)
+  3. Combat basics (attack, defend, use items)
+  4. Cyberware implants (clinic visit, equip/unequip)
+- **Impact:** Improved first-session retention, reduced confusion
+- **Effort:** 1–2 weeks
+
+### 2.2 Accessibility Features
+- **Status:** Game relies heavily on color (green/cyan/pink) for state communication
+- **Action:**
+  - Add colorblind mode (patterns/shapes instead of color-only indicators)
+  - Adjustable text size (currently hardcoded 7–12sp)
+  - Content descriptions on all interactive elements for TalkBack
+  - Reduced motion toggle (disable CRT flicker, scanlines, animations)
+- **Impact:** Broader audience, Play Store accessibility requirements
+- **Effort:** 1–2 weeks
+
+### 2.3 Localization (i18n)
+- **Status:** All UI strings are hardcoded in English
+- **Action:** Extract all strings to `strings.xml`, use `stringResource()` throughout Compose code. Prioritize: Japanese, Spanish, Portuguese, German
+- **Impact:** International market reach
+- **Effort:** 2–3 weeks (extraction + translation)
+
+### 2.4 Improved Character Creation
+- **Status:** Functional but basic — stat allocation and class selection
+- **Action:**
+  - Add class-specific starting abilities/descriptions
+  - Show stat impact preview (e.g., "HP will be 170 instead of 100")
+  - Add random character name generator
+  - Animated 3D preview with rotation controls
+- **Impact:** More engaging first impression
+- **Effort:** 1 week
+
+---
+
+## Phase 3: Gameplay Depth (Weeks 4–8)
+
+### 3.1 Enemy Variety & Boss Fights
+- **Status:** `Enemy` data class is flexible but few unique enemies exist
+- **Action:**
+  - Add 15–20 enemy types with unique abilities, resistances, and ASCII art
+  - Implement boss fights with multi-phase mechanics (e.g., shields that regenerate, pattern-based attacks)
+  - Scale enemy difficulty with floor/level progression
+- **Impact:** Core gameplay depth, replayability
+- **Effort:** 2–3 weeks
+
+### 3.2 Skill Tree / Progression System
+- **Status:** `characterLevel` and `xpToNextLevel` exist but progression is minimal
+- **Action:**
+  - Add a skill tree with 3 branches: Hacking, Combat, Engineering
+  - Each branch has 5–8 unlockable nodes with meaningful bonuses
+  - XP earned from combat, hacking, and exploration
+  - Respec option at cyberware clinic
+- **Impact:** Long-term progression goals, build diversity
+- **Effort:** 2–3 weeks
+
+### 3.3 Expanded Procedural Audio
+- **Status:** Already has `AudioTrack` PCM synthesis and `SoundPool` SFX — unique differentiator
+- **Action:**
+  - Dynamic combat music that responds to HP/turn state
+  - Environmental audio layers (wind, electronic hum, distant sirens)
+  - Distinct sound signatures per enemy type
+  - CRT power-on/power-off sound effect
+- **Impact:** Immersion, unique selling point vs other roguelikes
+- **Effort:** 1–2 weeks
+
+### 3.4 Daily/Weekly Challenge Runs
+- **Status:** Seed-based procedural generation already supports deterministic layouts
+- **Action:**
+  - Generate a daily seed from date (e.g., `date.hashCode()`)
+  - Show global leaderboard for daily runs
+  - Add "Daily Challenge" button on start menu
+  - Display personal best streak
+- **Impact:** Competitive retention, social sharing
+- **Effort:** 1 week
+
+### 3.5 Consumable & Item Crafting
+- **Status:** Inventory exists but items are limited (`NanoMed.sys`, `RAMBoost.exe`, etc.)
+- **Action:**
+  - Add 10+ new consumable items with unique effects
+  - Add a simple crafting system (combine 2 items at a terminal)
+  - Add item rarity tiers (Common, Uncommon, Rare, Legendary)
+- **Impact:** Loot-driven motivation, inventory management depth
+- **Effort:** 1–2 weeks
+
+---
+
+## Phase 4: Social & Competitive (Weeks 8–12)
+
+### 4.1 Cloud Leaderboard
+- **Status:** Local `RunRecord` in Room only
+- **Action:**
+  - Firebase Realtime Database or Firestore for global leaderboard
+  - Google Sign-In for anonymous authentication
+  - Filter by: class, floor reached, total kills
+  - Weekly/monthly reset with top-10 highlight
+- **Impact:** Competition, replayability, community
+- **Effort:** 1–2 weeks
+
+### 4.2 Cloud Saves
+- **Status:** All saves are local
+- **Action:**
+  - Upload `GameSaveProgressEntity` to Firestore on save
+  - Download on app install (detect existing save)
+  - Conflict resolution (latest timestamp wins)
+- **Impact:** Multi-device play, backup/restore
+- **Effort:** 1 week
+
+### 4.3 Sharing & Social Features
+- **Status:** No sharing functionality
+- **Action:**
+  - Share run summary as image (game over screen)
+  - Share daily challenge score
+  - "Share your build" for character configurations
+- **Impact:** Organic growth, word-of-mouth
+- **Effort:** 3–4 days
+
+---
+
+## Phase 5: Architecture & Performance (Ongoing)
+
+### 5.1 Gradle Module Split
+- **Status:** Single `app` module with all code
+- **Action:**
+  ```
+  :core:engine        — Pure Kotlin game logic (no Android deps)
+  :core:data          — Room entities, DAOs, repositories
+  :core:ui            — Shared composables, theme, colors
+  :feature:combat     — Combat screen, turn engine
+  :feature:hacking    — Hacking minigames
+  :feature:exploration — First-person view, minimap, navigation
+  :feature:cyberware  — Implant system, clinic
+  :app                — MainActivity, DI, integration
+  ```
+- **Impact:** Faster builds, independent testing, easier onboarding for contributors
+- **Effort:** 1–2 weeks
+
+### 5.2 Dependency Injection (Hilt)
+- **Status:** Singletons via `getInstance()` everywhere
+- **Action:** Add Hilt, convert `GameViewModel`, `CyberSoundEffectsManager`, `CyberSoundPoolManager`, `CyberVibrationManager`, `GameDatabase` to `@Inject` constructor injection
+- **Impact:** Testability, lifecycle safety, cleaner code
+- **Effort:** 1 week
+
+### 5.3 Performance Profiling
+- **Status:** `FirstPersonPerspectiveCanvas` (1265 lines) does heavy Canvas drawing every frame
+- **Action:**
+  - Profile with Android GPU Inspector
+  - Cache static grid/background elements
+  - Consider moving 3D wireframe to dedicated OpenGL renderer
+  - Lazy-load minimap tiles instead of redrawing entire map
+  - Reduce recomposition scope with `derivedStateOf` where possible
+- **Impact:** Smoother 60fps on low-end devices
+- **Effort:** 1–2 weeks
+
+### 5.4 Testing
+- **Status:** Minimal tests — `2+2=4` unit test, one screenshot test
+- **Action:**
+  - Unit tests for `GameEngine`, `TurnBasedCombatEngine`, `SparseVoxelDag`
+  - ViewModel tests with `kotlinx-coroutines-test`
+  - Compose UI tests for critical paths (start game → combat → victory)
+  - Screenshot tests for all major screens
+- **Impact:** Regression prevention, confident refactoring
+- **Effort:** 2–3 weeks
+
+### 5.5 CI/CD Pipeline
+- **Status:** No CI/CD configuration
+- **Action:**
+  - GitHub Actions workflow: lint → unit tests → build debug APK → instrumented tests
+  - Automated release builds on tag push
+  - Play Store internal track auto-deploy
+- **Impact:** Automated quality gates, faster iteration
+- **Effort:** 2–3 days
+
+---
+
+## Phase 6: Growth & Monetization (Weeks 12+)
+
+### 6.1 Cosmetics Monetization
+- **Status:** `CosmeticTheme` and `TerminalPromptStyle` systems exist
+- **Action:**
+  - Add 8–10 premium terminal themes (retro amber, blood red, ice blue, matrix green, etc.)
+  - Add custom CRT scanline patterns
+  - Price: $0.99–$1.99 per theme, or $4.99 for all
+  - Free themes unlock via achievements
+- **Impact:** Revenue, player expression
+- **Effort:** 1 week (content) + store integration
+
+### 6.2 Mod Support / Custom Content
+- **Status:** `CellType` enum and procedural generation are data-driven
+- **Action:**
+  - JSON schema for custom floor layouts, enemy definitions, item pools
+  - In-app mod loader (read from `Documents/Netcrawler/mods/`)
+  - Community mod sharing (upload/download)
+- **Impact:** Community engagement, indefinite content lifespan
+- **Effort:** 3–4 weeks
+
+### 6.3 Open Source the Engine
+- **Status:** Game engine algorithms (SVDAG, procedural generation, combat engine) are interesting and reusable
+- **Action:**
+  - Extract `:core:engine` and `:core:data` into a standalone library
+  - Publish on GitHub with MIT license
+  - Keep game assets and UI proprietary
+  - Write documentation for the engine
+- **Impact:** Community contributions, brand awareness, portfolio piece
+- **Effort:** 1–2 weeks
+
+### 6.4 Play Store Optimization
+- **Action:**
+  - A/B test screenshots and feature graphic
+  - Optimize listing with keywords: "cyberpunk roguelike", "hacking game", "terminal game"
+  - Add promo video (30–60s gameplay montage)
+  - Respond to all reviews within 24 hours
+- **Impact:** Organic install growth
+- **Effort:** Ongoing
+
+---
+
+## Priority Matrix
+
+| Priority | Item | Impact | Effort |
+|----------|------|--------|--------|
+| P0 | Firebase integration | High | Low |
+| P0 | Release signing | High | Low |
+| P0 | DB migrations | High | Medium |
+| P1 | Onboarding tutorial | High | Medium |
+| P1 | Enemy variety | High | Medium |
+| P1 | Skill tree | High | Medium |
+| P2 | Cloud leaderboard | Medium | Medium |
+| P2 | Accessibility | Medium | Medium |
+| P2 | Localization | Medium | High |
+| P3 | Daily challenges | Medium | Low |
+| P3 | Procedural audio expansion | Medium | Medium |
+| P3 | Gradle modularization | Medium | High |
+| P3 | Hilt DI | Medium | Medium |
+| P4 | Performance profiling | Medium | Medium |
+| P4 | Testing suite | Medium | High |
+| P4 | CI/CD | Medium | Low |
+| P5 | Cosmetics monetization | Medium | Low |
+| P5 | Mod support | High | High |
+| P5 | Open source engine | Medium | Medium |
+
+---
+
+## Estimated Timeline
+
+| Phase | Weeks | Focus |
+|-------|-------|-------|
+| Phase 1 | 1–2 | Stability & deployment readiness |
+| Phase 2 | 2–4 | UX, onboarding, accessibility |
+| Phase 3 | 4–8 | Gameplay depth, progression, audio |
+| Phase 4 | 8–12 | Social features, competition |
+| Phase 5 | Ongoing | Architecture, performance, testing |
+| Phase 6 | 12+ | Growth, monetization, community |
