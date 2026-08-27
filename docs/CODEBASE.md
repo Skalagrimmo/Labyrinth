@@ -124,7 +124,9 @@ A complete source-file reference organized by package and layer. All paths are r
 |------|---------|
 | `GameModels.kt` | Core types: `NetrunnerClass`, `Cyberware`, `StatusEffectType`, `ActiveStatusEffect`, `Program`, `Direction`, `CellType`, `Zone`, `CyberWeather`, `Enemy`, `BossType`, `LogMessage/LogType`, `RunRecord`, `CharacterProfileEntity`, `GameSaveProgressEntity`, `InventoryItemEntity`, `GameState`, `TurnPhase`, `CombatActionType`, `TurnActionRecord` |
 | `GameEngine.kt` (~1,680) | Procedural maze generation, 3D perspective raycast, enemy/boss spawning, hacking puzzles, starting program kits, weather |
-| `GameItemRegistry.kt` (~320) | Static `GameItem` catalog (consumables, equipment) |
+| `ContentModParser.kt` | Reusable Markdown parser for mod-defined content (enemies/items/programs) |
+| `ContentRegistry.kt` | Converts parsed mod blocks into model types and merges them into live registries + `assets/mods/` loader |
+| `GameItemRegistry.kt` (~320) | Static `GameItem` catalog (consumables, equipment) + mod-item merge |
 | `ItemModels.kt` | `GameItem`, `EquipmentSlot`, `InventoryCategory`, `InventorySortOption`, `ItemRarity` |
 | `CyberwareImplantRegistry.kt` | Implant catalog + starter implants |
 | `ImplantModels.kt` | `CyberwareImplant`, `ImplantBodySlot`, `ImplantAbility` |

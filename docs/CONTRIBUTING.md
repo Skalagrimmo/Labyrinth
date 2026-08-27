@@ -114,6 +114,16 @@ The core loop is **delegate through `GameViewModel`**:
 
 ## Adding Content
 
+### Prefer Markdown mods (no Kotlin)
+
+For **enemies, items, and programs** you usually don't need to touch code at all: drop a
+`.md` file into `app/src/main/assets/mods/` using the format documented in
+[`MODDING.md`](MODDING.md). `ContentModParser` + `ContentRegistry` load it automatically.
+
+The `.md` path is the recommended way to add content because it's lower-risk and requires
+no rebuild of logic. Use the Kotlin paths below when you need **new behavior** (new AI,
+new mechanics) rather than new static data.
+
 ### New enemies / bosses
 - Spawn definitions live in `GameEngine.kt` (`spawnEnemy`, `spawnBoss`).
 - AI goes in `data/EnemyCombatAIScript.kt` (`evaluateAction`, `evaluateBossAction` + per-boss functions).

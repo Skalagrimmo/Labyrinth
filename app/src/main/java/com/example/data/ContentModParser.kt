@@ -117,7 +117,8 @@ object ContentModParser {
                     fieldLines.add(kv)
                 } else {
                     val text = stripMarkdown(line).trim()
-                    if (text.isNotEmpty()) bodyBuf.append(text).append(' ')
+                    val isRule = text.matches(Regex("-{3,}|={3,}|\\*{3,}"))
+                    if (text.isNotEmpty() && !isRule) bodyBuf.append(text).append(' ')
                 }
             }
         }

@@ -124,7 +124,11 @@ class PersistenceManager(
             "SentinelFirewallBreaker.exe" -> Program("SentinelFirewallBreaker.exe", "SentinelFirewallBreaker.exe", "Boss drop: Bypasses all armor. Deals 50 piercing damage.", ramCost = 5, damage = 50, piercesDefense = true)
             "DaemonSlayer.sys" -> Program("DaemonSlayer.sys", "DaemonSlayer.sys", "Boss drop: 60 damage, restores 20 RAM on use.", ramCost = 4, damage = 60, heal = 20)
             "ColossusBlade.exe" -> Program("ColossusBlade.exe", "ColossusBlade.exe", "Boss drop: 75 damage, stuns target for 2 turns.", ramCost = 6, damage = 75)
-            else -> Program("basic_slash", "Slasher.sys", "Deals baseline security breach damage.", 0, damage = 12)
+            else -> {
+                // Fall back to mod-registered programs (ContentRegistry), then base slash.
+                ContentRegistry.programSpecs().firstOrNull { it.id == id || it.name == id }
+                    ?: Program("basic_slash", "Slasher.sys", "Deals baseline security breach damage.", 0, damage = 12)
+            }
         }
     }
 

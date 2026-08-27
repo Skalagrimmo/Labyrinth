@@ -27,6 +27,7 @@ Full project documentation lives in the [`docs/`](docs/) folder:
 | [Gameplay](docs/GAMEPLAY.md) | Mechanics, systems, bosses, items, terminals |
 | [Codebase](docs/CODEBASE.md) | Source-file reference for every layer |
 | [Data & Persistence](docs/DATA-PERSISTENCE.md) | Room schema, saves, export/import format |
+| [Modding](docs/MODDING.md) | Add enemies/items/programs via Markdown (no Kotlin) |
 | [Contributing](docs/CONTRIBUTING.md) | Build, test, and contribution guidelines |
 
 ## Building

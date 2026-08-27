@@ -276,11 +276,20 @@ object GameItemRegistry {
         )
     )
 
-    private val itemMap: Map<String, GameItem> = items.associateBy { it.name.lowercase() }
+    // Mod-defined items registered at runtime via ContentRegistry (merged into lookups
+    // and drops so a mod never needs to recompile Kotlin).
+    private val modItems = mutableListOf<GameItem>()
+
+    fun registerModItems(newItems: List<GameItem>) {
+        modItems.addAll(newItems)
+    }
+
+    private fun allItems(): List<GameItem> = items + modItems
 
     fun getItemByName(name: String): GameItem {
         val key = name.lowercase().trim()
-        return itemMap[key] ?: GameItem(
+        allItems().forEach { if (it.name.lowercase() == key) return it }
+        return GameItem(
             id = "custom_" + key.replace(" ", "_"),
             name = name,
             description = "Scavenged cyber asset stored in virtual memory.",
@@ -293,10 +302,10 @@ object GameItemRegistry {
         )
     }
 
-    fun getAllItems(): List<GameItem> = items
+    fun getAllItems(): List<GameItem> = allItems()
 
     fun getRandomExplorationDrop(floor: Int): GameItem {
-        val pool = items.filter { it.category != InventoryCategory.KEY_ITEM }
+        val pool = allItems().filter { it.category != InventoryCategory.KEY_ITEM }
         val weights = pool.map { item ->
             when (item.rarity) {
                 ItemRarity.COMMON -> 50
