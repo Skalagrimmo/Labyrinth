@@ -1188,6 +1188,7 @@ class ExplorationManager(
     private fun generateNewLevel() {
         scope.launch {
             val level = _uiState.value.level
+            val seed = System.currentTimeMillis()
             val size = minOf(35 + ((level - 1) * 4), 55)
             val maze = withContext(Dispatchers.Default) {
                 GameEngine.generateMaze(size, size, level)
@@ -1213,7 +1214,8 @@ class ExplorationManager(
                     gridY = 1,
                     direction = Direction.EAST,
                     perspectiveText = perspective,
-                    exploredCells = emptySet()
+                    exploredCells = emptySet(),
+                    levelSeed = seed
                 )
             }
             revealCellsAround(1, 1)

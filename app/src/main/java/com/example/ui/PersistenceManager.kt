@@ -1,12 +1,16 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import com.example.data.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
 
 class PersistenceManager(
     private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
@@ -703,5 +707,189 @@ class PersistenceManager(
         } catch (e: Exception) {
             onLog("RESTORE ERROR: COMPILING CORRUPT SYSTEM CHIP - ${e.localizedMessage}", LogType.ERROR)
         }
+    }
+
+    // ----------------------------------------------------
+    // Export / Import (Offline-first sharing)
+    // ----------------------------------------------------
+
+    fun exportSave(): String {
+        val state = uiState
+        val json = JSONObject()
+        json.put("version", 1)
+        json.put("runnerName", state.runnerName)
+        json.put("runnerClass", state.runnerClass.name)
+        json.put("level", state.level)
+        json.put("integrity", state.integrity)
+        json.put("maxIntegrity", state.maxIntegrity)
+        json.put("playerShield", state.playerShield)
+        json.put("playerMaxShield", state.playerMaxShield)
+        json.put("ram", state.ram)
+        json.put("maxRam", state.maxRam)
+        json.put("ramRecoveryRate", state.ramRecoveryRate)
+        json.put("credits", state.credits)
+        json.put("damageBonus", state.damageBonus)
+        json.put("defenseBonus", state.defenseBonus)
+        json.put("characterLevel", state.characterLevel)
+        json.put("characterXp", state.characterXp)
+        json.put("xpToNextLevel", state.xpToNextLevel)
+        json.put("gridX", state.gridX)
+        json.put("gridY", state.gridY)
+        json.put("direction", state.direction.name)
+        json.put("currentZone", state.currentZone.name)
+        json.put("buildingFloor", state.buildingFloor)
+        json.put("collectorsLevel", state.collectorsLevel)
+        json.put("cityDistrictIndex", state.cityDistrictIndex)
+        json.put("hasElevatorKeycard", state.hasElevatorKeycard)
+        json.put("nodesHackedCount", state.nodesHackedCount)
+        json.put("totalCreditsEarned", state.totalCreditsEarned)
+        json.put("dataFragments", state.dataFragments)
+        json.put("totalDataFragmentsExtracted", state.totalDataFragmentsExtracted)
+        json.put("activeWeather", state.activeWeather.name)
+        json.put("weatherTurnsLeft", state.weatherTurnsLeft)
+        json.put("levelSeed", state.levelSeed)
+        json.put("inventory", JSONArray(state.inventory))
+        json.put("installedPrograms", JSONArray(state.installedPrograms.map { it.id }))
+        json.put("exploredCellsCsv", serializeExploredCells(state.exploredCells))
+        json.put("mazeData", serializeMaze(state.maze))
+        json.put("originalMazeData", state.originalMaze?.let { serializeMaze(it) } ?: "")
+        json.put("buildingFloorsData", serializeFloors(state.buildingFloors))
+        json.put("buildingExploredData", serializeExploredMap(state.buildingExplored))
+        json.put("collectorsLevelsData", serializeFloors(state.collectorsLevels))
+        json.put("collectorsExploredData", serializeExploredMap(state.collectorsExplored))
+        json.put("cityDistrictsData", serializeFloors(state.cityDistricts))
+        json.put("cityExploredData", serializeExploredMap(state.cityExplored))
+        json.put("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
+
+        val encoded = android.util.Base64.encodeToString(json.toString().toByteArray(), android.util.Base64.NO_WRAP)
+        return "NETCRAWLER_SAVE_v1:$encoded"
+    }
+
+    fun importSave(encoded: String): Boolean {
+        try {
+            val stripped = encoded.removePrefix("NETCRAWLER_SAVE_v1:")
+            val jsonStr = String(android.util.Base64.decode(stripped, android.util.Base64.NO_WRAP))
+            val json = JSONObject(jsonStr)
+
+            val maze = deserializeMaze(json.optString("mazeData", ""))
+            if (maze.isEmpty()) { onLog("IMPORT FAILED: Invalid maze data.", LogType.ERROR); return false }
+
+            val inventory = mutableListOf<String>()
+            val invArr = json.optJSONArray("inventory")
+            if (invArr != null) { for (i in 0 until invArr.length()) inventory.add(invArr.getString(i)) }
+
+            val programs = mutableListOf<Program>()
+            val progArr = json.optJSONArray("installedPrograms")
+            if (progArr != null) { for (i in 0 until progArr.length()) programs.add(getProgramById(progArr.getString(i))) }
+
+            val installedImplants = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
+            val implCsv = json.optString("installedImplantsCsv", "")
+            if (implCsv.isNotEmpty()) {
+                implCsv.split(",").forEach { entry ->
+                    val parts = entry.split(":", limit = 2)
+                    if (parts.size == 2) {
+                        val slot = try { ImplantBodySlot.valueOf(parts[0]) } catch (_: Exception) { null }
+                        val implant = if (parts[1].isNotEmpty()) CyberwareImplantRegistry.STARTER_IMPLANTS.find { it.id == parts[1] } else null
+                        if (slot != null) installedImplants[slot] = implant
+                    }
+                }
+            }
+
+            val logFeed = mutableListOf<LogMessage>()
+            val ls = json.optString("logFeedSerialized", "")
+            if (ls.isNotEmpty()) {
+                ls.split("$$").forEach { entry ->
+                    val parts = entry.split("||")
+                    if (parts.size >= 2) {
+                        val type = try { LogType.valueOf(parts[1]) } catch (_: Exception) { LogType.INFO }
+                        logFeed.add(LogMessage(parts[0], type))
+                    }
+                }
+            }
+
+            val gameState = try { GameState.valueOf(json.optString("gameStateName", "EXPLORATION")) } catch (_: Exception) { GameState.EXPLORATION }
+
+            _uiState.update {
+                it.copy(
+                    screen = ActiveScreen.EXPLORATION,
+                    runnerName = json.optString("runnerName", ""),
+                    runnerClass = try { NetrunnerClass.valueOf(json.optString("runnerClass", "CODE_SLASHER")) } catch (_: Exception) { NetrunnerClass.CODE_SLASHER },
+                    level = json.optInt("level", 1),
+                    integrity = json.optInt("integrity", 100),
+                    maxIntegrity = json.optInt("maxIntegrity", 100),
+                    playerShield = json.optInt("playerShield", 10),
+                    playerMaxShield = json.optInt("playerMaxShield", 50),
+                    ram = json.optInt("ram", 12),
+                    maxRam = json.optInt("maxRam", 12),
+                    ramRecoveryRate = json.optInt("ramRecoveryRate", 2),
+                    credits = json.optInt("credits", 100),
+                    damageBonus = json.optInt("damageBonus", 0),
+                    defenseBonus = json.optInt("defenseBonus", 0),
+                    characterLevel = json.optInt("characterLevel", 1),
+                    characterXp = json.optInt("characterXp", 0),
+                    xpToNextLevel = json.optInt("xpToNextLevel", 100),
+                    gridX = json.optInt("gridX", 1),
+                    gridY = json.optInt("gridY", 1),
+                    direction = try { Direction.valueOf(json.optString("direction", "EAST")) } catch (_: Exception) { Direction.EAST },
+                    currentZone = try { Zone.valueOf(json.optString("currentZone", "BUILDING")) } catch (_: Exception) { Zone.BUILDING },
+                    buildingFloor = json.optInt("buildingFloor", 1),
+                    collectorsLevel = json.optInt("collectorsLevel", 1),
+                    cityDistrictIndex = json.optInt("cityDistrictIndex", 0),
+                    hasElevatorKeycard = json.optBoolean("hasElevatorKeycard", false),
+                    nodesHackedCount = json.optInt("nodesHackedCount", 0),
+                    totalCreditsEarned = json.optInt("totalCreditsEarned", 100),
+                    dataFragments = json.optInt("dataFragments", 0),
+                    totalDataFragmentsExtracted = json.optInt("totalDataFragmentsExtracted", 0),
+                    activeWeather = try { CyberWeather.valueOf(json.optString("activeWeather", "CLEAR")) } catch (_: Exception) { CyberWeather.CLEAR },
+                    weatherTurnsLeft = json.optInt("weatherTurnsLeft", 0),
+                    levelSeed = json.optLong("levelSeed", 0L),
+                    inventory = inventory,
+                    installedPrograms = programs,
+                    installedImplants = installedImplants,
+                    exploredCells = deserializeExploredCells(json.optString("exploredCellsCsv", "")),
+                    maze = maze,
+                    originalMaze = json.optString("originalMazeData", "").let { s -> if (s.isNotEmpty()) deserializeMaze(s) else null },
+                    buildingFloors = deserializeFloors(json.optString("buildingFloorsData", "")),
+                    buildingExplored = deserializeExploredMap(json.optString("buildingExploredData", "")),
+                    collectorsLevels = deserializeFloors(json.optString("collectorsLevelsData", "")),
+                    collectorsExplored = deserializeExploredMap(json.optString("collectorsExploredData", "")),
+                    cityDistricts = deserializeFloors(json.optString("cityDistrictsData", "")),
+                    cityExplored = deserializeExploredMap(json.optString("cityExploredData", "")),
+                    gameState = gameState,
+                    logFeed = logFeed
+                )
+            }
+
+            onLog("SAVE DATA IMPORTED SUCCESSFULLY.", LogType.SUCCESS)
+            onRestoreComplete()
+            return true
+
+        } catch (e: Exception) {
+            onLog("IMPORT FAILED: Corrupt save data - ${e.localizedMessage}", LogType.ERROR)
+            return false
+        }
+    }
+
+    fun copyExportToClipboard() {
+        val exported = exportSave()
+        val clipboard = application.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("Netcrawler Save", exported)
+        clipboard.setPrimaryClip(clip)
+        onLog("SAVE DATA COPIED TO CLIPBOARD. Share with friends!", LogType.SUCCESS)
+    }
+
+    fun importFromClipboard() {
+        val clipboard = application.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = clipboard.primaryClip
+        if (clip == null || clip.itemCount == 0) {
+            onLog("CLIPBOARD EMPTY. Copy a save code first.", LogType.ERROR)
+            return
+        }
+        val text = clip.getItemAt(0).text?.toString() ?: ""
+        if (!text.startsWith("NETCRAWLER_SAVE_v1:")) {
+            onLog("CLIPBOARD DOES NOT CONTAIN A VALID NETCRAWLER SAVE.", LogType.ERROR)
+            return
+        }
+        importSave(text)
     }
 }

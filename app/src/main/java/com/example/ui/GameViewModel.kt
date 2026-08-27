@@ -1,7 +1,6 @@
 package com.example.ui
 
 import android.app.Application
-import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
@@ -12,8 +11,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import kotlin.random.Random
 import java.util.concurrent.ConcurrentHashMap
 
@@ -166,7 +163,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val unlockedBuffs: Set<String> = emptySet(),
         val activeBuffs: Set<String> = emptySet(),
         val currentMultiFloorLevel: MultiFloorGridLevel? = null,
-        val activeFloorIndex: Int = 0
+        val activeFloorIndex: Int = 0,
+        val levelSeed: Long = 0L
     )
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -400,6 +398,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("INVENTORY: 'inventory', 'use <item>', 'equip <item>', 'unequip <slot>'", LogType.INFO)
                 addLog("SYSTEM: 'status', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>'", LogType.INFO)
+                addLog("SHARING: 'export' (copy save), 'import' (paste save), 'seed' (show level seed)", LogType.INFO)
             }
             "status", "stats", "info", "xp", "level", "lvl" -> {
                 addLog("--- RUNNER INTEGRITY PROFILE ---", LogType.SUCCESS)
@@ -418,13 +417,15 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             }
             "save" -> saveGame()
             "load" -> loadGame()
+            "export" -> { copyExportToClipboard() }
+            "import" -> { importFromClipboard() }
+            "seed" -> { addLog("LEVEL SEED: ${state.levelSeed}", LogType.INFO); addLog("Share this seed with friends to play the same dungeon!", LogType.INFO) }
             "menu" -> persistenceManager.returnToStartMenu()
             "clear" -> { _uiState.update { it.copy(logFeed = emptyList()) }; addLog("Log console cleared.", LogType.INFO) }
             else -> addLog("UNKNOWN COMMAND: '$trimmed'. Type 'help' for support.", LogType.ERROR)
         }
     }
 
-    // --- Delegated public API (thin forwarding) ---
     fun moveForward() = explorationManager.moveForward()
     fun moveBackward() = explorationManager.moveBackward()
     fun turnLeft() = explorationManager.turnLeft()
@@ -508,4 +509,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun startNewRun() = persistenceManager.startNewRun()
     fun returnToStartMenu() = persistenceManager.returnToStartMenu()
     fun resumeGame() = persistenceManager.resumeGame()
+
+    fun exportSave() = persistenceManager.exportSave()
+    fun importSave(encoded: String) = persistenceManager.importSave(encoded)
+    fun copyExportToClipboard() = persistenceManager.copyExportToClipboard()
+    fun importFromClipboard() = persistenceManager.importFromClipboard()
 }
