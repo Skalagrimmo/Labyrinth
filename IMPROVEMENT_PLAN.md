@@ -76,13 +76,10 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 ## Phase 3: Gameplay Depth (Weeks 4–8)
 
 ### 3.1 Enemy Variety & Boss Fights
-- **Status:** `Enemy` data class is flexible but few unique enemies exist
-- **Action:**
-  - Add 15–20 enemy types with unique abilities, resistances, and ASCII art
-  - Implement boss fights with multi-phase mechanics (e.g., shields that regenerate, pattern-based attacks)
-  - Scale enemy difficulty with floor/level progression
+- **Status:** ✅ **DONE** — 17 enemy archetypes (4 tiers) + 3 multi-phase bosses added in `GameEngine.kt`
+- **Action:** (completed) Enemy archetype catalog with stat multipliers + starting status effects; bosses with `bossPhase`/`turnCounter` AI in `EnemyCombatAIScript.kt`
 - **Impact:** Core gameplay depth, replayability
-- **Effort:** 2–3 weeks
+- **Effort:** (completed)
 
 ### 3.2 Skill Tree / Progression System
 - **Status:** `characterLevel` and `xpToNextLevel` exist but progression is minimal
@@ -193,9 +190,10 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 - **Effort:** 1–2 weeks
 
 ### 5.4 Testing
-- **Status:** Minimal tests — `2+2=4` unit test, one screenshot test
+- **Status:** 🟡 **In progress** — added host-JVM unit tests for `ContentModParser` and `GameEngine`
 - **Action:**
-  - Unit tests for `GameEngine`, `TurnBasedCombatEngine`, `SparseVoxelDag`
+  - Unit tests for `GameEngine`, `TurnBasedCombatEngine`, `SparseVoxelDag` (started: `ContentModParserTest`, `GameEngineTest` in `app/src/test`)
+  - More: `TurnBasedCombatEngine`, `CombatLootDropSystem`, enemy AI
   - ViewModel tests with `kotlinx-coroutines-test`
   - Compose UI tests for critical paths (start game → combat → victory)
   - Screenshot tests for all major screens
@@ -203,9 +201,10 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 - **Effort:** 2–3 weeks
 
 ### 5.5 CI/CD Pipeline
-- **Status:** No CI/CD configuration
+- **Status:** 🟡 **In progress** — `.github/workflows/ci.yml` added (unit tests → lint → assembleDebug)
 - **Action:**
-  - GitHub Actions workflow: lint → unit tests → build debug APK → instrumented tests
+  - GitHub Actions workflow: lint → unit tests → build debug APK → instrumented tests ✅ (workflow added)
+  - **Prerequisite:** commit a Gradle wrapper (`gradlew`, `gradlew.bat`, `gradle/wrapper/`) — generate in Android Studio (`gradle wrapper`), since none is currently tracked
   - Automated release builds on tag push
   - Play Store internal track auto-deploy
 - **Impact:** Automated quality gates, faster iteration
@@ -226,13 +225,11 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 - **Effort:** 1 week (content) + store integration
 
 ### 6.2 Mod Support / Custom Content
-- **Status:** `CellType` enum and procedural generation are data-driven
-- **Action:**
-  - JSON schema for custom floor layouts, enemy definitions, item pools
-  - In-app mod loader (read from `Documents/Netcrawler/mods/`)
-  - Community mod sharing (upload/download)
+- **Status:** ✅ **Partially DONE (enemies/items/programs via Markdown)** — see `docs/MODDING.md`
+- **Action implemented:** `ContentModParser` (reusable Markdown parser) + `ContentRegistry` load `.md` files from `assets/mods/` at startup, covering enemies, items, and programs. No recompilation needed.
+- **Action remaining:** in-app runtime loader from `Documents/Netcrawler/mods/`, community mod sharing
 - **Impact:** Community engagement, indefinite content lifespan
-- **Effort:** 3–4 weeks
+- **Effort:** (foundation done; runtime loading 1–2 weeks)
 
 ### 6.3 Open Source the Engine
 - **Status:** Game engine algorithms (SVDAG, procedural generation, combat engine) are interesting and reusable

@@ -30,6 +30,15 @@ Full project documentation lives in the [`docs/`](docs/) folder:
 | [Modding](docs/MODDING.md) | Add enemies/items/programs via Markdown (no Kotlin) |
 | [Contributing](docs/CONTRIBUTING.md) | Build, test, and contribution guidelines |
 
+See also the **[Improvement Plan](IMPROVEMENT_PLAN.md)** and **[Changelog](CHANGELOG.md)**.
+
+## Development & CI
+
+- **Testing:** unit tests live in `app/src/test/java/...` (`./gradlew testDebugUnitTest`).
+- **CI:** `.github/workflows/ci.yml` runs unit tests, lint, and debug builds on push/PR.
+  A committed Gradle wrapper is required (generate once in Android Studio with
+  `gradle wrapper`).
+
 ## Building
 
 ### Prerequisites

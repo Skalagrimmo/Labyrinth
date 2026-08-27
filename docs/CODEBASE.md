@@ -178,6 +178,7 @@ A complete source-file reference organized by package and layer. All paths are r
 | Location | Purpose |
 |----------|---------|
 | `app/src/test/java/com/example/` | `ExampleUnitTest.kt`, `ExampleRobolectricTest.kt`, `GreetingScreenshotTest.kt` |
+| `app/src/test/java/com/example/data/` | `ContentModParserTest.kt`, `GameEngineTest.kt` (host-JVM unit tests) |
 | `app/src/test/screenshots/greeting.png` | Screenshot test output |
 | `app/src/androidTest/java/com/example/` | `ExampleInstrumentedTest.kt` (device/instrumented) |
 
