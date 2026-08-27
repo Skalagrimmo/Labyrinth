@@ -1499,39 +1499,254 @@ object GameEngine {
     }
 
     // Generates a fully loaded enemy depending on the cyberspace layer
+    /**
+     * Enemy archetype catalog. Each archetype defines a distinct combat profile
+     * (tank, glass-cannon, shield-heavy, healer, debuffer...) with stat multipliers,
+     * optional starting status effects, and a unique ASCII portrait.
+     */
+    data class EnemyArchetype(
+        val name: String,
+        val description: String,
+        val asciiArt: String,
+        val minTier: Int,          // minimum depth/layer at which this enemy can appear
+        val hpMult: Float = 1.0f,
+        val shieldMult: Float = 1.0f,
+        val dmgMult: Float = 1.0f,
+        val armorBonus: Int = 0,
+        val bountyMult: Float = 1.0f,
+        val statusEffects: List<Pair<StatusEffectType, Int>> = emptyList() // (type, turns)
+    )
+
+    private val ENEMY_ARCHETYPES = listOf(
+        // ---------- TIER 1 : Corporate Lobby Daemons (Building floors 1-2) ----------
+        EnemyArchetype(
+            name = "Worm.exe",
+            description = "A fast-replicating data worm gnawing through transmission channels. Weak but persistent.",
+            asciiArt = "  ~o~~~~~o~~\n (  o  _  o )\n  ~~o~~~~~o~",
+            minTier = 1, dmgMult = 1.15f, bountyMult = 0.9f
+        ),
+        EnemyArchetype(
+            name = "Spyware.dll",
+            description = "Stealthy surveillance daemon that siphons RAM and exposes system weaknesses.",
+            asciiArt = "  /-------\\\n < (o) (o) >\n  \\_  ^  _/",
+            minTier = 1, shieldMult = 0.8f, dmgMult = 1.1f,
+            statusEffects = listOf(StatusEffectType.WEAKENED to 2)
+        ),
+        EnemyArchetype(
+            name = "Trojan.Horse",
+            description = "A disguised intrusion script that appears harmless until deep inside the network.",
+            asciiArt = "  ,_____\n /_ _ _ \\\n |o|   |o|\n |_______|",
+            minTier = 1, dmgMult = 1.25f, armorBonus = 2
+        ),
+        EnemyArchetype(
+            name = "ScriptKiddie.Bot",
+            description = "An amateur automated script, clumsy but erratic and unpredictable.",
+            asciiArt = "  (>_<)\n  (o o)\n  (_|_)",
+            minTier = 1, hpMult = 0.8f, dmgMult = 1.0f, bountyMult = 1.1f
+        ),
+
+        // ---------- TIER 2 : Building Core / Reactor ----------
+        EnemyArchetype(
+            name = "LogicBomb.sh",
+            description = "A dormant payload rigged to detonate with devastating cascading corruption.",
+            asciiArt = "   _\\|/_\n  ( o_o )\n  (_____) ",
+            minTier = 2, dmgMult = 1.4f,
+            statusEffects = listOf(StatusEffectType.POISONED to 3)
+        ),
+        EnemyArchetype(
+            name = "Ransomware.crypt",
+            description = "Locks your core files and demands credits. Armor-tough encryption shell.",
+            asciiArt = "  [Locked]\n  [ O_O  ]\n  [=====_]",
+            minTier = 2, armorBonus = 3, hpMult = 1.2f, bountyMult = 1.2f
+        ),
+        EnemyArchetype(
+            name = "Rootkit.sys",
+            description = "Hides deep in the operating system and erodes your defenses from within.",
+            asciiArt = "   /\\_/\\\n  ( >.< )\n   =(I)=",
+            minTier = 2, shieldMult = 1.3f, dmgMult = 1.15f,
+            statusEffects = listOf(StatusEffectType.WEAKENED to 1)
+        ),
+        EnemyArchetype(
+            name = "Firewall Guardian",
+            description = "A sentry program reinforced with heavy subdermal-plated shielding.",
+            asciiArt = "  [GUARD]\n  |=o o=|\n  |_____|",
+            minTier = 2, shieldMult = 1.6f, hpMult = 1.3f, armorBonus = 2, dmgMult = 0.9f
+        ),
+
+        // ---------- TIER 3 : Collector Sub-Grid ----------
+        EnemyArchetype(
+            name = "ZombieBot.bin",
+            description = "A thrall daemon under external control, relentless but mentally fragmented.",
+            asciiArt = "  [Z][Z]\n  ( x_x )\n  (_|_|_)",
+            minTier = 3, hpMult = 1.4f, dmgMult = 1.2f,
+            statusEffects = listOf(StatusEffectType.BUFFED to 2)
+        ),
+        EnemyArchetype(
+            name = "VampirePacket.sys",
+            description = "Drains your RAM reserves to fuel its own corrupted data stream.",
+            asciiArt = "  \\\\____//\n   ( o_o )\n  __|___|__",
+            minTier = 3, hpMult = 0.9f, dmgMult = 1.25f, shieldMult = 1.2f
+        ),
+        EnemyArchetype(
+            name = "Adware Construct",
+            description = "A bloated, loud daemon that hammers you with overwhelming corrupt spam.",
+            asciiArt = "  [AD!]\n  ( O_o )\n  |>_<|",
+            minTier = 3, hpMult = 1.3f, dmgMult = 1.35f, bountyMult = 1.3f
+        ),
+        EnemyArchetype(
+            name = "Scav-Killer.exe",
+            description = "A hardened hunter that preys on weaker black-ice, relentless and fast.",
+            asciiArt = "   ,___,\n  < o o >\n   \\_|_/",
+            minTier = 3, dmgMult = 1.5f, armorBonus = 2, hpMult = 1.1f
+        ),
+
+        // ---------- TIER 4 : City Metro Districts ----------
+        EnemyArchetype(
+            name = "Cryptolocker.Baron",
+            description = "An elite ransomware general that enslaves your files for massive ransoms.",
+            asciiArt = " [BARON]\n [  ]|[ ]\n |_____|",
+            minTier = 4, hpMult = 1.6f, armorBonus = 4, bountyMult = 1.5f
+        ),
+        EnemyArchetype(
+            name = "IceWyrm.sys",
+            description = "A colossal serpentine ICE construct that coils and strikes with venomous payloads.",
+            asciiArt = " ~~~~~~\n<((( )))>\n ~~~^~~~",
+            minTier = 4, hpMult = 1.5f, dmgMult = 1.4f, shieldMult = 1.2f,
+            statusEffects = listOf(StatusEffectType.POISONED to 4)
+        ),
+        EnemyArchetype(
+            name = "Overlord Lieutenant",
+            description = "A Daemon-Overlord sub-commandant that buffs any black-ice around it.",
+            asciiArt = " [LIEUT]\n  ( O,O )\n  |_____|",
+            minTier = 4, hpMult = 1.7f, shieldMult = 1.5f, dmgMult = 1.3f,
+            statusEffects = listOf(StatusEffectType.BUFFED to 3)
+        ),
+        EnemyArchetype(
+            name = "Synthwraith.exe",
+            description = "A fragment of a long-dead netrunner, glitching between dimensions and stacking curses.",
+            asciiArt = "  ( ~ ~ )\n  <  o  >\n   /|_|\\",
+            minTier = 4, hpMult = 0.8f, dmgMult = 1.6f, shieldMult = 1.4f,
+            statusEffects = listOf(StatusEffectType.WEAKENED to 3, StatusEffectType.POISONED to 2)
+        ),
+        EnemyArchetype(
+            name = "BlackICE Berserker",
+            description = "A rage-maddened ICE unit that forgoes defense for pure, overwhelming offense.",
+            asciiArt = "  [ RAGE ]\n  ( >_< )\n  ((:=))",
+            minTier = 4, dmgMult = 1.8f, hpMult = 1.2f, shieldMult = 0.6f,
+            statusEffects = listOf(StatusEffectType.BUFFED to 2)
+        )
+    )
+
+    /**
+     * Mod-registered enemy archetypes dynamically added at runtime.
+     * Populated by [ContentRegistry] when a mod document is loaded.
+     */
+    val registeredEnemyArchetypes = mutableListOf<EnemyArchetype>()
+
+    /** Registers additional enemy archetypes from mods. */
+    fun registerEnemyArchetypes(archetypes: List<EnemyArchetype>) {
+        registeredEnemyArchetypes.addAll(archetypes)
+    }
+
+    /**
+     * Spawns a procedurally chosen enemy scaled to the current depth/layer.
+     * Higher tiers (and tougher archetypes) unlock as the player descends.
+     * Mod-registered archetypes (via [registerEnemyArchetypes]) are merged in.
+     */
     fun spawnEnemy(layer: Int): Enemy {
-        val names = listOf("Worm.exe", "Trojan.Horse", "LogicBomb.sh", "Spyware.dll", "Ransomware.crypt", "Rootkit.sys")
         val random = Random(System.currentTimeMillis())
-        val name = names[random.nextInt(names.size)]
+        val effectiveLayer = layer.coerceAtLeast(1)
 
-        val integrity = 40 + (layer * 15) + random.nextInt(15)
-        val shield = 15 + (layer * 10) + random.nextInt(10)
-        val damage = 8 + (layer * 4) + random.nextInt(5)
-        val armor = layer + random.nextInt(2)
-        val bounty = 50 + (layer * 25) + random.nextInt(30)
+        // Merge hardcoded catalog with any mod-registered archetypes.
+        val pool = ENEMY_ARCHETYPES + registeredEnemyArchetypes
 
-        val asciiArt = when (name) {
-            "Worm.exe" -> "  ~o~~~~~o~~\n (  o  _  o )\n  ~~o~~~~~o~"
-            "Trojan.Horse" -> "  ,_____\n /_ _ _ \\\n |o|   |o|\n |_______|"
-            "LogicBomb.sh" -> "   _\\|/_\n  ( o_o )\n  (_____) "
-            "Spyware.dll" -> "  /-------\\\n < (o) (o) >\n  \\_  ^  _/"
-            "Ransomware.crypt" -> "  [Locked]\n  [ O_O  ]\n  [=====_]"
-            else -> "   /\\_/\\\n  ( >.< )\n   =(I)="
+        // Only spawn archetypes whose minTier <= effectiveLayer; weight by staleness to
+        // favour newer/threatening archetypes while keeping variety.
+        val candidates = pool.filter { it.minTier <= effectiveLayer }
+        val chosen = if (candidates.isEmpty()) pool.first()
+        else {
+            val weighted = mutableListOf<EnemyArchetype>()
+            for (c in candidates) {
+                val weight = 2 + (effectiveLayer - c.minTier)
+                repeat(weight) { weighted.add(c) }
+            }
+            weighted[random.nextInt(weighted.size)]
+        }
+
+        val integrity = ((40 + (effectiveLayer * 15)) * chosen.hpMult).toInt() + random.nextInt(15)
+        val shield = ((15 + (effectiveLayer * 10)) * chosen.shieldMult).toInt() + random.nextInt(10)
+        val damage = ((8 + (effectiveLayer * 4)) * chosen.dmgMult).toInt() + random.nextInt(5)
+        val armor = (effectiveLayer + chosen.armorBonus) + random.nextInt(2)
+        val bounty = ((50 + (effectiveLayer * 25)) * chosen.bountyMult).toInt() + random.nextInt(30)
+
+        val startingEffects = chosen.statusEffects.map { (type, turns) ->
+            ActiveStatusEffect(type = type, turnsRemaining = turns, sourceName = chosen.name)
         }
 
         return Enemy(
-            id = "enemy_${System.currentTimeMillis()}",
-            name = name,
+            id = "enemy_${System.currentTimeMillis()}_${random.nextInt(10000)}",
+            name = chosen.name,
             maxIntegrity = integrity,
             integrity = integrity,
             maxShield = shield,
             shield = shield,
             damage = damage,
             armor = armor,
-            iconAscii = asciiArt,
+            iconAscii = chosen.asciiArt,
             bountyCredits = bounty,
-            description = "Active security daemon blocking transmission channels. Highly hostile."
+            description = chosen.description,
+            statusEffects = startingEffects.toMutableList()
         )
+    }
+
+    fun spawnBoss(bossType: BossType, level: Int): Enemy {
+        return when (bossType) {
+            BossType.FIREWALL_SENTINEL -> Enemy(
+                id = "boss_sentinel_${System.currentTimeMillis()}",
+                name = "Firewall Sentinel",
+                maxIntegrity = 250 + (level * 20),
+                integrity = 250 + (level * 20),
+                maxShield = 100 + (level * 15),
+                shield = 100 + (level * 15),
+                damage = 22 + (level * 3),
+                armor = 8 + level,
+                iconAscii = "   _______\n  | SENT |\n  |inel._|\n  |_______|\n  /||\\ ||\\\n / ||\\ || \\",
+                bountyCredits = 400 + (level * 60),
+                description = "Ancient defensive sub-routine guarding the deepest corporate firewalls. Regenerates shields and locks down systems.",
+                isBoss = true,
+                bossType = BossType.FIREWALL_SENTINEL
+            )
+            BossType.DAEMON_OVERLORD -> Enemy(
+                id = "boss_overlord_${System.currentTimeMillis()}",
+                name = "Daemon Overlord",
+                maxIntegrity = 350 + (level * 25),
+                integrity = 350 + (level * 25),
+                maxShield = 80 + (level * 10),
+                shield = 80 + (level * 10),
+                damage = 30 + (level * 4),
+                armor = 6 + level,
+                iconAscii = "   .d8888.\n  d88' '88b\n  88     88\n  Y8b   d8P\n   Y8888P'\n    '||'\n    [OVERLORD]",
+                bountyCredits = 600 + (level * 80),
+                description = "Supreme daemon ruling the collector sub-grid. Summons lesser daemons and drains neural resources.",
+                isBoss = true,
+                bossType = BossType.DAEMON_OVERLORD
+            )
+            BossType.BLACK_ICE_COLOSSUS -> Enemy(
+                id = "boss_colossus_${System.currentTimeMillis()}",
+                name = "Black ICE Colossus",
+                maxIntegrity = 500 + (level * 30),
+                integrity = 500 + (level * 30),
+                maxShield = 150 + (level * 20),
+                shield = 150 + (level * 20),
+                damage = 42 + (level * 5),
+                armor = 12 + (level * 2),
+                iconAscii = "  _________\n |  BLACK  |\n |   ICE   |\n | COLOSSUS|\n |_________|\n  |||   |||\n  |||   |||\n  ===   ===",
+                bountyCredits = 1000 + (level * 100),
+                description = "Apex security construct of the Metro Core. Adapts defenses and unleashes devastating neural storms.",
+                isBoss = true,
+                bossType = BossType.BLACK_ICE_COLOSSUS
+            )
+        }
     }
 
     // Hacking puzzle matrix generator

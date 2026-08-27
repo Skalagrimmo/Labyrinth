@@ -180,7 +180,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         onSave = ::saveGame,
         onAddExperience = ::addExperience,
         onVictoryCleanup = ::handleCombatVictoryCleanup,
-        onGameOver = ::handleGameOver
+        onGameOver = ::handleGameOver,
+        onBossZoneTransition = { zone, floor -> explorationManager.loadOrCreateLevel(zone, floor) }
     )
 
     private val explorationManager = ExplorationManager(
@@ -204,7 +205,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         onAddExperience = ::addExperience,
         onSave = ::saveGame,
         onRecordPlayerAction = { _: CombatActionType, _: String, _: Int, _: String? -> },
-        onCombatAction = {}
+        onCombatAction = { combatManager.onPlayerActionCompleted() },
+        onApplyStatusEffectToPlayer = { type, turns, source -> combatManager.applyStatusEffectToPlayer(type, turns, 0, source) },
+        onApplyStatusEffectToEnemy = { type, turns, source -> combatManager.applyStatusEffectToEnemy(type, turns, 0, source) }
     )
 
     private val persistenceManager = PersistenceManager(

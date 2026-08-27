@@ -184,8 +184,18 @@ data class Enemy(
     val iconAscii: String,
     val bountyCredits: Int,
     val description: String,
-    var statusEffects: MutableList<ActiveStatusEffect> = mutableListOf()
+    var statusEffects: MutableList<ActiveStatusEffect> = mutableListOf(),
+    val isBoss: Boolean = false,
+    val bossType: BossType? = null,
+    var bossPhase: Int = 1,
+    var turnCounter: Int = 0
 )
+
+enum class BossType {
+    FIREWALL_SENTINEL,
+    DAEMON_OVERLORD,
+    BLACK_ICE_COLOSSUS
+}
 
 data class LogMessage(
     val text: String,

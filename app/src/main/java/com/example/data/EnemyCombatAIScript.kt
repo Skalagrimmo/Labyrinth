@@ -36,11 +36,182 @@ data class EnemyAIDecision(
     val logMessage: String = ""
 )
 
-/**
- * AI behavior script for the turn-based combat system.
- * Evaluates enemy health ratio, shield integrity, player RAM vulnerability,
- * and combat proximity to dynamically select optimal tactical actions.
- */
+    /**
+     * Boss-specific AI evaluation. Called when the enemy is a boss.
+     */
+    fun evaluateBossAction(
+        boss: Enemy,
+        playerHealth: Int,
+        playerMaxHealth: Int,
+        playerRam: Int
+    ): EnemyAIDecision {
+        val healthRatio = boss.integrity.toFloat() / boss.maxIntegrity.coerceAtLeast(1)
+        val shieldRatio = boss.shield.toFloat() / boss.maxShield.coerceAtLeast(1)
+        val turn = boss.turnCounter
+
+        return when (boss.bossType) {
+            BossType.FIREWALL_SENTINEL -> evaluateSentinel(boss, healthRatio, shieldRatio, turn, playerHealth, playerRam)
+            BossType.DAEMON_OVERLORD -> evaluateOverlord(boss, healthRatio, shieldRatio, turn, playerHealth, playerRam)
+            BossType.BLACK_ICE_COLOSSUS -> evaluateColossus(boss, healthRatio, shieldRatio, turn, playerHealth, playerMaxHealth, playerRam)
+            null -> evaluateAction(boss.integrity, boss.maxIntegrity, boss.shield, boss.maxShield, boss.damage, playerHealth, playerRam)
+        }
+    }
+
+    private fun evaluateSentinel(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerRam: Int): EnemyAIDecision {
+        // Phase 2 at 50% HP: gains counter-attack ability
+        if (healthRatio < 0.50f && boss.bossPhase == 1) {
+            boss.bossPhase = 2
+            return EnemyAIDecision(
+                actionType = EnemyActionType.FORTIFY_ICE,
+                actionName = "FIREWALL OVERCLOCK",
+                shieldAmount = (boss.maxShield * 0.4f).toInt(),
+                logMessage = "🔥 SENTINEL PHASE 2: Firewall Sentinel activated counter-intrusion protocols! Shield restored +${(boss.maxShield * 0.4f).toInt()}! All attacks now reflect 50% damage!"
+            )
+        }
+
+        // Every 3 turns: shield regeneration
+        if (turn % 3 == 0 && shieldRatio < 0.80f) {
+            val restore = (boss.maxShield * 0.35f).toInt()
+            return EnemyAIDecision(
+                actionType = EnemyActionType.FORTIFY_ICE,
+                actionName = "ICE Shield Reboot",
+                shieldAmount = restore,
+                logMessage = "🛡️ SENTINEL REBOOT: Firewall Sentinel restored $restore shield integrity!"
+            )
+        }
+
+        // Every 5 turns: system lockdown (stun)
+        if (turn % 5 == 0) {
+            return EnemyAIDecision(
+                actionType = EnemyActionType.HACK_PLAYER,
+                actionName = "System Lockdown",
+                damage = boss.damage,
+                ramDrain = 2,
+                logMessage = "🔒 LOCKDOWN: Firewall Sentinel initiated system lockdown! Player stunned for 1 turn! $boss.damage damage + 2 RAM drained!"
+            )
+        }
+
+        // Default: heavy attack
+        val dmg = boss.damage + Random.nextInt(-2, 6)
+        return EnemyAIDecision(
+            actionType = EnemyActionType.ATTACK,
+            actionName = "Sentinel Strike",
+            damage = max(5, dmg),
+            logMessage = "🚨 SENTINEL STRIKE: Firewall Sentinel unleashed heavy counter-intrusion blast for $dmg damage!"
+        )
+    }
+
+    private fun evaluateOverlord(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerRam: Int): EnemyAIDecision {
+        // Phase 2 at 60% HP: summon daemons
+        if (healthRatio < 0.60f && boss.bossPhase == 1) {
+            boss.bossPhase = 2
+            return EnemyAIDecision(
+                actionType = EnemyActionType.HEAL,
+                actionName = "Summon Daemon",
+                healAmount = (boss.maxIntegrity * 0.2f).toInt(),
+                logMessage = "👹 OVERLORD SUMMON: Daemon Overlord summoned a lesser daemon to aid in combat! Healed +${(boss.maxIntegrity * 0.2f).toInt()} HP!"
+            )
+        }
+
+        // Phase 3 at 30% HP: massive RAM drain
+        if (healthRatio < 0.30f && boss.bossPhase == 2) {
+            boss.bossPhase = 3
+            return EnemyAIDecision(
+                actionType = EnemyActionType.HACK_PLAYER,
+                actionName = "Neural Devour",
+                damage = boss.damage + 15,
+                ramDrain = min(5, playerRam),
+                logMessage = "💀 OVERLORD PHASE 3: Daemon Overlord unleashed Neural Devour! ${boss.damage + 15} damage + ${min(5, playerRam)} RAM DRAINED!"
+            )
+        }
+
+        // Every 4 turns: RAM drain
+        if (turn % 4 == 0 && playerRam > 0) {
+            val drain = min(4, playerRam)
+            return EnemyAIDecision(
+                actionType = EnemyActionType.HACK_PLAYER,
+                actionName = "RAM Siphon",
+                damage = boss.damage / 2,
+                ramDrain = drain,
+                logMessage = "⚡ RAM SIPHON: Daemon Overlord drained $drain MB RAM + ${(boss.damage / 2)} damage!"
+            )
+        }
+
+        // 30% chance: shadow step (dodge hint)
+        if (Random.nextInt(100) < 30) {
+            return EnemyAIDecision(
+                actionType = EnemyActionType.ATTACK,
+                actionName = "Shadow Step Strike",
+                damage = boss.damage + Random.nextInt(5, 12),
+                logMessage = "👤 SHADOW STEP: Daemon Overlord phased through defenses for ${boss.damage + Random.nextInt(5, 12)} damage!"
+            )
+        }
+
+        // Default: heavy attack
+        val dmg = boss.damage + Random.nextInt(-2, 5)
+        return EnemyAIDecision(
+            actionType = EnemyActionType.ATTACK,
+            actionName = "Overlord Assault",
+            damage = max(6, dmg),
+            logMessage = "👹 OVERLORD ASSAULT: Daemon Overlord attacked for $dmg damage!"
+        )
+    }
+
+    private fun evaluateColossus(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerMaxHealth: Int, playerRam: Int): EnemyAIDecision {
+        // Phase 2 at 65% HP: adaptive armor
+        if (healthRatio < 0.65f && boss.bossPhase == 1) {
+            boss.bossPhase = 2
+            return EnemyAIDecision(
+                actionType = EnemyActionType.FORTIFY_ICE,
+                actionName = "Adaptive Plating",
+                shieldAmount = (boss.maxShield * 0.5f).toInt(),
+                logMessage = "🔷 COLOSSUS PHASE 2: Black ICE Colossus activated adaptive plating! Shield +${(boss.maxShield * 0.5f).toInt()}! Incoming damage reduced by 25%!"
+            )
+        }
+
+        // Phase 3 at 35% HP: neural storm
+        if (healthRatio < 0.35f && boss.bossPhase == 2) {
+            boss.bossPhase = 3
+            return EnemyAIDecision(
+                actionType = EnemyActionType.HACK_PLAYER,
+                actionName = "Neural Storm",
+                damage = boss.damage + 20,
+                ramDrain = min(4, playerRam),
+                logMessage = "⚡ NEURAL STORM: Black ICE Colossus unleashed devastating neural storm! ${boss.damage + 20} damage + ${min(4, playerRam)} RAM DRAINED!"
+            )
+        }
+
+        // Every 3 turns: phase shift (becomes harder to hit)
+        if (turn % 3 == 0) {
+            return EnemyAIDecision(
+                actionType = EnemyActionType.ATTACK,
+                actionName = "Phase Shift Strike",
+                damage = boss.damage + Random.nextInt(8, 18),
+                logMessage = "🌀 PHASE SHIFT: Black ICE Colossus phased through reality for ${boss.damage + Random.nextInt(8, 18)} devastating damage!"
+            )
+        }
+
+        // 25% chance: heal
+        if (Random.nextInt(100) < 25 && healthRatio < 0.70f) {
+            val heal = (boss.maxIntegrity * 0.15f).toInt()
+            return EnemyAIDecision(
+                actionType = EnemyActionType.HEAL,
+                actionName = "Core Reboot",
+                healAmount = heal,
+                logMessage = "🔧 CORE REBOOT: Black ICE Colossus restored $heal HP!"
+            )
+        }
+
+        // Default: massive attack
+        val dmg = boss.damage + Random.nextInt(-2, 8)
+        return EnemyAIDecision(
+            actionType = EnemyActionType.ATTACK,
+            actionName = "Colossus Slam",
+            damage = max(8, dmg),
+            logMessage = "🔴 COLOSSUS SLAM: Black ICE Colossus crushed down for $dmg damage!"
+        )
+    }
+}
 object EnemyCombatAIScript {
 
     /**

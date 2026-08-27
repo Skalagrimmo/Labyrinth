@@ -123,4 +123,38 @@ object CombatLootDropSystem {
             logMessage = logMsg
         )
     }
+
+    private val BOSS_LOOT = mapOf(
+        BossType.FIREWALL_SENTINEL to LootTableItem("SentinelFirewallBreaker.exe", "PROGRAM", LootRarity.LEGENDARY, "Bypasses all enemy armor. Deals 50 piercing damage. Bonus: +25% damage vs bosses.", 5.0f),
+        BossType.DAEMON_OVERLORD to LootTableItem("DaemonSlayer.sys", "PROGRAM", LootRarity.LEGENDARY, "Deals 60 damage and restores 20 RAM on kill. Bonus: +30% crit chance.", 5.0f),
+        BossType.BLACK_ICE_COLOSSUS to LootTableItem("ColossusBlade.exe", "PROGRAM", LootRarity.LEGENDARY, "Devastating 75 damage strike. Stuns target for 2 turns. Bonus: +40% damage when below 50% HP.", 5.0f)
+    )
+
+    fun generateBossLootDrop(bossType: BossType, enemyLevel: Int, saveSlotId: String = "current_save"): LootDropResult {
+        val item = BOSS_LOOT[bossType]!!
+        val bonusCredits = (800 + (enemyLevel * 100)) * item.creditBonusMultiplier.toInt()
+        val xpReward = 200 + (enemyLevel * 50) + Random.nextInt(20, 50)
+
+        val entity = InventoryItemEntity(
+            saveSlotId = saveSlotId,
+            itemName = item.name,
+            itemType = item.itemType,
+            quantity = 1,
+            description = item.description,
+            acquiredTimestamp = System.currentTimeMillis()
+        )
+
+        val logMsg = "🎁 BOSS LOOT DROPPED: ${item.rarity.colorTag} ${item.name} — ${item.description}"
+
+        return LootDropResult(
+            itemName = item.name,
+            itemType = item.itemType,
+            description = item.description,
+            rarity = item.rarity,
+            totalCreditsEarned = bonusCredits,
+            xpEarned = xpReward,
+            inventoryEntity = entity,
+            logMessage = logMsg
+        )
+    }
 }

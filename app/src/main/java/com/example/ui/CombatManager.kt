@@ -2,6 +2,7 @@ package com.example.ui
 
 import com.example.audio.CyberSoundEffectsManager
 import com.example.data.*
+import com.example.data.EnemyCombatAIScript
 import com.example.data.svdag.IceAlertLevel
 import com.example.data.svdag.SvdagIcePathfinder
 import com.example.data.svdag.SvdagScannerService
@@ -23,10 +24,19 @@ class CombatManager(
     private val onSave: () -> Unit,
     private val onAddExperience: (Int) -> Unit,
     private val onVictoryCleanup: (Enemy) -> Unit,
-    private val onGameOver: (String) -> Unit
+    private val onGameOver: (String) -> Unit,
+    private val onBossZoneTransition: ((Zone, Int) -> Unit)? = null,
+    private val onPlayerActionCompleted: (() -> Unit)? = null
 ) {
     private val uiState get() = _uiState.value
     private var combatHackTimerJob: Job? = null
+
+    fun onPlayerActionCompleted() {
+        val state = uiState
+        if (state.gameState == GameState.PLAYER_TURN || state.gameState == GameState.COMBAT_START) {
+            executeEnemyCombatTurn()
+        }
+    }
 
     fun triggerCombat(targetX: Int, targetY: Int) {
         if (uiState.gameState != GameState.EXPLORATION) {
@@ -59,7 +69,7 @@ class CombatManager(
                 lastEnemyActionRecord = null,
                 totalPlayerActionsCount = 0,
                 totalEnemyTurnsCount = 0,
-                showCombatBanner = "⚔️ SYSTEM OVERLOAD INTRUSION",
+                showCombatBanner = if (enemy.isBoss) "⚠️ BOSS ENCOUNTER" else "⚔️ SYSTEM OVERLOAD INTRUSION",
                 isCombatInputEnabled = false,
                 combatFlashEnemy = false,
                 combatFlashPlayer = false,
@@ -496,18 +506,49 @@ class CombatManager(
             var finalEnemyDmg = maxOf(1, baseEnemyDmg - state.defenseBonus)
             if (state.kineticShieldActiveThisCombat) { finalEnemyDmg = 0; _uiState.update { it.copy(kineticShieldActiveThisCombat = false) }; onLog("🛡️ KINETIC SHIELD IMPLANT: Subdermal kinetic barrier completely absorbed incoming attack!", LogType.SUCCESS) }
 
+            // Boss-specific AI
             val actions = listOf("Trojan injection stream", "Rootkit port scan exploit", "Distributed Denial-of-Service packets", "Logic logicbomb payload")
             val selectedAction = actions[Random.nextInt(actions.size)]
-            val shieldDamage = minOf(state.playerShield, finalEnemyDmg)
-            val integrityDamage = finalEnemyDmg - shieldDamage
+            val decision = if (enemy.isBoss) {
+                EnemyCombatAIScript.evaluateBossAction(enemy, state.integrity, state.maxIntegrity, state.ram)
+            } else null
+
+            val isLockdown = decision?.actionName == "System Lockdown"
+            if (isLockdown) {
+                onLog("🔒 SYSTEM LOCKDOWN: You are stunned and cannot act next turn!", LogType.ERROR)
+                _uiState.update { it.copy(playerStatusEffects = it.playerStatusEffects + ActiveStatusEffect(StatusEffectType.STUNNED, 1, 0, enemy.name)) }
+            }
+
+            val bossDmg = decision?.damage ?: 0
+            val bossRamDrain = decision?.ramDrain ?: 0
+            val bossShieldGain = decision?.shieldAmount ?: 0
+            val bossHeal = decision?.healAmount ?: 0
+
+            if (bossShieldGain > 0) {
+                enemy.shield = minOf(enemy.maxShield, enemy.shield + bossShieldGain)
+                _uiState.update { it.copy(enemyStatusEffects = enemy.statusEffects.toList()) }
+            }
+            if (bossHeal > 0) {
+                enemy.integrity = minOf(enemy.maxIntegrity, enemy.integrity + bossHeal)
+                _uiState.update { it.copy(enemyStatusEffects = enemy.statusEffects.toList()) }
+            }
+
+            val effectiveDmg = if (decision != null) maxOf(1, bossDmg - state.defenseBonus) else finalEnemyDmg
+            val shieldDamage = minOf(state.playerShield, effectiveDmg)
+            val integrityDamage = effectiveDmg - shieldDamage
             val newPlayerIntegrity = maxOf(0, state.integrity - integrityDamage)
+            val newPlayerRam = maxOf(0, state.ram - bossRamDrain)
+
+            val actionName = decision?.actionName ?: selectedAction
+            val logMsg = decision?.logMessage ?: "${enemy.name} ran $selectedAction: Dealt $effectiveDmg damage. (Shield absorbed: $shieldDamage, Core hit: $integrityDamage)"
 
             soundManager.playCombatHitSound()
-            _uiState.update { it.copy(integrity = newPlayerIntegrity, playerShield = state.playerShield - shieldDamage, enemyCombatAction = "${enemy.name} ran $selectedAction: Dealt $finalEnemyDmg damage. (Shield absorbed: $shieldDamage, Core hit: $integrityDamage)", combatFlashPlayer = true, combatScreenShake = true, playerDamagePopup = if (finalEnemyDmg > 0) "-$finalEnemyDmg HP" else "ABSORBED") }
-            recordEnemyAction(actionType = CombatActionType.STRIKE, summary = "${enemy.name} ran $selectedAction dealing $finalEnemyDmg damage", damageDealt = finalEnemyDmg, shieldAbsorbed = shieldDamage)
-            onLog("${enemy.name} executes $selectedAction...", LogType.ERROR)
+            _uiState.update { it.copy(integrity = newPlayerIntegrity, playerShield = state.playerShield - shieldDamage, ram = newPlayerRam, enemyCombatAction = logMsg, combatFlashPlayer = true, combatScreenShake = true, playerDamagePopup = if (effectiveDmg > 0) "-$effectiveDmg HP" else "ABSORBED") }
+            recordEnemyAction(actionType = CombatActionType.STRIKE, summary = "${enemy.name} used $actionName dealing $effectiveDmg damage", damageDealt = effectiveDmg, shieldAbsorbed = shieldDamage)
+            onLog(logMsg, LogType.ERROR)
             if (shieldDamage > 0) onLog("Player Shield absorbed $shieldDamage damage.", LogType.ALERT)
             if (integrityDamage > 0) onLog("System Integrity degraded by $integrityDamage%.", LogType.ERROR)
+            if (bossRamDrain > 0) onLog("RAM siphoned: -$bossRamDrain MB.", LogType.ERROR)
 
             if (Random.nextInt(100) < 25) {
                 val debuff = listOf(StatusEffectType.POISONED, StatusEffectType.WEAKENED, StatusEffectType.STUNNED).random()
@@ -535,7 +576,11 @@ class CombatManager(
     private fun handleCombatVictory(enemy: Enemy) {
         soundManager.playLootCollectionSound()
         val state = _uiState.value
-        val lootDrop = CombatLootDropSystem.generateLootDrop(enemy.name, state.level, enemy.bountyCredits)
+        val lootDrop = if (enemy.isBoss && enemy.bossType != null) {
+            CombatLootDropSystem.generateBossLootDrop(enemy.bossType, state.level)
+        } else {
+            CombatLootDropSystem.generateLootDrop(enemy.name, state.level, enemy.bountyCredits)
+        }
         onVictoryCleanup(enemy)
         val updatedInventory = state.inventory.toMutableList(); updatedInventory.add(lootDrop.itemName)
         _uiState.update { it.copy(gameState = GameState.EXPLORATION, credits = it.credits + lootDrop.totalCreditsEarned, totalCreditsEarned = it.totalCreditsEarned + lootDrop.totalCreditsEarned, inventory = updatedInventory, activeEnemy = null) }
@@ -543,9 +588,35 @@ class CombatManager(
         onLog("Bounty extraction: +${lootDrop.totalCreditsEarned} MB credits compiled.", LogType.SUCCESS)
         onLog(lootDrop.logMessage, LogType.SUCCESS)
         onAddExperience(lootDrop.xpEarned)
+
+        // Boss victory: grant zone transition rewards and proceed
+        if (enemy.isBoss) {
+            when (enemy.bossType) {
+                BossType.FIREWALL_SENTINEL -> {
+                    onLog("🏆 BOSS DEFEATED: Firewall Sentinel destroyed!", LogType.SUCCESS)
+                    onLog("Sector gate unlocked. +200 MB credits bonus.", LogType.SUCCESS)
+                    _uiState.update { it.copy(credits = it.credits + 200, totalCreditsEarned = it.totalCreditsEarned + 200) }
+                    onBossZoneTransition?.invoke(Zone.COLLECTORS, 1)
+                }
+                BossType.DAEMON_OVERLORD -> {
+                    onLog("🏆 BOSS DEFEATED: Daemon Overlord destroyed!", LogType.SUCCESS)
+                    onLog("Extraction point secured. +300 MB credits bonus.", LogType.SUCCESS)
+                    _uiState.update { it.copy(credits = it.credits + 300, totalCreditsEarned = it.totalCreditsEarned + 300) }
+                    onBossZoneTransition?.invoke(Zone.CITY, 0)
+                }
+                BossType.BLACK_ICE_COLOSSUS -> {
+                    onLog("🏆 BOSS DEFEATED: Black ICE Colossus destroyed!", LogType.SUCCESS)
+                    onLog("ULTIMATE NETRUN-GATE PENETRATED! CYBERSPACE SECURED!", LogType.SUCCESS)
+                    _uiState.update { it.copy(screen = ActiveScreen.GAME_OVER, gameState = GameState.COMBAT_END, runOutcome = "CORE GRID TAKEOVER: SUCCESSFUL NETRUN") }
+                }
+                null -> {}
+            }
+        }
     }
 
     private fun processTurnMaintenance() {
+        val enemy = _uiState.value.activeEnemy
+        if (enemy?.isBoss == true) enemy.turnCounter++
         _uiState.update { it.copy(combatRound = it.combatRound + 1, ram = minOf(it.maxRam, it.ram + it.ramRecoveryRate), defenseBonus = 0, activeFirewallTimeLeft = 0, turnPhase = TurnPhase.PLAYER_INPUT, combatTurn = CombatTurn.PLAYER, isCombatInputEnabled = true, gameState = GameState.PLAYER_TURN) }
     }
 

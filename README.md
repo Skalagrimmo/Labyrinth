@@ -8,12 +8,26 @@ Navigate procedurally generated corporate intranets, hack security nodes, engage
 
 - **7 Netrunner Classes** — Code Slasher, Street Samurai, Techie, Netrunner, Cyber Shield, Script Kiddie, Buffer Overflow
 - **Turn-based Combat** — Attack, defend, hack, scan, and use programs against corporate ICE
+- **3 Boss Encounters** — Multi-phase bosses with unique AI guarding each zone portal
 - **Procedural Levels** — Seed-based maze generation across buildings, collector tunnels, and city sectors
 - **Hacking Mini-games** — Pattern-matching breach protocols on terminals and data stores
 - **Cyberware Implant System** — Install and upgrade implants across 8 body slots
 - **3D First-Person View** — Real-time perspective rendering with weather effects
 - **Offline-first** — 100% offline gameplay, no network required
-- **Full Save/Load** — Dual-layer persistence via Room DB + SharedPreferences
+- **Full Save/Load** — Dual-layer persistence via Room DB + SharedPreferences, with portable save export/import
+
+## Documentation
+
+Full project documentation lives in the [`docs/`](docs/) folder:
+
+| Document | Contents |
+|----------|----------|
+| [Overview](docs/OVERVIEW.md) | What Netcrawler is, features, tech stack |
+| [Architecture](docs/ARCHITECTURE.md) | Manager pattern, data flow, code structure |
+| [Gameplay](docs/GAMEPLAY.md) | Mechanics, systems, bosses, items, terminals |
+| [Codebase](docs/CODEBASE.md) | Source-file reference for every layer |
+| [Data & Persistence](docs/DATA-PERSISTENCE.md) | Room schema, saves, export/import format |
+| [Contributing](docs/CONTRIBUTING.md) | Build, test, and contribution guidelines |
 
 ## Building
 
@@ -50,11 +64,11 @@ Navigate procedurally generated corporate intranets, hack security nodes, engage
 ```
 app/src/main/java/com/example/
 ├── ui/                          # ViewModels and Managers
-│   ├── GameViewModel.kt         # Thin coordinator (511 lines)
-│   ├── CombatManager.kt         # Turn-based combat logic
-│   ├── ExplorationManager.kt    # Movement, weather, level navigation
-│   ├── InventoryManager.kt      # Items, equipment, shop
-│   ├── PersistenceManager.kt    # Save/load, serialization
+│   ├── GameViewModel.kt         # Thin coordinator (~500 lines)
+│   ├── CombatManager.kt         # Turn-based combat, bosses, loot
+│   ├── ExplorationManager.kt    # Movement, weather, level navigation, SVDAG
+│   ├── InventoryManager.kt      # Items, equipment, shop, cyberware/clinic
+│   ├── PersistenceManager.kt    # Save/load, serialization, export/import
 │   ├── CosmeticVaultManager.kt  # Themes, data fragments, buffs
 │   ├── ActiveScreen.kt          # Screen navigation enum
 │   ├── CombatTurn.kt            # Combat turn state enum
@@ -64,9 +78,16 @@ app/src/main/java/com/example/
 ├── data/                        # Room DB, entities, DAOs, models
 │   ├── GameDatabase.kt          # Room database (10 entities)
 │   ├── GameModels.kt            # Core data types
-│   ├── GameEngine.kt            # Procedural generation
-│   └── GameRepository.kt        # Data access layer
-└── audio/                       # Procedural sound effects
+│   ├── GameEngine.kt            # Procedural generation + bosses
+│   ├── EnemyCombatAIScript.kt   # Enemy & boss AI
+│   ├── CombatLootDropSystem.kt  # Loot tables
+│   └── ...                      # Registries, floor maps, grid, player
+├── data/svdag/                  # Sparse Voxel DAG 3D world system
+├── audio/                       # PCM music synthesis + sound pools + haptics
+├── gl/                          # OpenGL ES matrix/character renderers
+└── assets/shaders/              # GLSL shaders
+
+docs/                           # Full project documentation (see table above)
 ```
 
 ## Architecture

@@ -854,24 +854,25 @@ class ExplorationManager(
                 val stateNow = _uiState.value
                 when (stateNow.currentZone) {
                     Zone.BUILDING -> {
-                        addLog("EMERGING FROM BUILDING REACTOR CORE. ENTERING COLLECTOR SUB-TUNNELS...", LogType.ALERT)
-                        _uiState.update { it.copy(credits = it.credits + 200, totalCreditsEarned = it.totalCreditsEarned + 200) }
-                        loadOrCreateLevel(Zone.COLLECTORS, 1, isAscending = true)
+                        addLog("⚠️ WARNING: HIGH-THREAT HOSTILE DETECTED AT SECTOR GATE!", LogType.ERROR)
+                        addLog("FIREWALL SENTINEL: Ancient defensive sub-routine activated!", LogType.ERROR)
+                        addLog("Defeat the guardian to proceed to the Collector sub-tunnels.", LogType.ALERT)
+                        val boss = GameEngine.spawnBoss(BossType.FIREWALL_SENTINEL, stateNow.level)
+                        _uiState.update { it.copy(activeEnemy = boss, gameState = GameState.COMBAT_START, combatTurn = CombatTurn.PLAYER, combatRound = 1, turnPhase = TurnPhase.PLAYER_INPUT, isCombatInputEnabled = true, playerActionHistory = emptyList(), enemyTurnHistory = emptyList(), allTurnActions = emptyList(), lastPlayerActionRecord = null, lastEnemyActionRecord = null, totalPlayerActionsCount = 0, totalEnemyTurnsCount = 0, playerStatusEffects = emptyList(), enemyStatusEffects = boss.statusEffects.toList(), kineticShieldActiveThisCombat = true, activeCombatHack = null) }
                     }
                     Zone.COLLECTORS -> {
-                        addLog("DRAINAGE SEQUENCE COMPLETE. EMERGING INTO METROPOLITAN CYBER-CITY MAIN GRID!", LogType.SUCCESS)
-                        _uiState.update { it.copy(credits = it.credits + 300, totalCreditsEarned = it.totalCreditsEarned + 300) }
-                        loadOrCreateLevel(Zone.CITY, 0, isAscending = true)
+                        addLog("⚠️ WARNING: SUPREME DAEMON DETECTED AT EXTRACTION POINT!", LogType.ERROR)
+                        addLog("DAEMON OVERLORD: Ruler of the collector sub-grid has awakened!", LogType.ERROR)
+                        addLog("Defeat the overlord to proceed to the Metro Core.", LogType.ALERT)
+                        val boss = GameEngine.spawnBoss(BossType.DAEMON_OVERLORD, stateNow.level)
+                        _uiState.update { it.copy(activeEnemy = boss, gameState = GameState.COMBAT_START, combatTurn = CombatTurn.PLAYER, combatRound = 1, turnPhase = TurnPhase.PLAYER_INPUT, isCombatInputEnabled = true, playerActionHistory = emptyList(), enemyTurnHistory = emptyList(), allTurnActions = emptyList(), lastPlayerActionRecord = null, lastEnemyActionRecord = null, totalPlayerActionsCount = 0, totalEnemyTurnsCount = 0, playerStatusEffects = emptyList(), enemyStatusEffects = boss.statusEffects.toList(), kineticShieldActiveThisCombat = true, activeCombatHack = null) }
                     }
                     Zone.CITY -> {
-                        addLog("ULTIMATE NETRUN-GATE PENETRATED! CYBERSPACE SECURED!", LogType.SUCCESS)
-                        _uiState.update { s ->
-                            s.copy(
-                                screen = ActiveScreen.GAME_OVER,
-                                gameState = GameState.COMBAT_END,
-                                runOutcome = "CORE GRID TAKEOVER: SUCCESSFUL NETRUN"
-                            )
-                        }
+                        addLog("⚠️ CRITICAL: APEX SECURITY CONSTRUCT AWAKENED!", LogType.ERROR)
+                        addLog("BLACK ICE COLOSSUS: The ultimate defense system of the Metro Core!", LogType.ERROR)
+                        addLog("Defeat the colossus to complete the netrun.", LogType.ALERT)
+                        val boss = GameEngine.spawnBoss(BossType.BLACK_ICE_COLOSSUS, stateNow.level)
+                        _uiState.update { it.copy(activeEnemy = boss, gameState = GameState.COMBAT_START, combatTurn = CombatTurn.PLAYER, combatRound = 1, turnPhase = TurnPhase.PLAYER_INPUT, isCombatInputEnabled = true, playerActionHistory = emptyList(), enemyTurnHistory = emptyList(), allTurnActions = emptyList(), lastPlayerActionRecord = null, lastEnemyActionRecord = null, totalPlayerActionsCount = 0, totalEnemyTurnsCount = 0, playerStatusEffects = emptyList(), enemyStatusEffects = boss.statusEffects.toList(), kineticShieldActiveThisCombat = true, activeCombatHack = null) }
                     }
                 }
             }
