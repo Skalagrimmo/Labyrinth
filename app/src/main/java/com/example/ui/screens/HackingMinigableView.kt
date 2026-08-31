@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.*
@@ -44,6 +45,7 @@ fun HackingMinigableView(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .heightIn(max = 48.dp)
                 .padding(bottom = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
@@ -101,13 +103,18 @@ fun HackingMinigableView(
                 }
             }
 
-            Text(
-                text = "--- BREACH PROTOCOL ACCESS ---",
-                color = CyberAmber,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-                fontSize = 11.sp
-            )
+            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                Text(
+                    text = "--- BREACH PROTOCOL ACCESS ---",
+                    color = CyberAmber,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
 
         if (hackModeTab == 0) {

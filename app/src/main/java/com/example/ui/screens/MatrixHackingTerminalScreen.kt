@@ -263,7 +263,7 @@ fun MatrixHackingTerminalScreen(
     ) {
         FlickeringCrtScanlineTerminalOverlay(
             enabled = true,
-            showControlToggle = true,
+            showControlToggle = false,
             flickerIntensity = 0.35f
         ) {
             Box(modifier = Modifier.fillMaxSize()) {

@@ -172,7 +172,7 @@ fun CyberHackingMinigameSuite(
     ) {
         FlickeringCrtScanlineTerminalOverlay(
             enabled = true,
-            showControlToggle = true,
+            showControlToggle = false,
             flickerIntensity = 0.30f
         ) {
             Column(
