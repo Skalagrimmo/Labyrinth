@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.*
+import com.example.data.svdag.*
 import com.example.ui.GameViewModel
 import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.theme.*
@@ -48,6 +49,9 @@ private data class PerspectiveData(
 )
 
 // 3D Wireframe Voxel Wall Segment Drawer (Advanced Voxel graphics)
+// stability: 0..1 structural integrity (1 = pristine). Drives the eclectic
+// SOLID / DAMAGED(flicker) / DECAY render languages, borrowed from the ecleptic prototype.
+// flicker: per-wall deterministic time noise in 0..1 for independent "breathing".
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.draw3DVoxelWallSegment(
     w1: Offset, w2: Offset, w3: Offset, w4: Offset,
     primaryColor: Color,
@@ -59,11 +63,24 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.draw3DVoxelWallSegm
     adjustedTr_r: FloatArray,
     adjustedBr_r: FloatArray,
     d: Int,
-    h: Float
+    h: Float,
+    stability: Float = 1f,
+    flicker: Float = 0f
 ) {
     fun getPixelLocal(col: Float, row: Float): Offset {
         return Offset((col / 30f) * w, (row / 10f) * h)
     }
+
+    // Classify render mode from structural stability (prototype weight/damage split).
+    val decayColor = Color(0xFF7fffa0)
+    val damaged = stability < 0.65f && stability >= 0.25f
+    val decaying = stability < 0.25f
+
+    // Damaged / decaying walls "breathe" via their own deterministic phase.
+    val pulse = if (damaged || decaying) (0.6f + 0.4f * flicker) else 1f
+    // Decay droplets along the wall face (glyph-adjacent texture).
+    val burnOvershoot = if (decaying) 0.55f + 0.35f * flicker else 0f
+    val jitter = if (damaged || decaying) (flicker - 0.5f) * 2.2f else 0f
 
     val shiftScale = 0.15f
 
@@ -86,18 +103,24 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.draw3DVoxelWallSegm
 
     val wallPath = Path()
 
-    wallPath.reset()
-    wallPath.moveTo(w1.x, w1.y)
-    wallPath.lineTo(w2.x, w2.y)
-    wallPath.lineTo(w3.x, w3.y)
-    wallPath.lineTo(w4.x, w4.y)
-    wallPath.close()
-    drawPath(path = wallPath, color = primaryColor.copy(alpha = alpha * 0.3f))
+    // Damage-induced micro-jitter offsets (per-wall, stable base points + time flicker).
+    fun jx(ox: Float): Float = ox + jitter
+    fun jy(oy: Float): Float = oy + jitter * 0.6f
 
-    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w1, end = w2, strokeWidth = 1.5f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w2, end = w3, strokeWidth = 1.5f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w3, end = w4, strokeWidth = 1.5f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 0.7f), start = w4, end = w1, strokeWidth = 1.5f)
+    // SOLID (stable) fill: unchanged.
+    val wallFillAlpha = (alpha * 0.3f * pulse).coerceIn(0f, 1f)
+    if (stability >= 0.25f) {
+        drawPath(path = wallPath, color = primaryColor.copy(alpha = wallFillAlpha))
+    } else {
+        // DECAY: drop the cool fill to near-black, the decay palette "burns through".
+        drawPath(path = wallPath, color = Color.Black.copy(alpha = (alpha * 0.25f).coerceIn(0f, 1f)))
+    }
+
+    val rim = if (decaying) decayColor else primaryColor
+    drawLine(color = rim.copy(alpha = (alpha * 0.7f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w1.x), jy(w1.y)), end = Offset(jx(w2.x), jy(w2.y)), strokeWidth = 1.5f)
+    drawLine(color = rim.copy(alpha = (alpha * 0.7f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w2.x), jy(w2.y)), end = Offset(jx(w3.x), jy(w3.y)), strokeWidth = 1.5f)
+    drawLine(color = rim.copy(alpha = (alpha * 0.7f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w3.x), jy(w3.y)), end = Offset(jx(w4.x), jy(w4.y)), strokeWidth = 1.5f)
+    drawLine(color = rim.copy(alpha = (alpha * 0.7f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w4.x), jy(w4.y)), end = Offset(jx(w1.x), jy(w1.y)), strokeWidth = 1.5f)
 
     val frontPath = Path()
     frontPath.moveTo(p1.x, p1.y)
@@ -105,18 +128,28 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.draw3DVoxelWallSegm
     frontPath.lineTo(p3.x, p3.y)
     frontPath.lineTo(p4.x, p4.y)
     frontPath.close()
-    drawPath(path = frontPath, color = Color.Black)
-    drawPath(path = frontPath, color = primaryColor.copy(alpha = alpha * 0.45f))
+    if (decaying) {
+        // DECAY: front face becomes "burnt out" — faint cool fill + bright hot rim.
+        drawPath(path = frontPath, color = Color.Black)
+        drawPath(path = frontPath, color = decayColor.copy(alpha = (alpha * 0.3f * pulse).coerceIn(0f, 1f)))
+    } else {
+        drawPath(path = frontPath, color = Color.Black)
+        drawPath(path = frontPath, color = primaryColor.copy(alpha = (alpha * 0.45f * pulse).coerceIn(0f, 1f)))
+    }
 
-    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p1, end = p2, strokeWidth = 3f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p2, end = p3, strokeWidth = 3f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p3, end = p4, strokeWidth = 3f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 2f), start = p4, end = p1, strokeWidth = 3f)
+    // Hot rim lines; DAMAGED/DECAY walls overshoot brightness when their flicker peaks.
+    val edgeColor = if (decaying) decayColor else primaryColor
+    val edgeBurst = if (damaged || decaying) (1f + burnOvershoot) else 1f
+    drawLine(color = edgeColor.copy(alpha = (alpha * 2f * pulse * edgeBurst).coerceIn(0f, 1f)), start = p1, end = p2, strokeWidth = 3f)
+    drawLine(color = edgeColor.copy(alpha = (alpha * 2f * pulse * edgeBurst).coerceIn(0f, 1f)), start = p2, end = p3, strokeWidth = 3f)
+    drawLine(color = edgeColor.copy(alpha = (alpha * 2f * pulse * edgeBurst).coerceIn(0f, 1f)), start = p3, end = p4, strokeWidth = 3f)
+    drawLine(color = edgeColor.copy(alpha = (alpha * 2f * pulse * edgeBurst).coerceIn(0f, 1f)), start = p4, end = p1, strokeWidth = 3f)
 
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w1, end = p1, strokeWidth = 2f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w2, end = p2, strokeWidth = 2f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w3, end = p3, strokeWidth = 2f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.3f), start = w4, end = p4, strokeWidth = 2f)
+    val connColor = if (decaying) decayColor else primaryColor
+    drawLine(color = connColor.copy(alpha = (alpha * 1.3f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w1.x), jy(w1.y)), end = Offset(jx(p1.x), jy(p1.y)), strokeWidth = 2f)
+    drawLine(color = connColor.copy(alpha = (alpha * 1.3f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w2.x), jy(w2.y)), end = Offset(jx(p2.x), jy(p2.y)), strokeWidth = 2f)
+    drawLine(color = connColor.copy(alpha = (alpha * 1.3f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w3.x), jy(w3.y)), end = Offset(jx(p3.x), jy(p3.y)), strokeWidth = 2f)
+    drawLine(color = connColor.copy(alpha = (alpha * 1.3f * pulse).coerceIn(0f, 1f)), start = Offset(jx(w4.x), jy(w4.y)), end = Offset(jx(p4.x), jy(p4.y)), strokeWidth = 2f)
 
     val wMidY_near = (w1.y + w4.y) / 2f
     val wMidY_far = (w2.y + w3.y) / 2f
@@ -128,10 +161,30 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.draw3DVoxelWallSegm
     val pMidL = Offset((p1.x + p4.x) / 2f, pMidY_near)
     val pMidR = Offset((p2.x + p3.x) / 2f, pMidY_far)
 
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.1f), start = wMidL, end = wMidR, strokeWidth = 1f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.5f), start = pMidL, end = pMidR, strokeWidth = 1.5f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.1f), start = wMidL, end = pMidL, strokeWidth = 1f)
-    drawLine(color = primaryColor.copy(alpha = alpha * 1.1f), start = wMidR, end = pMidR, strokeWidth = 1f)
+    drawLine(color = connColor.copy(alpha = (alpha * 1.1f * pulse).coerceIn(0f, 1f)), start = wMidL, end = wMidR, strokeWidth = 1f)
+    drawLine(color = connColor.copy(alpha = (alpha * 1.5f * pulse).coerceIn(0f, 1f)), start = pMidL, end = pMidR, strokeWidth = 1.5f)
+    drawLine(color = connColor.copy(alpha = (alpha * 1.1f * pulse).coerceIn(0f, 1f)), start = wMidL, end = pMidL, strokeWidth = 1f)
+    drawLine(color = connColor.copy(alpha = (alpha * 1.1f * pulse).coerceIn(0f, 1f)), start = wMidR, end = pMidR, strokeWidth = 1f)
+
+    // DECAY: ASCII-glyph "droplets" bleeding down the front face (glyph-language decay).
+    if (decaying) {
+        for (k in 0..3) {
+            val sx = p1.x + (p2.x - p1.x) * (0.2f + 0.25f * k)
+            val syTop = (p1.y + p2.y) / 2f
+            val syBot = (p3.y + p4.y) / 2f
+            val tRow = 0.25f + 0.5f * ((((flicker * 9.0).toInt() + k) % 3) / 3f)
+            val dx = sx + Math.sin(flicker * 6.0 + k).toFloat() * 2f
+            val dy = syTop + (syBot - syTop) * tRow
+            // independent per-droplet alpha flicker
+            val fa = (0.5 + 0.5 * Math.sin(flicker * 12.0 + k * 2.7)).toFloat()
+            drawLine(
+                color = decayColor.copy(alpha = ((0.25f + 0.6f * fa) * alpha).coerceIn(0f, 1f)),
+                start = Offset(dx, dy),
+                end = Offset(dx + 4f, dy + 4f),
+                strokeWidth = 2f
+            )
+        }
+    }
 }
 
 @Composable
@@ -466,12 +519,68 @@ fun FirstPersonPerspectiveCanvas(
                     else -> 0.1f
                 }
 
+                // ---- Eclectic structural stability (prototype weight/damage borrow) ----
+                // Global decay driven by the runner's integrity: a damaged matrix destabilizes.
+                val globalDecay = 1f - (uiState.integrity / uiState.maxIntegrity.coerceAtLeast(1).toFloat())
+
+                fun wallStability(depth: Int): Float {
+                    // FPE live mode: when enabled and the 3D World State overlay exists, the
+                    // wall's structural stability is derived from the overlay at the matching
+                    // voxel, so damage done in the SVDAG world degrades the wall in-sight.
+                    if (uiState.useFpeInFppView) {
+                        val overlay = uiState.svdagWorldState
+                        val gs = uiState.svdagWorld?.gridSize ?: 1
+                        if (overlay != null && gs > 0) {
+                            val (cx, cy) = cellCoords.getOrElse(depth) { Pair(-1, -1) }
+                            if (cx >= 0 && cy >= 0) {
+                                val vx = cx % gs
+                                val vy = cy % gs
+                                val vz = depth % gs
+                                val st = overlay.stateAt(vx, vy, vz)
+                                // Map integrity (0..1) onto the existing SOLID/DAMAGED/DECAY
+                                // language; decayed voxels also press stability down further.
+                                val fpeInt = st.integrity
+                                val mode = FpeRenderStylist.modeFor(st)
+                                val penalty = when (mode) {
+                                    FpeRenderMode.ASCII_DECAY -> -0.15f * (1f - st.weight)
+                                    FpeRenderMode.POINT_CLOUD -> -0.05f
+                                    else -> 0f
+                                }
+                                return (fpeInt + penalty).coerceIn(0f, 1f)
+                            }
+                        }
+                    }
+                    // Base stability varies by corridor cell type (unstable environments decay first).
+                    val base = when (cellTypes[depth]) {
+                        CellType.GRAND_HALL -> 0.55f
+                        CellType.DOME_CHAMBER -> 0.5f
+                        CellType.VENT_TUNNEL -> 0.42f
+                        CellType.ELEVATED_BALCONY -> 0.5f
+                        CellType.STAIRS_UP -> 0.35f
+                        CellType.STAIRS_DOWN -> 0.35f
+                        CellType.GRAVITY_SLOPE -> 0.3f
+                        CellType.ECHO -> 0.22f
+                        CellType.SECRET_WALL -> 0.28f
+                        CellType.DATA_STORE -> 0.5f
+                        CellType.VIRUS_NODE -> 0.4f
+                        else -> 0.85f // pristine WALL/most stable
+                    }
+                    // Integrity damage erodes stability; distance adds atmospheric instability.
+                    return (base * (1f - globalDecay * 0.75f) - depth * 0.03f).coerceIn(0f, 1f)
+                }
+                // Per-wall deterministic flicker = time-based breathing, seeded by depth + wall side.
+                fun wallFlicker(depth: Int, sideSeed: Int): Float {
+                    val t = frameTime / 1000.0
+                    val s = Math.sin(t * 3.1f + depth * 2.3f + sideSeed * 1.7f)
+                    return (0.5f + 0.5f * s).toFloat()
+                }
+
                 if (leftWallAt[d]) {
                     val w1 = getPixel(tl_c[d], adjustedTl_r[d])
                     val w2 = getPixel(tl_c[d+1], adjustedTl_r[d+1])
                     val w3 = getPixel(bl_c[d+1], adjustedBl_r[d+1])
                     val w4 = getPixel(bl_c[d], adjustedBl_r[d])
-                    draw3DVoxelWallSegment(w1, w2, w3, w4, primaryColor, alpha, isLeft = true, w, adjustedTl_r, adjustedBl_r, adjustedTr_r, adjustedBr_r, d, h)
+                    draw3DVoxelWallSegment(w1, w2, w3, w4, primaryColor, alpha, isLeft = true, w, adjustedTl_r, adjustedBl_r, adjustedTr_r, adjustedBr_r, d, h, stability = wallStability(d), flicker = wallFlicker(d, 1))
                 } else {
                     drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tl_c[d], adjustedTl_r[d+1]), end = getPixel(tl_c[d+1], adjustedTl_r[d+1]), strokeWidth = 2f)
                     drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(bl_c[d], adjustedBl_r[d+1]), end = getPixel(bl_c[d+1], adjustedBl_r[d+1]), strokeWidth = 2f)
@@ -483,7 +592,7 @@ fun FirstPersonPerspectiveCanvas(
                     val w2 = getPixel(tr_c[d+1], adjustedTr_r[d+1])
                     val w3 = getPixel(br_c[d+1], adjustedBr_r[d+1])
                     val w4 = getPixel(br_c[d], adjustedBr_r[d])
-                    draw3DVoxelWallSegment(w1, w2, w3, w4, primaryColor, alpha, isLeft = false, w, adjustedTl_r, adjustedBl_r, adjustedTr_r, adjustedBr_r, d, h)
+                    draw3DVoxelWallSegment(w1, w2, w3, w4, primaryColor, alpha, isLeft = false, w, adjustedTl_r, adjustedBl_r, adjustedTr_r, adjustedBr_r, d, h, stability = wallStability(d), flicker = wallFlicker(d, 3))
                 } else {
                     drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(tr_c[d+1], adjustedTr_r[d+1]), end = getPixel(tr_c[d], adjustedTr_r[d+1]), strokeWidth = 2f)
                     drawLine(color = primaryColor.copy(alpha = 0.2f), start = getPixel(br_c[d+1], adjustedBr_r[d+1]), end = getPixel(br_c[d], adjustedBr_r[d+1]), strokeWidth = 2f)

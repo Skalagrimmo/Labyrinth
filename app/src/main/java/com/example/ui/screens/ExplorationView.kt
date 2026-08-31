@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.data.*
 import com.example.ui.GameViewModel
 import com.example.ui.components.VisualTurnIndicator
@@ -115,6 +116,17 @@ fun ExplorationView(
                                         totalDragY += dragAmount.y
                                     }
                                 )
+                            }
+                            .pointerInput(uiState.gameState, uiState.isCombatInputEnabled) {
+                                detectTapGestures(
+                                    onTap = {
+                                        // Touch-first: tapping the viewport's hostile target = attack.
+                                        if (uiState.gameState != GameState.EXPLORATION && uiState.isCombatInputEnabled) {
+                                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                                            viewModel.combatAttack()
+                                        }
+                                    }
+                                )
                             },
                         contentAlignment = Alignment.Center
                     ) {
@@ -203,7 +215,8 @@ fun ExplorationView(
                             Column(
                                 modifier = Modifier
                                     .padding(6.dp)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
                                 verticalArrangement = Arrangement.spacedBy(4.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {

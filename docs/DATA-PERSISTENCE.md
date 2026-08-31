@@ -9,6 +9,7 @@ This document describes how Netcrawler stores game state: the Room (SQLite) sche
 - [Persistence Layers](#persistence-layers)
 - [Room Database](#room-database)
 - [The Save Entity](#the-save-entity)
+- [Database Migration Strategy](#database-migration-strategy)
 - [Save / Load Flow](#save--load-flow)
 - [Export / Import (Portable Saves)](#export--import-portable-saves)
 - [Serialization Format](#serialization-format)
@@ -33,7 +34,7 @@ Netcrawler uses **two independent layers** for durability:
 
 ## Room Database
 
-Defined in `data/GameDatabase.kt` — version **6**, `exportSchema = false`, with migration `MIGRATION_1_2` registered and `fallbackToDestructiveMigration(true)`.
+Defined in `data/GameDatabase.kt` — version **6**, `exportSchema = true`, with migration `MIGRATION_1_2` registered and `fallbackToDestructiveMigration(true)`. Room schema JSON is exported to `app/schemas/` (see [Database Migration Strategy](#database-migration-strategy)).
 
 ### Entities (10)
 
@@ -69,6 +70,8 @@ Defined in `data/GameDatabase.kt` — version **6**, `exportSchema = false`, wit
 - **Identity/progression:** runnerName, runnerClass, `level`, `characterLevel`, `characterXp`, `xpToNextLevel`
 - **Vitals:** `integrity`, `maxIntegrity`, `playerShield`, `playerMaxShield`, `ram`, `maxRam`, `ramRecoveryRate`
 - **Resources:** `credits`, `damageBonus`, `defenseBonus`, `totalCreditsEarned`, `nodesHackedCount`
+- **Progression extras:** `skillPoints`, `unlockedSkills` (persisted via the SharedPreferences layer + portable export/import; the stat bonuses they granted are already baked into the restored vitals/resources fields)
+- **Onboarding:** `tutorialStep`, `tutorialActive`, `tutorialSeen` (persisted via SharedPreferences layer + portable export/import so the tutorial only shows for new players)
 - **Navigation:** `gridX`, `gridY`, `direction`, `currentZone`, `buildingFloor`, `collectorsLevel`, `cityDistrictIndex`, `hasElevatorKeycard`
 - **World:** `activeWeather`, `weatherTurnsLeft`, `stepsSinceLastEvent`, `nextEventSteps`, `predictedWeather`, `levelSeed`
 - **Inventory (CSV):** `inventoryCsv`, `installedCyberwareCsv`, `installedProgramsCsv`, `installedImplantsCsv`
@@ -76,6 +79,28 @@ Defined in `data/GameDatabase.kt` — version **6**, `exportSchema = false`, wit
 - **Session:** `gameStateName`, `logFeedSerialized`, `lastSavedTimestamp`
 
 Inventory items are additionally mirrored row-by-row into the `inventory_items` table.
+
+---
+
+## Database Migration Strategy
+
+> Scope: room schema is at **version 6**. Because the earlier schema versions were never exported, accurate incremental migrations for `2 → 6` cannot be authored without the historical schema snapshots. The strategy below makes future updates safe and documents the current reality.
+
+### Current behavior
+- Only `MIGRATION_1_2` (creating `character_profiles`, `game_save_progress`, `inventory_items`) is registered.
+- `fallbackToDestructiveMigration(true)` means any install whose `@Database` version is **older than 6** without a matching migration chain gets its Room DB **dropped and recreated**. For a roguelike whose save is largely regenerable from an alive run (and mirrored in SharedPreferences + portable export), this is an acceptable safety net, but it will reset leaderboard/run records on legacy-stale installs.
+
+### How to add a table/column safely (the intended workflow)
+1. **Edit the entity** in `data/GameModels.kt` (or the `…Entity.kt` files).
+2. **Bump `version = 6 → 7`** in `GameDatabase`.
+3. **Add `MIGRATION_6_7 = object : Migration(6, 7) { override fun migrate(db) { db.execSQL("ALTER TABLE …") } }`** to the companion object and to `.addMigrations(...)`.
+4. **Test with `MigrationTestHelper`** using the exported schema JSON in `app/schemas/` (Room now writes these because `exportSchema = true`; the KSP `room.schemaLocation` is `$projectDir/schemas`).
+5. Never edit an already-shipped migration; add a new forward migration instead.
+
+### Legacy-gap mitigation
+Because `2 → 6` was never migrated incrementally, the pragmatic options for existing users are:
+- Keep `fallbackToDestructiveMigration(true)` (current) so the DB heals itself — recommended for a build where saves are self-healing/regenerable.
+- Or, when the app is stable and shipped, define a single `Migration(1, 6)` (or `(2, 6)`) that creates the **complete** v6 schema in one step, letting older installs upgrade without data loss. Those `CREATE TABLE` statements should mirror the final entity definitions.
 
 ---
 

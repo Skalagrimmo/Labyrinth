@@ -516,7 +516,7 @@ class CombatManager(
             val isLockdown = decision?.actionName == "System Lockdown"
             if (isLockdown) {
                 onLog("🔒 SYSTEM LOCKDOWN: You are stunned and cannot act next turn!", LogType.ERROR)
-                _uiState.update { it.copy(playerStatusEffects = it.playerStatusEffects + ActiveStatusEffect(StatusEffectType.STUNNED, 1, 0, enemy.name)) }
+                _uiState.update { it.copy(playerStatusEffects = it.playerStatusEffects + ActiveStatusEffect(type = StatusEffectType.STUNNED, turnsRemaining = 1, magnitude = 0, sourceName = enemy.name)) }
             }
 
             val bossDmg = decision?.damage ?: 0

@@ -30,13 +30,25 @@ A deep dive into how Netcrawler actually plays: character creation, combat, hack
 
 When you start a new run you configure:
 
-- **Runner name** (auto-generates a name if blank)
+- **Runner name** — press the **`[ SURGE_ALIAS ]`** button to generate a random cyberpunk alias, or tap one of the three generated suggestions. `data/NameGenerator.kt` compounds prefix/suffix word pairs (e.g. `Ghost Codec`, `Sable Vector`) with an optional title suffix (~25%: `The Quiet`, `Prime`, etc.)
 - **Netrunner class** — 7 classes with distinct passives and starting kits (see [Overview](OVERVIEW.md#key-features))
 - **Starting implant** — an initial cyberware implant occupying one body slot
 - **Stat allocation** — spend points into *HP, RAM, Reflexes (damage), Armor (defense),* and *Funds (credits)*
 - **Starter kit** — `STANDARD`, `HACKER`, `COMBAT`, or `SCAVENGER`, granting different starting utility items
 
 The starting values are computed by combining class base stats + chosen implant bonuses + allocated points (see `GameViewModel.createCharacter`).
+
+## Onboarding Tutorial
+
+Brand-new players start with a **5-step guided tutorial** (`ui/TutorialOverlay.kt`) that appears over exploration:
+
+1. **Welcome** — HUD overview (integrity, RAM, credits)
+2. **Movement** — swipe to turn/advance
+3. **Interaction** — `hack <row> <col>` terminals
+4. **Combat** — turn-based `attack` / `defend` / `use <item>`
+5. **Cyberware** — `clinic` visits and implant slots
+
+Advance with `[ NEXT ]`, skip with `[ SKIP ]`, or dismiss. You can also re-run it anytime via the terminal: `tutorial next` / `tutorial skip`. Once completed, it's marked `tutorial_seen` and won't reappear.
 
 ---
 
@@ -359,6 +371,23 @@ Weather persists for a turn count (`weatherTurnsLeft`). `GibsonForecast.sys` pre
 - Gain XP from combat, hacking, and loot.
 - When XP ≥ `xpToNextLevel`, you level up: `+15` Max HP, `+10` Max Shield, `+2` Damage, and occasional RAM gains.
 - `xpToNextLevel` formula: `100 + (level-1)*75`.
+- Each level also grants **+1 Skill Point**, spendable in the skill tree (see below).
+
+---
+
+## Skill Tree
+
+Type `skilltree` (or `skills`) in the terminal to view the tree and your unallocated points. Spend points with:
+
+```
+skill learn <HACKING|COMBAT|ENGINEERING> <node#>
+```
+
+- **3 branches** — Hacking, Combat, Engineering — each a linear chain of nodes.
+- **Prerequisites** — you must unlock a branch's earlier nodes before later ones.
+- Learn a node to apply a **permanent stat bonus** (Max RAM, RAM recovery, damage, defense, Max Integrity) or a one-time **credit grant** to your live run.
+- `skill points` shows unallocated points; `skill reset` clears all learned skills (stats already applied remain).
+- Skill points and learned nodes are saved with your game (SharedPreferences + save export/import).
 
 ---
 

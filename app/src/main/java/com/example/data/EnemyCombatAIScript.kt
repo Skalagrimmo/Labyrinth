@@ -36,6 +36,8 @@ data class EnemyAIDecision(
     val logMessage: String = ""
 )
 
+object EnemyCombatAIScript {
+
     /**
      * Boss-specific AI evaluation. Called when the enemy is a boss.
      */
@@ -211,8 +213,6 @@ data class EnemyAIDecision(
             logMessage = "🔴 COLOSSUS SLAM: Black ICE Colossus crushed down for $dmg damage!"
         )
     }
-}
-object EnemyCombatAIScript {
 
     /**
      * Determines combat decision based on current health, proximity distance, and player status.

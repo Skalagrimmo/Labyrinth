@@ -115,7 +115,7 @@ object ContentRegistry {
             isConsumable = category == InventoryCategory.CONSUMABLE,
             isEquippable = isEquip,
             equipmentSlot = slot,
-            damageBonus = f["dmg"]?.toIntOrNull() ?: 0,
+            damageBonus = f["dmg"]?.toIntOrNull() ?: f["damage"]?.toIntOrNull() ?: 0,
             defenseBonus = f["def"]?.toIntOrNull() ?: 0,
             ramBonus = f["ram"]?.toIntOrNull() ?: 0,
             integrityBonus = f["integrity"]?.toIntOrNull() ?: 0,

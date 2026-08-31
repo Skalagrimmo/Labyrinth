@@ -44,6 +44,8 @@ import java.util.Locale
 fun SvdagWorldInspectorScreen(
     currentDag: SparseVoxelDag,
     currentStats: SvdagStats,
+    worldState: SvdagWorldState? = null,
+    useFpeRender: Boolean = true,
     scanSummary: SvdagScanSummary? = null,
     scanRippleState: SvdagRippleState? = null,
     iceEntities: List<IceEntity> = emptyList(),
@@ -70,6 +72,20 @@ fun SvdagWorldInspectorScreen(
     var selectedZ by remember(currentDag) { mutableStateOf(currentDag.gridSize / 2) }
     var selectedVoxelType by remember { mutableStateOf(VoxelType.SOLID_WALL) }
     var hoveredVoxelInfo by remember { mutableStateOf<String?>(null) }
+    var fpeRenderEnabled by remember { mutableStateOf(useFpeRender) }
+
+    // FPE §6 probabilistic collapse: a read-only field over the same world state, plus a
+    // slowly-animated observer phase so decayed voxels shimmer/materialise over time.
+    val probField = remember(worldState) {
+        worldState?.let { FpeProbabilityField(it, seed = 0xC0FFEE5EEDL) }
+    }
+    var collapsePhase by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(probField, fpeRenderEnabled) {
+        while (fpeRenderEnabled && probField != null) {
+            collapsePhase++
+            kotlinx.coroutines.delay(140L)
+        }
+    }
 
     // Scanner Ripple Animation Loop
     var rippleAnimProgress by remember { mutableFloatStateOf(0f) }
@@ -510,6 +526,20 @@ fun SvdagWorldInspectorScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                         }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = if (fpeRenderEnabled) "FPE RENDER: ON" else "FPE RENDER: OFF",
+                            color = if (fpeRenderEnabled) Color.Black else Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(if (fpeRenderEnabled) Color(0xFF34D399) else Color(0xFF1E293B))
+                                .clickable { fpeRenderEnabled = !fpeRenderEnabled }
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
                     }
                 }
 
@@ -630,18 +660,50 @@ fun SvdagWorldInspectorScreen(
 
                                 val vType = currentDag.getVoxelAtLod(vx, vy, vz, selectedLodLevel)
 
-                                if (vType != VoxelType.EMPTY) {
-                                    drawRect(
-                                        color = Color(vType.colorHex),
-                                        topLeft = Offset(x * cellW, y * cellH),
-                                        size = Size(cellW - 1f, cellH - 1f)
-                                    )
+                                // FPE §15 language selection + §6 probabilistic collapse.
+                                val fpeActive = fpeRenderEnabled && worldState != null
+                                val fpeState = if (fpeActive) worldState.stateAt(vx, vy, vz) else null
+                                val fpeMode = fpeState?.let { FpeRenderStylist.modeFor(it) }
+                                // Solid/robust geometry is always materialised; decayed modes
+                                // flicker in and out as the collapse field animates (§6).
+                                val materialised = !fpeActive ||
+                                    (fpeMode == FpeRenderMode.SOLID) ||
+                                    (probField?.isMaterialised(vx, vy, vz, collapsePhase) ?: true)
+                                val baseAlpha = fpeState?.let { FpeRenderStylist.opacityFor(it, materialised) } ?: 1f
+
+                                fun gone() = drawRect(
+                                    color = Color(0xFF0F172A).copy(alpha = 0.5f),
+                                    topLeft = Offset(x * cellW, y * cellH),
+                                    size = Size(cellW - 1f, cellH - 1f)
+                                )
+
+                                if (materialised) {
+                                    when {
+                                        // FPE render: VOID collapsed states are treated as gone.
+                                        fpeMode == FpeRenderMode.VOID -> gone()
+
+                                        fpeMode == FpeRenderMode.ASCII_DECAY -> drawRect(
+                                            color = Color(0xFF34D399).copy(alpha = 0.7f * baseAlpha),
+                                            topLeft = Offset(x * cellW, y * cellH),
+                                            size = Size(cellW - 1f, cellH - 1f)
+                                        )
+
+                                        fpeMode == FpeRenderMode.POINT_CLOUD -> drawRect(
+                                            color = Color(vType.colorHex).copy(alpha = 0.45f * baseAlpha),
+                                            topLeft = Offset(x * cellW + cellW * 0.15f, y * cellH + cellH * 0.15f),
+                                            size = Size(cellW * 0.7f, cellH * 0.7f)
+                                        )
+
+                                        vType != VoxelType.EMPTY -> drawRect(
+                                            color = Color(vType.colorHex),
+                                            topLeft = Offset(x * cellW, y * cellH),
+                                            size = Size(cellW - 1f, cellH - 1f)
+                                        )
+
+                                        else -> gone()
+                                    }
                                 } else {
-                                    drawRect(
-                                        color = Color(0xFF0F172A).copy(alpha = 0.5f),
-                                        topLeft = Offset(x * cellW, y * cellH),
-                                        size = Size(cellW - 1f, cellH - 1f)
-                                    )
+                                    gone()
                                 }
                             }
                         }

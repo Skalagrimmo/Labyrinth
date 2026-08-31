@@ -370,7 +370,7 @@ class InventoryManager(
 
     fun exitShop() {
         _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
-        onLog("DISCONNECTED FROM SHOP SERVER. TELEMETRY RESUMED.")
+        onLog("DISCONNECTED FROM SHOP SERVER. TELEMETRY RESUMED.", LogType.INFO)
     }
 
     fun purchaseCyberware(cyberware: Cyberware) {

@@ -13,7 +13,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Markdown modding system** (`ContentModParser` + `ContentRegistry`): add enemies,
   items, and programs via `.md` files in `assets/mods/` — no Kotlin needed. See
   `docs/MODDING.md`.
-- **Unit tests** for `ContentModParser` and `GameEngine` content generation.
+- **Skill tree / progression** (`SkillTreeModels` + `SkillTreeManager`): 3 branches
+  (Hacking, Combat, Engineering) with prerequisite-linked nodes granting permanent
+  stat bonuses / one-time credits; spend via `skill learn <BRANCH> <#>`; +1 skill
+  point per level; persisted across saves.
+- **Random runner-name generator** (`NameGenerator` + `[ SURGE_ALIAS ]` button and
+  suggestions on character creation).
+- **Onboarding tutorial** (`TutorialOverlay`): 5-step guided hints for new players
+  (movement, hacking, combat, cyberware) with `tutorial next` / `tutorial skip`
+  terminal commands and persisted `tutorial_seen` flag.
+- **Unit tests** for `ContentModParser`, `GameEngine`, `NameGenerator`, and `SkillTree`.
+- **Gradle wrapper** committed (`gradlew`, `gradlew.bat`, `gradle/wrapper/*`) pinned to Gradle
+  9.3.1 (satisfies AGP 9.1.1; also unblocks the CI workflow).
+- **Database migration strategy** (item 1.3): enabled Room `exportSchema = true` +
+  `room.schemaLocation` KSP arg (`app/schemas/`) and documented the migration workflow so
+  future schema changes can be authored + tested with `MigrationTestHelper`.
+- **Fixed pre-existing build breaker** in `data/EnemyCombatAIScript.kt`: the boss-AI block
+  (`evaluateBossAction`/sentinel/overlord/colossus) was stray top-level code with a
+  duplicate `object EnemyCombatAIScript`; merged into a single object so the file compiles.
+- **Fixed** `SkillTreeModels.combinedEffects` (accumulated `+=` on `val` data-class fields → local vars).
 - **GitHub Actions CI** workflow (unit tests → lint → assemble debug APK). *Requires a
   committed Gradle wrapper to run.*
 - Project documentation (`docs/`): Overview, Architecture, Gameplay, Codebase,

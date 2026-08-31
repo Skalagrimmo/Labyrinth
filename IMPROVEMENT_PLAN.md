@@ -20,10 +20,13 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 - **Effort:** 1–2 hours
 
 ### 1.3 Database Migration Strategy
-- **Status:** Room entities exist but no visible `@Database` version migrations
-- **Action:** Add `Migration(1, 2, ...)` objects, test with `MigrationTestHelper`, handle `fallbackToDestructiveMigration` gracefully
-- **Impact:** Prevents data loss on app updates for existing users
-- **Effort:** 4–6 hours
+- **Status:** ✅ **DONE (configuration + documented strategy)** — Room schema export enabled so future migrations can be authored/tested
+- **Action:**
+  - (completed) Set `exportSchema = true` on `GameDatabase` and added `ksp { arg("room.schemaLocation", "$projectDir/schemas") }` in `app/build.gradle.kts` so Room writes schema JSON to `app/schemas/` for `MigrationTestHelper`.
+  - (completed) Documented the migration workflow + create-a-fresh-DB fallback + legacy-gap behavior in `docs/DATA-PERSISTENCE.md`.
+  - (deferred) Author `Migration(2,3)…(5,6)` objects — blocked: no historical schema snapshots exist for versions 2→6 (they weren't exported). Once `app/schemas/` is populated by a build, add explicit migrations + a `MigrationTestHelper` unit test. Until then, legacy installs rely on the existing `fallbackToDestructiveMigration(true)`.
+- **Impact:** Prevents data loss on app updates for future schema changes
+- **Effort:** (config done; migrations need schema snapshots + a working build)
 
 ### 1.4 Remove Dead Code
 - **Status:** ~1,427 lines of dead composables removed during split (verified)
@@ -36,14 +39,10 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 ## Phase 2: User Experience (Weeks 2–4)
 
 ### 2.1 Onboarding / Tutorial Flow
-- **Status:** New players are dropped into a complex terminal UI with no guidance
-- **Action:** Create a 4-step interactive tutorial:
-  1. Movement (swipe/drag to navigate)
-  2. Interaction (tap to hack terminals, collect items)
-  3. Combat basics (attack, defend, use items)
-  4. Cyberware implants (clinic visit, equip/unequip)
+- **Status:** ✅ **DONE** — 5-step guided tutorial for new players
+- **Action:** (completed) `ui/TutorialOverlay.kt` — non-blocking dialog with 5 steps (movement/swipe, interaction/hack, combat, cyberware clinic) + ASCII illustrations + `[ NEXT ]`/`[ SKIP ]`/tap-to-dismiss; auto-activates in `GameViewModel.createCharacter` for new players; `tutorial` terminal command (`tutorial next`, `tutorial skip`); `tutorial_seen` persisted via SharedPreferences + JSON export/import
 - **Impact:** Improved first-session retention, reduced confusion
-- **Effort:** 1–2 weeks
+- **Effort:** (completed)
 
 ### 2.2 Accessibility Features
 - **Status:** Game relies heavily on color (green/cyan/pink) for state communication
@@ -62,11 +61,11 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 - **Effort:** 2–3 weeks (extraction + translation)
 
 ### 2.4 Improved Character Creation
-- **Status:** Functional but basic — stat allocation and class selection
+- **Status:** ✅ **DONE (partial)** — random cyberpunk name generator added
 - **Action:**
+  - (completed) Random character name generator (`data/NameGenerator.kt`) + `[ SURGE_ALIAS ]` button and 3 suggestion rows in `CharacterCreationView` + `NameGeneratorTest.kt`
   - Add class-specific starting abilities/descriptions
   - Show stat impact preview (e.g., "HP will be 170 instead of 100")
-  - Add random character name generator
   - Animated 3D preview with rotation controls
 - **Impact:** More engaging first impression
 - **Effort:** 1 week
@@ -82,14 +81,10 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 - **Effort:** (completed)
 
 ### 3.2 Skill Tree / Progression System
-- **Status:** `characterLevel` and `xpToNextLevel` exist but progression is minimal
-- **Action:**
-  - Add a skill tree with 3 branches: Hacking, Combat, Engineering
-  - Each branch has 5–8 unlockable nodes with meaningful bonuses
-  - XP earned from combat, hacking, and exploration
-  - Respec option at cyberware clinic
+- **Status:** ✅ **DONE** — skill tree with 3 branches (Hacking, Combat, Engineering)
+- **Action:** (completed) `data/SkillTreeModels.kt` (data-driven branches + node chains + `combinedEffects`), `ui/SkillTreeManager.kt` (terminal: `skilltree`, `skill learn <BRANCH> <#>`, `skill points`, `skill reset`), 1 skill point per level awarded in `GameViewModel.addExperience`, stats applied to live state on learn, persisted via SharedPreferences + JSON export/import, `SkillTreeTest.kt`
 - **Impact:** Long-term progression goals, build diversity
-- **Effort:** 2–3 weeks
+- **Effort:** (completed)
 
 ### 3.3 Expanded Procedural Audio
 - **Status:** Already has `AudioTrack` PCM synthesis and `SoundPool` SFX — unique differentiator
@@ -112,9 +107,9 @@ This document outlines prioritized improvements for Netcrawler, a cyberpunk rogu
 - **Effort:** 1 week
 
 ### 3.5 Consumable & Item Crafting
-- **Status:** Inventory exists but items are limited (`NanoMed.sys`, `RAMBoost.exe`, etc.)
+- **Status:** ✅ **DONE (partial)** — 5 new content-driven consumables via mod system
 - **Action:**
-  - Add 10+ new consumable items with unique effects
+  - (completed) New consumables via `assets/mods/new_items.md` (AdrenalineFlicker.exe, RegenMatrix.dll, RAMExpander.pkg, RuinDust.sh, VirusSynthMaker.bin) + `sample_mod.md` (OverclockSerum.exe, ModularPlating.pkg, KillSwitch.bin program) — parsed by `data/ContentModParser.kt`, merged by `ContentRegistry.kt`
   - Add a simple crafting system (combine 2 items at a terminal)
   - Add item rarity tiers (Common, Uncommon, Rare, Legendary)
 - **Impact:** Loot-driven motivation, inventory management depth

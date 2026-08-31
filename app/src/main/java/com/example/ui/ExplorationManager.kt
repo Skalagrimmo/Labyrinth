@@ -5,7 +5,9 @@ import com.example.data.*
 import com.example.data.svdag.SvdagIcePathfinder
 import com.example.data.svdag.SvdagScannerService
 import com.example.data.svdag.SvdagWorldBuilder
+import com.example.data.svdag.SvdagWorldState
 import com.example.data.svdag.VoxelType
+import com.example.data.svdag.WorldRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -1063,6 +1065,7 @@ class ExplorationManager(
                     direction = Direction.EAST,
                     perspectiveText = perspective,
                     svdagWorld = svdagData.first,
+                    svdagWorldState = SvdagWorldState(svdagData.first),
                     svdagStats = svdagData.second,
                     svdagScaleDepth = 6,
                     exploredCells = targetExplored,
@@ -1268,18 +1271,18 @@ class ExplorationManager(
         val level = state.currentMultiFloorLevel ?: return
 
         val sourceFloor = level.floors.getOrNull(currentFloorIndex) ?: return
-        val targetGridFloor = level.floors.getOrNull(connector.targetFloorIndex) ?: return
+        val targetGridFloor = level.floors.getOrNull(connector.toFloor) ?: return
 
         _uiState.update {
             it.copy(
-                activeFloorIndex = connector.targetFloorIndex,
+                activeFloorIndex = connector.toFloor,
                 maze = targetGridFloor.grid,
-                gridX = connector.targetSpawnX.coerceIn(0, targetGridFloor.grid[0].size - 1),
-                gridY = connector.targetSpawnY.coerceIn(0, targetGridFloor.grid.size - 1)
+                gridX = connector.toPos.first.coerceIn(0, targetGridFloor.grid[0].size - 1),
+                gridY = connector.toPos.second.coerceIn(0, targetGridFloor.grid.size - 1)
             )
         }
         updatePerspective()
-        revealCellsAround(connector.targetSpawnX, connector.targetSpawnY)
+        revealCellsAround(connector.toPos.first, connector.toPos.second)
         addLog("TRANSIT CONNECTED: ${connector.name} used. Transferred to ${targetGridFloor.floorName}.", LogType.SUCCESS)
     }
 
@@ -1296,6 +1299,7 @@ class ExplorationManager(
             _uiState.update {
                 it.copy(
                     svdagWorld = dag,
+                    svdagWorldState = SvdagWorldState(dag),
                     svdagStats = stats,
                     svdagScaleDepth = targetDepth,
                     svdagIceEntities = initialIce,
@@ -1316,6 +1320,7 @@ class ExplorationManager(
                 _uiState.update {
                     it.copy(
                         svdagWorld = dag,
+                        svdagWorldState = SvdagWorldState(dag),
                         svdagStats = stats,
                         svdagScaleDepth = targetDepth,
                         svdagIceEntities = initialIce,
@@ -1396,6 +1401,19 @@ class ExplorationManager(
     fun modifySvdagVoxel(x: Int, y: Int, z: Int, type: VoxelType) {
         val currentDag = uiState.svdagWorld ?: return
         currentDag.setVoxel(x, y, z, type)
+
+        // FPE live mutation path (§2/§7): mirror the edit into the World State overlay.
+        // The DAG stays the structural source of truth; dynamic damage lives in the
+        // sparse World State so it is never baked into the deduplicated structure.
+        uiState.svdagWorldState?.let { world ->
+            if (type == VoxelType.EMPTY) {
+                world.update(x, y, z) { WorldRules.playerTransform(it, strength = 0.6f) }
+            } else {
+                // Construction/repair restores the procedural default.
+                world.clearOverride(x, y, z)
+            }
+        }
+
         val newStats = currentDag.getStats(lodLevel = uiState.svdagLodLevel)
         _uiState.update { it.copy(svdagStats = newStats) }
     }
@@ -1466,6 +1484,15 @@ class ExplorationManager(
             _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
             updatePerspective()
         }
+    }
+
+    fun setUseFpeInFppView(enabled: Boolean) {
+        _uiState.update { it.copy(useFpeInFppView = enabled) }
+        addLog(
+            if (enabled) "FPE RENDER: First-person walls now driven by 3D World State (weight/integrity)."
+            else "FPE RENDER: First-person walls back to procedural stability model.",
+            LogType.INFO
+        )
     }
 
     // ----------------------------------------------------
@@ -1546,6 +1573,16 @@ class ExplorationManager(
                     interactWithElevator()
                     true
                 } else false
+            }
+            "fpe", "fperender" -> {
+                when {
+                    parts.getOrNull(1) == "on" -> { setUseFpeInFppView(true); true }
+                    parts.getOrNull(1) == "off" -> { setUseFpeInFppView(false); true }
+                    else -> {
+                        addLog("FPE RENDER: $ fpe <on|off> - drive first-person wall stability from 3D World State", LogType.INFO)
+                        true
+                    }
+                }
             }
             "svdag", "voxelworld" -> {
                 when {

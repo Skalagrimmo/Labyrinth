@@ -247,6 +247,16 @@ class PersistenceManager(
         return sharedPrefs.getBoolean("has_saved_game", false)
     }
 
+    fun markTutorialSeen() {
+        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        sharedPrefs.edit().putBoolean("tutorial_seen", true).apply()
+    }
+
+    fun isTutorialSeen(): Boolean {
+        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
+        return sharedPrefs.getBoolean("tutorial_seen", false)
+    }
+
     fun saveGame() {
         val state = uiState
         if (state.runnerName.isEmpty()) return
@@ -365,6 +375,11 @@ class PersistenceManager(
             putString("installedPrograms", state.installedPrograms.joinToString(",") { it.id })
             putString("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
             putString("storedImplantsCsv", state.storedImplants.joinToString(",") { it.id })
+            putInt("skillPoints", state.skillPoints)
+            putString("unlockedSkills", state.unlockedSkills.joinToString(","))
+            putInt("tutorialStep", state.tutorialStep)
+            putBoolean("tutorialActive", state.tutorialActive)
+            putBoolean("tutorialSeen", state.tutorialSeen)
             putString("exploredCells", serializeExploredCells(state.exploredCells))
 
             putString("activeWeather", state.activeWeather.name)
@@ -695,6 +710,12 @@ class PersistenceManager(
                     predictedWeather = predictedWeather,
                     nodesHackedCount = sharedPrefs.getInt("nodesHackedCount", 0),
                     totalCreditsEarned = sharedPrefs.getInt("totalCreditsEarned", 100),
+                    skillPoints = sharedPrefs.getInt("skillPoints", 0),
+                    unlockedSkills = (sharedPrefs.getString("unlockedSkills", "") ?: "")
+                        .split(",").filter { it.isNotBlank() }.toSet(),
+                    tutorialStep = sharedPrefs.getInt("tutorialStep", 0),
+                    tutorialActive = sharedPrefs.getBoolean("tutorialActive", false),
+                    tutorialSeen = sharedPrefs.getBoolean("tutorialSeen", false),
                     maze = maze,
                     originalMaze = originalMaze,
                     buildingFloors = buildingFloors,
@@ -752,6 +773,11 @@ class PersistenceManager(
         json.put("totalCreditsEarned", state.totalCreditsEarned)
         json.put("dataFragments", state.dataFragments)
         json.put("totalDataFragmentsExtracted", state.totalDataFragmentsExtracted)
+        json.put("skillPoints", state.skillPoints)
+        json.put("unlockedSkills", state.unlockedSkills.joinToString(","))
+        json.put("tutorialStep", state.tutorialStep)
+        json.put("tutorialActive", state.tutorialActive)
+        json.put("tutorialSeen", state.tutorialSeen)
         json.put("activeWeather", state.activeWeather.name)
         json.put("weatherTurnsLeft", state.weatherTurnsLeft)
         json.put("levelSeed", state.levelSeed)
@@ -847,6 +873,11 @@ class PersistenceManager(
                     totalCreditsEarned = json.optInt("totalCreditsEarned", 100),
                     dataFragments = json.optInt("dataFragments", 0),
                     totalDataFragmentsExtracted = json.optInt("totalDataFragmentsExtracted", 0),
+                    skillPoints = json.optInt("skillPoints", 0),
+                    unlockedSkills = json.optString("unlockedSkills", "").split(",").filter { it.isNotBlank() }.toSet(),
+                    tutorialStep = json.optInt("tutorialStep", 0),
+                    tutorialActive = json.optBoolean("tutorialActive", false),
+                    tutorialSeen = json.optBoolean("tutorialSeen", false),
                     activeWeather = try { CyberWeather.valueOf(json.optString("activeWeather", "CLEAR")) } catch (_: Exception) { CyberWeather.CLEAR },
                     weatherTurnsLeft = json.optInt("weatherTurnsLeft", 0),
                     levelSeed = json.optLong("levelSeed", 0L),

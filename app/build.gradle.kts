@@ -72,6 +72,12 @@ googleServices {
   missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN
 }
 
+// Export Room schema JSON to app/schemas so migrations can be authored and
+// tested with MigrationTestHelper (IMPROVEMENT_PLAN item 1.3).
+ksp {
+  arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.

@@ -145,6 +145,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val kineticShieldActiveThisCombat: Boolean = true,
         val naniteStepCounter: Int = 0,
         val svdagWorld: com.example.data.svdag.SparseVoxelDag? = null,
+        val svdagWorldState: com.example.data.svdag.SvdagWorldState? = null,
+        val useFpeInFppView: Boolean = false,
         val svdagStats: com.example.data.svdag.SvdagStats? = null,
         val svdagScaleDepth: Int = 7,
         val svdagLodLevel: Int = 0,
@@ -164,7 +166,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val activeBuffs: Set<String> = emptySet(),
         val currentMultiFloorLevel: MultiFloorGridLevel? = null,
         val activeFloorIndex: Int = 0,
-        val levelSeed: Long = 0L
+        val levelSeed: Long = 0L,
+        val skillPoints: Int = 0,
+        val unlockedSkills: Set<String> = emptySet(),
+        val tutorialStep: Int = 0,
+        val tutorialActive: Boolean = false,
+        val tutorialSeen: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -225,6 +232,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         onLog = ::addLog
     )
 
+    private val skillTreeManager = SkillTreeManager(
+        _uiState = _uiState,
+        onLog = ::addLog
+    )
+
     init {
         cosmeticVaultManager.onRefreshPerspective = ::updatePerspective
         addLog("DECENTRALIZED TERMINAL ESTABLISHED...", LogType.SUCCESS)
@@ -259,17 +271,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             val newDmgBonus = _uiState.value.damageBonus + (2 * levelsGained)
             val ramGain = levelsGained / 2 + (if (currentLvl % 2 == 0) 1 else 0)
             val newMaxRam = _uiState.value.maxRam + maxOf(0, ramGain)
+            _uiState.update { it.copy(skillPoints = it.skillPoints + levelsGained) }
             _uiState.update { it.copy(characterLevel = currentLvl, characterXp = currentXp, xpToNextLevel = reqXp, maxIntegrity = newMaxHp, integrity = newMaxHp, playerMaxShield = newMaxShield, playerShield = newMaxShield, damageBonus = newDmgBonus, maxRam = newMaxRam, ram = newMaxRam) }
             soundManager.playLootCollectionSound()
             addLog("LEVEL UP! RECOGNIZED AS LEVEL $currentLvl NETRUNNER (+$levelsGained LVL)!", LogType.SUCCESS)
             addLog("SYSTEM UPGRADE: Max Integrity: $newMaxHp HP | Shield: $newMaxShield | Dmg: +$newDmgBonus | Max RAM: $newMaxRam MB", LogType.SUCCESS)
+            addLog("SKILL POINTS AWARDED: +$levelsGained (total ${_uiState.value.skillPoints}). Type 'skilltree' to spend.", LogType.SUCCESS)
         } else {
             _uiState.update { it.copy(characterXp = currentXp, xpToNextLevel = reqXp) }
         }
         addLog("GAINED +$amount EXPERIENCE POINTS! (XP: $currentXp / $reqXp)", LogType.INFO)
     }
 
-    private fun triggerCombat(targetX: Int, targetY: Int) = combatManager.triggerCombat(targetX, targetY)
+    private fun triggerCombat(targetX: Int, targetY: Int): Unit {
+        combatManager.triggerCombat(targetX, targetY)
+    }
 
     private fun handleCombatVictoryCleanup(enemy: Enemy) {
         val state = _uiState.value
@@ -374,6 +390,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val startShieldMax = if (selectedClass == NetrunnerClass.STREET_SAMURAI || selectedClass == NetrunnerClass.CYBER_SHIELD) 75 else 50
         val startShieldCurrent = if (selectedClass == NetrunnerClass.STREET_SAMURAI || selectedClass == NetrunnerClass.CYBER_SHIELD) 25 else 10
         _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION, runnerName = cleanName, runnerClass = selectedClass, selectedStartingImplant = chosenImplant, installedImplants = initialImplantsMap, storedImplants = starterStoredImplants, maxIntegrity = initMaxHp, integrity = initMaxHp, playerMaxShield = startShieldMax, playerShield = startShieldCurrent, maxRam = initMaxRam, ram = initMaxRam, ramRecoveryRate = initRecovery, damageBonus = initDamage, defenseBonus = initDefense, credits = baseCredits, totalCreditsEarned = baseCredits, installedPrograms = baseProg, inventory = startInv, level = 1, gridX = 1, gridY = 1, direction = Direction.EAST, nodesHackedCount = 0, equippedWeaponName = weaponName, hasUsedEmergencyRebootThisRun = false, kineticShieldActiveThisCombat = true, logFeed = emptyList()) }
+        if (!_uiState.value.tutorialSeen) {
+            _uiState.update { it.copy(tutorialActive = true, tutorialStep = 0) }
+        }
         val profileEntity = CharacterProfileEntity(profileId = "profile_${cleanName.lowercase().replace(" ", "_")}", runnerName = cleanName, runnerClass = selectedClass.name, level = 1, credits = baseCredits, totalCreditsEarned = baseCredits, maxIntegrity = initMaxHp, maxRam = initMaxRam, nodesHackedCount = 0)
         viewModelScope.launch { repository.saveProfile(profileEntity) }
         addLog("==========================================", LogType.SUCCESS); addLog("PROFILE SYNCHRONIZED: $cleanName [${selectedClass.title}]", LogType.SUCCESS); addLog("SPECIALIZATION: ${selectedClass.passiveDesc}", LogType.INFO); addLog("STARTER IMPLANT INJECTED: ${chosenImplant.name} [${chosenImplant.slot.displayName.uppercase()}]", LogType.SUCCESS)
@@ -391,6 +410,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (explorationManager.runTerminalCommand(parts, state)) return
         if (inventoryManager.runTerminalCommand(parts, state)) return
         if (cosmeticVaultManager.runTerminalCommand(parts, state)) return
+        if (skillTreeManager.runTerminalCommand(parts, state)) return
 
         when (mainCommand) {
             "help", "?" -> {
@@ -400,6 +420,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("COMBAT: 'attack', 'defend', 'flee', 'scan'", LogType.INFO)
                 addLog("INVENTORY: 'inventory', 'use <item>', 'equip <item>', 'unequip <slot>'", LogType.INFO)
                 addLog("SYSTEM: 'status', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
+                addLog("SKILLS: 'skilltree', 'skill learn <HACKING|COMBAT|ENGINEERING> <#>', 'skill points'", LogType.INFO)
+                addLog("TUTORIAL: 'tutorial next', 'tutorial skip'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>'", LogType.INFO)
                 addLog("SHARING: 'export' (copy save), 'import' (paste save), 'seed' (show level seed)", LogType.INFO)
             }
@@ -425,6 +447,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "seed" -> { addLog("LEVEL SEED: ${state.levelSeed}", LogType.INFO); addLog("Share this seed with friends to play the same dungeon!", LogType.INFO) }
             "menu" -> persistenceManager.returnToStartMenu()
             "clear" -> { _uiState.update { it.copy(logFeed = emptyList()) }; addLog("Log console cleared.", LogType.INFO) }
+            "tutorial", "helpme", "assist" -> {
+                when (parts.getOrNull(1)?.lowercase()) {
+                    "next" -> tutorialAdvance()
+                    "skip" -> tutorialSkip()
+                    else -> onTutorialStepLog(_uiState.value.tutorialStep)
+                }
+            }
             else -> addLog("UNKNOWN COMMAND: '$trimmed'. Type 'help' for support.", LogType.ERROR)
         }
     }
@@ -452,6 +481,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun triggerSvdagScan(originX: Int? = null, originY: Int? = null, originZ: Int? = null, radius: Int = 16) = explorationManager.triggerSvdagScan(originX, originY, originZ, radius)
     fun enterSvdagWorldInspector() = explorationManager.enterSvdagWorldInspector()
     fun exitSvdagWorldInspector() = explorationManager.exitSvdagWorldInspector()
+    fun setUseFpeInFppView(enabled: Boolean) = explorationManager.setUseFpeInFppView(enabled)
 
     fun combatAttack() = combatManager.combatAttack()
     fun combatDefend() = combatManager.combatDefend()
@@ -485,6 +515,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun selectStartingImplant(implant: CyberwareImplant) = inventoryManager.selectStartingImplant(implant)
     fun openCyberwareClinic() = inventoryManager.openCyberwareClinic()
     fun closeCyberwareClinic() = inventoryManager.closeCyberwareClinic()
+
+    private val tutorialStepCount = 5
+
+    fun tutorialAdvance() {
+        val s = _uiState.value
+        if (!s.tutorialActive) return
+        val step = s.tutorialStep + 1
+        if (step >= tutorialStepCount) {
+            finishTutorial()
+        } else {
+            _uiState.update { it.copy(tutorialStep = step) }
+            onTutorialStepLog(step)
+        }
+    }
+
+    fun tutorialSkip() = finishTutorial()
+
+    private fun finishTutorial() {
+        _uiState.update { it.copy(tutorialActive = false, tutorialSeen = true) }
+        persistenceManager.markTutorialSeen()
+        addLog("TUTORIAL COMPLETE. GOOD LUCK, NETRUNNER.", LogType.SUCCESS)
+    }
+
+    private fun onTutorialStepLog(step: Int) {
+        when (step) {
+            1 -> addLog("TUTORIAL 2/5: SWIPE to move. Drag left/right to turn, up/down to advance.", LogType.INFO)
+            2 -> addLog("TUTORIAL 3/5: Stand next to a terminal and type 'hack <row> <col>' to interact.", LogType.INFO)
+            3 -> addLog("TUTORIAL 4/5: Combat is turn-based. Use 'attack', 'defend', and items from the terminal.", LogType.INFO)
+            4 -> addLog("TUTORIAL 5/5: Visit the Cyberware Clinic ('clinic') to equip implants for bonuses.", LogType.INFO)
+        }
+    }
+
     fun installImplant(implant: CyberwareImplant) = inventoryManager.installImplant(implant)
     fun uninstallImplant(slot: ImplantBodySlot) = inventoryManager.uninstallImplant(slot)
     fun toggleCyberwareInventoryOverlay(show: Boolean? = null) = inventoryManager.toggleCyberwareInventoryOverlay(show)

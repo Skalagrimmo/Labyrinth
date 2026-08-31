@@ -48,6 +48,8 @@ A complete source-file reference organized by package and layer. All paths are r
 | `InventoryManager.kt` (~650) | Items/consumables, equipment slot management, shops, cyberware, cybernetics clinic, implants, scavenging |
 | `PersistenceManager.kt` (~800) | Save/load, serialization, game lifecycle, leaderboard, high scores, run records, save export/import, clipboard |
 | `CosmeticVaultManager.kt` (~170) | Data fragments, cosmetic themes, prompt styles, performance buffs, Data Vault navigation |
+| `SkillTreeManager.kt` | Skill-point allocation: `skilltree`/`skill` terminal commands, node learn/reset, stat application |
+| `TutorialOverlay.kt` | 5-step non-blocking onboarding dialog + `tutorial` terminal command + `tutorial_seen` persistence |
 
 ### Shared Types
 
@@ -126,6 +128,8 @@ A complete source-file reference organized by package and layer. All paths are r
 | `GameEngine.kt` (~1,680) | Procedural maze generation, 3D perspective raycast, enemy/boss spawning, hacking puzzles, starting program kits, weather |
 | `ContentModParser.kt` | Reusable Markdown parser for mod-defined content (enemies/items/programs) |
 | `ContentRegistry.kt` | Converts parsed mod blocks into model types and merges them into live registries + `assets/mods/` loader |
+| `NameGenerator.kt` | Random cyberpunk alias/name generator (suggestions + title suffixes) |
+| `SkillTreeModels.kt` | Data-driven skill tree: `SkillBranch`, `SkillNode`, `SkillTree`, `SkillTreeEffects`, `combinedEffects` |
 | `GameItemRegistry.kt` (~320) | Static `GameItem` catalog (consumables, equipment) + mod-item merge |
 | `ItemModels.kt` | `GameItem`, `EquipmentSlot`, `InventoryCategory`, `InventorySortOption`, `ItemRarity` |
 | `CyberwareImplantRegistry.kt` | Implant catalog + starter implants |
@@ -178,7 +182,7 @@ A complete source-file reference organized by package and layer. All paths are r
 | Location | Purpose |
 |----------|---------|
 | `app/src/test/java/com/example/` | `ExampleUnitTest.kt`, `ExampleRobolectricTest.kt`, `GreetingScreenshotTest.kt` |
-| `app/src/test/java/com/example/data/` | `ContentModParserTest.kt`, `GameEngineTest.kt` (host-JVM unit tests) |
+| `app/src/test/java/com/example/data/` | `ContentModParserTest.kt`, `GameEngineTest.kt`, `NameGeneratorTest.kt`, `SkillTreeTest.kt` (host-JVM unit tests) |
 | `app/src/test/screenshots/greeting.png` | Screenshot test output |
 | `app/src/androidTest/java/com/example/` | `ExampleInstrumentedTest.kt` (device/instrumented) |
 

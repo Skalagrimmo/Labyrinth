@@ -120,6 +120,39 @@ fun CharacterCreationView(
                         .fillMaxWidth()
                         .testTag("runner_name_input")
                 )
+                Spacer(modifier = Modifier.height(6.dp))
+                TextButton(
+                    onClick = { runnerName = NameGenerator.randomName() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "[ SURGE_ALIAS ]",
+                        color = CyberPurple,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp
+                    )
+                }
+                val suggestions = remember { NameGenerator.suggestions(3) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    suggestions.forEach { name ->
+                        OutlinedButton(
+                            onClick = { runnerName = name },
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = name,
+                                color = CyberMutedText,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
             }
         }
 

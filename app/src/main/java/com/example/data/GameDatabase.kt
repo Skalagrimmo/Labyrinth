@@ -106,7 +106,7 @@ interface InventoryItemDao {
         PlayerEntity::class
     ],
     version = 6,
-    exportSchema = false
+    exportSchema = true
 )
 abstract class GameDatabase : RoomDatabase() {
     abstract fun runRecordDao(): RunRecordDao

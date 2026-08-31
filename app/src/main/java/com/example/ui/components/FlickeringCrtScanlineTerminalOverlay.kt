@@ -231,9 +231,7 @@ fun FlickeringCrtScanlineTerminalOverlay(
 
                 // --- E. Glass Bezel Vignette & CRT Screen Corner Curvature ---
                 if (curvatureVignette) {
-                    val isCompactScreen = with(LocalDensity.current) {
-                        (size.height / density) < 700f
-                    }
+                    val isCompactScreen = (size.height / density) < 700f
                     val vignetteAlpha = if (isCompactScreen) 0.35f else 0.82f
                     val radialVignette = Brush.radialGradient(
                         colors = listOf(
