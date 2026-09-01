@@ -34,6 +34,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
 
     private var isMuted: Boolean = false
     private var isBgmMuted: Boolean = false
+    private var isSfxMuted: Boolean = false
     private var bgmVolume: Float = 0.45f
     private var currentMusicMode: MusicMode = MusicMode.EXPLORATION
 
@@ -63,6 +64,12 @@ class CyberSoundEffectsManager private constructor(context: Context) {
     }
 
     fun isBgmMuted(): Boolean = isBgmMuted
+
+    fun setSfxMuted(muted: Boolean) {
+        isSfxMuted = muted
+    }
+
+    fun isSfxMuted(): Boolean = isSfxMuted
 
     fun setBgmVolume(volume: Float) {
         bgmVolume = volume.coerceIn(0f, 1f)
@@ -198,7 +205,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
     // ----------------------------------------------------
 
     private fun playTone(freqHz: Double, durationMs: Int, volume: Float = 0.35f) {
-        if (isMuted) return
+        if (isMuted || isSfxMuted) return
         scope.launch(Dispatchers.Default) {
             try {
                 val sampleRate = 22050
@@ -253,7 +260,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
         volume: Float = 0.35f,
         isHarshSquare: Boolean = false
     ) {
-        if (isMuted) return
+        if (isMuted || isSfxMuted) return
         scope.launch(Dispatchers.Default) {
             try {
                 val sampleRate = 22050
@@ -323,7 +330,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Plays ascending pitches proportional to item count and distinct chimes for secrets or bypass routes.
      */
     fun playScannerDetectionSound(itemCount: Int, hasSecrets: Boolean = false, hasBypass: Boolean = false) {
-        if (isMuted) return
+        if (isMuted || isSfxMuted) return
         scope.launch {
             if (itemCount <= 0) {
                 // Low subtle ping for empty scan area
@@ -360,6 +367,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue when executing terminal commands.
      */
     fun playTerminalCommandSound() {
+        if (isSfxMuted) return
         soundPoolManager.playTerminalBeep(0.8f)
     }
 
@@ -367,6 +375,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for terminal keyboard typing input.
      */
     fun playTerminalKeyPressSound() {
+        if (isSfxMuted) return
         soundPoolManager.playTerminalKeyPress(0.5f)
     }
 
@@ -374,6 +383,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Cybernetic step movement sound effect.
      */
     fun playStepSound() {
+        if (isSfxMuted) return
         soundPoolManager.playFootstep(CyberSoundPoolManager.SurfaceMaterial.CONCRETE, 0.7f)
     }
 
@@ -381,6 +391,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Environmental footstep sound with surface material.
      */
     fun playFootstep(material: CyberSoundPoolManager.SurfaceMaterial = CyberSoundPoolManager.SurfaceMaterial.CONCRETE, volume: Float = 0.7f) {
+        if (isSfxMuted) return
         soundPoolManager.playFootstep(material, volume)
     }
 
@@ -388,6 +399,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Door open/close pneumatic sound effect.
      */
     fun playDoorSound() {
+        if (isSfxMuted) return
         soundPoolManager.playDoorSound(0.8f)
     }
 
@@ -395,6 +407,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Elevator / sector lift transition sound.
      */
     fun playElevatorSound() {
+        if (isSfxMuted) return
         soundPoolManager.playElevatorSound(0.8f)
     }
 
@@ -402,6 +415,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for standard combat damage hit.
      */
     fun playCombatHitSound() {
+        if (isSfxMuted) return
         soundPoolManager.playCombatHit(1.0f)
     }
 
@@ -409,6 +423,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Audio cue for critical combat impact or heavy attack.
      */
     fun playCombatCritSound() {
+        if (isSfxMuted) return
         soundPoolManager.playCombatCrit(1.0f)
     }
 
@@ -450,7 +465,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Plays a triumphant multi-stage digital breach victory sequence.
      */
     fun playSecurityNodeHackSuccessSound() {
-        if (isMuted) return
+        if (isMuted || isSfxMuted) return
         scope.launch {
             // Stage 1: Ascending cyber triad cascade
             playTone(659.25, 70, 0.35f)  // E5
@@ -473,7 +488,7 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      * Plays a harsh electrical glitch alarm & descending ICE lockout sweep.
      */
     fun playSecurityNodeHackFailureSound() {
-        if (isMuted) return
+        if (isMuted || isSfxMuted) return
         scope.launch {
             // Stage 1: Harsh 150Hz feedback error burst
             playFrequencySweep(startFreqHz = 180.0, endFreqHz = 120.0, durationMs = 150, volume = 0.5f, isHarshSquare = true)

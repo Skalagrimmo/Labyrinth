@@ -27,7 +27,8 @@ fun CyberCharacterGLView(
     modifier: Modifier = Modifier,
     hueR: Float = 0.0f,
     hueG: Float = 1.0f,
-    hueB: Float = 0.85f
+    hueB: Float = 0.85f,
+    variant: CharacterVariant = CharacterVariant.GENERIC
 ) {
     AndroidView(
         factory = { ctx ->
@@ -35,12 +36,14 @@ fun CyberCharacterGLView(
                 characterRenderer.activeHueR = hueR
                 characterRenderer.activeHueG = hueG
                 characterRenderer.activeHueB = hueB
+                characterRenderer.variant = variant
             }
         },
         update = { view ->
             view.characterRenderer.activeHueR = hueR
             view.characterRenderer.activeHueG = hueG
             view.characterRenderer.activeHueB = hueB
+            view.characterRenderer.variant = variant
         },
         modifier = modifier
     )

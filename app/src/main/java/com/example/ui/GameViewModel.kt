@@ -1,6 +1,7 @@
 package com.example.ui
 
 import android.app.Application
+import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
@@ -17,6 +18,15 @@ import java.util.concurrent.ConcurrentHashMap
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val soundManager = com.example.audio.CyberSoundEffectsManager.getInstance(application)
+
+    private val _bgmEnabled = mutableStateOf(!soundManager.isMuted())
+    val bgmEnabled: Boolean get() = _bgmEnabled.value
+    private val _bgmVolume = mutableStateOf(soundManager.getBgmVolume())
+    val bgmVolume: Float get() = _bgmVolume.value
+    private val _sfxEnabled = mutableStateOf(!soundManager.isMuted())
+    val sfxEnabled: Boolean get() = _sfxEnabled.value
+    private val _vibrationEnabled = mutableStateOf(com.example.audio.CyberVibrationManager.isEnabled())
+    val vibrationEnabled: Boolean get() = _vibrationEnabled.value
 
     private val database = GameDatabase.getDatabase(application)
     private val repository = GameRepository(
@@ -569,6 +579,28 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun viewLeaderboard() = persistenceManager.viewLeaderboard()
     fun exitLeaderboard() = persistenceManager.exitLeaderboard()
     fun clearHighScores() = persistenceManager.clearHighScores()
+    fun viewSettings() = persistenceManager.viewSettings()
+    fun exitSettings() = persistenceManager.exitSettings()
+
+    fun setBgmEnabled(enabled: Boolean) {
+        _bgmEnabled.value = enabled
+        soundManager.setBgmMuted(!enabled)
+    }
+
+    fun setBgmVolume(volume: Float) {
+        _bgmVolume.value = volume
+        soundManager.setBgmVolume(volume)
+    }
+
+    fun setSfxEnabled(enabled: Boolean) {
+        _sfxEnabled.value = enabled
+        soundManager.setSfxMuted(!enabled)
+    }
+
+    fun setVibrationEnabled(enabled: Boolean) {
+        _vibrationEnabled.value = enabled
+        com.example.audio.CyberVibrationManager.setEnabled(enabled)
+    }
     fun disconnectRunSuccessfully() = persistenceManager.disconnectRunSuccessfully()
     fun restartGame() = persistenceManager.restartGame()
     fun startNewRun() = persistenceManager.startNewRun()

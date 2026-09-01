@@ -25,7 +25,7 @@ class CyberVibrationManager(private val context: Context) {
      * Pulse intensity scales with closer distance.
      */
     fun triggerIceProximityVibration(distance: Double) {
-        if (vibrator?.hasVibrator() != true) return
+        if (!isEnabled() || vibrator?.hasVibrator() != true) return
         val clampedDist = distance.coerceIn(0.5, 3.5)
         val duration = (70 - clampedDist * 15).toLong().coerceIn(20L, 80L)
         val intensity = ((1.0 - (clampedDist / 4.0)) * 255).toInt().coerceIn(40, 255)
@@ -44,7 +44,7 @@ class CyberVibrationManager(private val context: Context) {
      * Trigger urgent warning pulse when hacking minigame timer is running low (<= 5 sec).
      */
     fun triggerLowTimerPulse() {
-        if (vibrator?.hasVibrator() != true) return
+        if (!isEnabled() || vibrator?.hasVibrator() != true) return
         val pattern = longArrayOf(0, 35, 45, 35)
         val amplitudes = intArrayOf(0, 220, 0, 220)
 
@@ -62,7 +62,7 @@ class CyberVibrationManager(private val context: Context) {
      * Trigger short success haptic burst upon completing hack node.
      */
     fun triggerHackSuccess() {
-        if (vibrator?.hasVibrator() != true) return
+        if (!isEnabled() || vibrator?.hasVibrator() != true) return
         val pattern = longArrayOf(0, 30, 40, 60)
         val amplitudes = intArrayOf(0, 150, 0, 255)
         try {
@@ -79,7 +79,7 @@ class CyberVibrationManager(private val context: Context) {
      * Trigger heavy error feedback when ICE trace spikes or hack fails.
      */
     fun triggerIceTraceWarning() {
-        if (vibrator?.hasVibrator() != true) return
+        if (!isEnabled() || vibrator?.hasVibrator() != true) return
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createOneShot(120L, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -88,5 +88,16 @@ class CyberVibrationManager(private val context: Context) {
                 vibrator.vibrate(120L)
             }
         } catch (_: Exception) {}
+    }
+
+    companion object {
+        @Volatile
+        private var sharedEnabled: Boolean = true
+
+        fun setEnabled(value: Boolean) {
+            sharedEnabled = value
+        }
+
+        fun isEnabled(): Boolean = sharedEnabled
     }
 }

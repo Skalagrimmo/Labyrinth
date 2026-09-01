@@ -17,6 +17,7 @@ import com.example.data.*
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
 import com.example.gl.CyberCharacterGLView
+import com.example.gl.CharacterVariant
 
 @Composable
 fun CharacterCreationView(
@@ -78,7 +79,13 @@ fun CharacterCreationView(
                     NetrunnerClass.SCRIPT_KIDDIE -> 0.15f
                 },
                 hueG = 1.0f,
-                hueB = 0.85f
+                hueB = 0.85f,
+                variant = when (selectedClass) {
+                    NetrunnerClass.NETRUNNER -> CharacterVariant.NETRUNNER
+                    NetrunnerClass.STREET_SAMURAI -> CharacterVariant.SAMURAI
+                    NetrunnerClass.TECHIE -> CharacterVariant.TECHIE
+                    else -> CharacterVariant.GENERIC
+                }
             )
         }
 

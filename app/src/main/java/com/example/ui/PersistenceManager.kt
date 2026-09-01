@@ -238,6 +238,21 @@ class PersistenceManager(
         }
     }
 
+    fun viewSettings() {
+        _uiState.update { it.copy(screen = ActiveScreen.SETTINGS) }
+        onLog("OPENING SYSTEM CONFIGURATION PANEL...", LogType.SUCCESS)
+    }
+
+    fun exitSettings() {
+        if (uiState.integrity <= 0) {
+            _uiState.update { it.copy(screen = ActiveScreen.GAME_OVER) }
+        } else if (uiState.runnerName.isEmpty()) {
+            _uiState.update { it.copy(screen = ActiveScreen.START_MENU) }
+        } else {
+            _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION) }
+            onRestoreComplete()
+        }
+    }
     // ----------------------------------------------------
     // Save / Load
     // ----------------------------------------------------

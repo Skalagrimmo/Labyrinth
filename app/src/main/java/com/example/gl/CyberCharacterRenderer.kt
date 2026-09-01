@@ -11,6 +11,18 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /**
+ * Visual loadout variant for the hologram character.
+ * Each archetype renders a distinct body build and weapon silhouette so the
+ * three primary classes are clearly distinguishable in the 3D preview.
+ */
+enum class CharacterVariant {
+    GENERIC,
+    NETRUNNER,
+    SAMURAI,
+    TECHIE
+}
+
+/**
  * OpenGL ES 3.0 GLSurfaceView.Renderer implementation handling the OpenGL lifecycle
  * and rendering loop for 3D Cyberpunk Character Models.
  *
@@ -69,6 +81,10 @@ class CyberCharacterRenderer : GLSurfaceView.Renderer {
     @Volatile
     var activeHueB: Float = 0.85f
 
+    // Visual loadout: drives body build, weapon shape and pose per archetype.
+    @Volatile
+    var variant: CharacterVariant = CharacterVariant.GENERIC
+
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
         // Clear screen with deep dark space background
         GLES30.glClearColor(0.01f, 0.02f, 0.05f, 1.0f)
@@ -126,11 +142,18 @@ class CyberCharacterRenderer : GLSurfaceView.Renderer {
         Matrix.rotateM(rootModel, 0, characterPitch, 1.0f, 0.0f, 0.0f)
         Matrix.rotateM(rootModel, 0, characterYaw + (timeSec * 15.0f % 360.0f), 0.0f, 1.0f, 0.0f)
 
-        // 1. Torso (Armor Chestplate)
+        // Per-archetype body build (width / height factor)
+        val (torsoW, torsoH, legW) = when (variant) {
+            CharacterVariant.SAMURAI -> Triple(0.62f, 0.72f, 0.20f)
+            CharacterVariant.NETRUNNER -> Triple(0.42f, 0.60f, 0.13f)
+            else -> Triple(0.5f, 0.65f, 0.16f)
+        }
+
+        // 1. Torso (Armor Chestplate) with archetype-tuned silhouette
         renderPart(
             parentModel = rootModel,
             tx = 0.0f, ty = 0.8f, tz = 0.0f,
-            sx = 0.5f, sy = 0.65f, sz = 0.35f,
+            sx = torsoW, sy = torsoH, sz = 0.35f,
             colorR = 0.15f, colorG = 0.20f, colorB = 0.28f,
             glowIntensity = 0.1f
         )
@@ -148,7 +171,7 @@ class CyberCharacterRenderer : GLSurfaceView.Renderer {
             glowIntensity = 0.0f
         )
 
-        // Glowing Neon Visor Band
+        // Glowing Neon Visor Band (driven by archetype hue)
         renderPart(
             parentModel = headModel,
             tx = 0.0f, ty = 0.02f, tz = 0.14f,
@@ -157,7 +180,7 @@ class CyberCharacterRenderer : GLSurfaceView.Renderer {
             glowIntensity = 0.95f
         )
 
-        // 3. Left Arm
+        // 3. Left Arm (Guarded / support arm)
         val lArmAngle = (Math.sin(timeSec.toDouble() * 2.5) * 12.0).toFloat()
         val lArmModel = rootModel.clone()
         Matrix.translateM(lArmModel, 0, -0.38f, 1.05f, 0.0f)
@@ -170,10 +193,15 @@ class CyberCharacterRenderer : GLSurfaceView.Renderer {
             glowIntensity = 0.2f
         )
 
-        // 4. Right Arm (Holding Plasma Blade)
+        // 4. Right Arm (Weapon arm) — pose differs by archetype
         val rArmModel = rootModel.clone()
         Matrix.translateM(rArmModel, 0, 0.38f, 1.05f, 0.0f)
-        Matrix.rotateM(rArmModel, 0, -25.0f + lArmAngle * 0.5f, 1.0f, 0.0f, 0.0f)
+        val baseArmAngle = -25.0f + lArmAngle * 0.5f
+        val armAngle = when (variant) {
+            CharacterVariant.SAMURAI -> baseArmAngle - 15.0f  // raised for two-handed katana
+            else -> baseArmAngle
+        }
+        Matrix.rotateM(rArmModel, 0, armAngle, 1.0f, 0.0f, 0.0f)
         renderPart(
             parentModel = rArmModel,
             tx = 0.0f, ty = -0.28f, tz = 0.0f,
@@ -182,34 +210,87 @@ class CyberCharacterRenderer : GLSurfaceView.Renderer {
             glowIntensity = 0.2f
         )
 
-        // Plasma Cyber Blade (Glowing weapon)
-        renderPart(
-            parentModel = rArmModel,
-            tx = 0.0f, ty = -0.55f, tz = 0.35f,
-            sx = 0.04f, sy = 0.06f, sz = 0.7f,
-            colorR = activeHueR, colorG = activeHueG, colorB = activeHueB,
-            glowIntensity = 1.0f
-        )
+        // Weapon silhouette per archetype (all keep one hand on the weapon)
+        when (variant) {
+            CharacterVariant.NETRUNNER -> renderNetrunnerWeapon(rArmModel)
+            CharacterVariant.SAMURAI -> renderSamuraiWeapon(rArmModel)
+            CharacterVariant.TECHIE -> renderTechieWeapon(rArmModel)
+            else -> renderNetrunnerWeapon(rArmModel)
+        }
 
-        // 5. Left Leg
+        // 5. Legs — build width varies with archetype
         renderPart(
             parentModel = rootModel,
-            tx = -0.16f, ty = 0.22f, tz = 0.0f,
-            sx = 0.16f, sy = 0.55f, sz = 0.18f,
+            tx = -legW, ty = 0.22f, tz = 0.0f,
+            sx = legW, sy = 0.55f, sz = 0.18f,
             colorR = 0.12f, colorG = 0.16f, colorB = 0.22f,
             glowIntensity = 0.1f
         )
-
-        // 6. Right Leg
         renderPart(
             parentModel = rootModel,
-            tx = 0.16f, ty = 0.22f, tz = 0.0f,
-            sx = 0.16f, sy = 0.55f, sz = 0.18f,
+            tx = legW, ty = 0.22f, tz = 0.0f,
+            sx = legW, sy = 0.55f, sz = 0.18f,
             colorR = 0.12f, colorG = 0.16f, colorB = 0.22f,
             glowIntensity = 0.1f
         )
 
         GLES30.glBindVertexArray(0)
+    }
+
+    private fun renderNetrunnerWeapon(parentModel: FloatArray) {
+        // Slim optic blade — long, thin, forward thrust posture
+        renderPart(
+            parentModel = parentModel,
+            tx = 0.0f, ty = -0.55f, tz = 0.45f,
+            sx = 0.03f, sy = 0.05f, sz = 0.85f,
+            colorR = activeHueR, colorG = activeHueG, colorB = activeHueB,
+            glowIntensity = 1.0f
+        )
+    }
+
+    private fun renderSamuraiWeapon(parentModel: FloatArray) {
+        // Broad mono-molecular katana — long curved blade, wider sweep, tip angled
+        renderPart(
+            parentModel = parentModel,
+            tx = 0.06f, ty = -0.55f, tz = 0.55f,
+            sx = 0.06f, sy = 0.09f, sz = 1.0f,
+            colorR = activeHueR, colorG = activeHueG, colorB = activeHueB,
+            glowIntensity = 1.0f
+        )
+        // Second blade segment for sweeping katana tip
+        renderPart(
+            parentModel = parentModel,
+            tx = 0.12f, ty = -0.62f, tz = 0.15f,
+            sx = 0.05f, sy = 0.07f, sz = 0.5f,
+            colorR = activeHueR, colorG = activeHueG, colorB = activeHueB,
+            glowIntensity = 0.9f
+        )
+    }
+
+    private fun renderTechieWeapon(parentModel: FloatArray) {
+        // Compact Kiroshi pulse-solderer — boxy tool with short emitter tip
+        renderPart(
+            parentModel = parentModel,
+            tx = 0.0f, ty = -0.55f, tz = 0.32f,
+            sx = 0.09f, sy = 0.09f, sz = 0.40f,
+            colorR = 0.18f, colorG = 0.20f, colorB = 0.28f,
+            glowIntensity = 0.2f
+        )
+        renderPart(
+            parentModel = parentModel,
+            tx = 0.0f, ty = -0.55f, tz = 0.62f,
+            sx = 0.05f, sy = 0.05f, sz = 0.25f,
+            colorR = activeHueR, colorG = activeHueG, colorB = activeHueB,
+            glowIntensity = 1.0f
+        )
+        // Utility drone pod floating beside the tool
+        renderPart(
+            parentModel = parentModel,
+            tx = 0.22f, ty = 0.45f, tz = 0.1f,
+            sx = 0.07f, sy = 0.07f, sz = 0.07f,
+            colorR = activeHueR, colorG = activeHueG, colorB = activeHueB,
+            glowIntensity = 0.7f
+        )
     }
 
     private fun renderPart(

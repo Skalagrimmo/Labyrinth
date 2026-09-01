@@ -141,7 +141,7 @@ fun HighDensityBottomNavigation(
                 }
 
                 // Tab 4: SYSTEM
-                val isSystemActive = currentScreen == ActiveScreen.LEADERBOARD
+                val isSystemActive = currentScreen == ActiveScreen.SETTINGS
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier
@@ -149,11 +149,11 @@ fun HighDensityBottomNavigation(
                             view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                             if (currentScreen != ActiveScreen.CHARACTER_CREATION &&
                                 currentScreen != ActiveScreen.GAME_OVER) {
-                                viewModel.viewLeaderboard()
+                                viewModel.viewSettings()
                             }
                         }
                         .padding(horizontal = 12.dp, vertical = 6.dp)
-                        .testTag("system_tab_leaderboard")
+                        .testTag("system_tab_settings")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,

@@ -55,6 +55,7 @@ import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.components.AnimatedCyberHudConsole
 import com.example.gl.CyberCharacterGLView
+import com.example.gl.CharacterVariant
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -414,6 +415,12 @@ fun TerminalScreen(
                                 onExit = { viewModel.exitLeaderboard() }
                             )
                         }
+                        ActiveScreen.SETTINGS -> {
+                            SettingsView(
+                                viewModel = viewModel,
+                                onExit = { viewModel.exitSettings() }
+                            )
+                        }
                         ActiveScreen.GAME_OVER -> {
                             GameOverView(
                                 uiState = uiState,
@@ -597,6 +604,12 @@ fun TerminalScreen(
                                 scores = highScores,
                                 onClearScores = { viewModel.clearHighScores() },
                                 onExit = { viewModel.exitLeaderboard() }
+                            )
+                        }
+                        ActiveScreen.SETTINGS -> {
+                            SettingsView(
+                                viewModel = viewModel,
+                                onExit = { viewModel.exitSettings() }
                             )
                         }
                         ActiveScreen.GAME_OVER -> {
@@ -913,6 +926,13 @@ fun CharacterCreationView(
         NetrunnerClass.SCRIPT_KIDDIE -> Triple(1.0f, 0.9f, 0.2f)
     }
 
+    val glVariant = when (selectedClass) {
+        NetrunnerClass.NETRUNNER -> CharacterVariant.NETRUNNER
+        NetrunnerClass.STREET_SAMURAI -> CharacterVariant.SAMURAI
+        NetrunnerClass.TECHIE -> CharacterVariant.TECHIE
+        else -> CharacterVariant.GENERIC
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -994,7 +1014,8 @@ fun CharacterCreationView(
                         modifier = Modifier.fillMaxSize(),
                         hueR = hueR,
                         hueG = hueG,
-                        hueB = hueB
+                        hueB = hueB,
+                        variant = glVariant
                     )
 
                     Text(
