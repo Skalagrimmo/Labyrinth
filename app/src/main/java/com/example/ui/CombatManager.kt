@@ -69,7 +69,7 @@ class CombatManager(
                 lastEnemyActionRecord = null,
                 totalPlayerActionsCount = 0,
                 totalEnemyTurnsCount = 0,
-                showCombatBanner = if (enemy.isBoss) "⚠️ BOSS ENCOUNTER" else "⚔️ SYSTEM OVERLOAD INTRUSION",
+                showCombatBanner = if (enemy.isBoss) "⚠️ BOSS ENCOUNTER" else if (enemy.isElite) "☠ ELITE BLACK-ICE INTERCEPT" else "⚔️ SYSTEM OVERLOAD INTRUSION",
                 isCombatInputEnabled = false,
                 combatFlashEnemy = false,
                 combatFlashPlayer = false,
@@ -90,6 +90,9 @@ class CombatManager(
         onLog("==========================================", LogType.ERROR)
         onLog("⚠️ SECURITY INTRUSION THREAT TRIGGERED: ${enemy.name}!", LogType.ERROR)
         onLog("DESCRIPTION: ${enemy.description}", LogType.ALERT)
+        if (enemy.isElite) {
+            onLog("☠ ELITE BLACK-ICE SIGNATURE: Enhanced chassis, fortified protocols, doubled bounty.", LogType.ERROR)
+        }
         onLog("SYSTEM DETECTED RECALIBRATION: INITIATING TURN-BASED COMBAT.", LogType.INFO)
 
         if (uiState.runnerClass == NetrunnerClass.CYBER_SHIELD) {

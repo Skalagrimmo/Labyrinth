@@ -30,6 +30,9 @@ fun CharacterCreationView(
     var selectedClass by remember { mutableStateOf(NetrunnerClass.CODE_SLASHER) }
     var selectedImplant by remember { mutableStateOf(CyberwareImplantRegistry.STARTER_IMPLANTS[0]) }
     var selectedKit by remember { mutableStateOf("STANDARD") }
+    var selectedMutationTitle by remember { mutableStateOf<String?>(null) }
+
+    val mutationCandidates = remember(selectedClass) { DigitalMutation.rollCandidates(selectedClass) }
 
     var hpPoints by remember { mutableStateOf(0) }
     var ramPoints by remember { mutableStateOf(0) }
@@ -388,6 +391,102 @@ fun CharacterCreationView(
             }
         }
 
+        // Digital Mutation Selection
+        Card(
+            colors = CardDefaults.cardColors(containerColor = CyberCardBg.copy(alpha = 0.85f)),
+            border = BorderStroke(1.dp, CyberBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 8.dp)
+        ) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                Text(
+                    text = "DIGITAL MUTATION PROTOCOL (OPTIONAL):",
+                    color = CyberPurple,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "A single run-modifier injected at birth. Choose none to stay stable.",
+                    color = CyberMutedText,
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 7.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { selectedMutationTitle = null }
+                        .background(
+                            if (selectedMutationTitle == null) CyberGreen.copy(alpha = 0.12f) else CyberDark.copy(alpha = 0.5f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .border(
+                            1.dp,
+                            if (selectedMutationTitle == null) CyberGreen else CyberBorder.copy(alpha = 0.3f),
+                            RoundedCornerShape(4.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                        .testTag("mutation_option_NONE")
+                ) {
+                    Text(
+                        text = if (selectedMutationTitle == null) "▸ NO MUTATION" else "  NO MUTATION",
+                        color = if (selectedMutationTitle == null) CyberGreen else CyberMutedText,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 9.sp,
+                        fontWeight = if (selectedMutationTitle == null) FontWeight.Bold else FontWeight.Normal,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "Stable baseline chassis",
+                        color = CyberMutedText,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 7.sp
+                    )
+                }
+
+                mutationCandidates.forEach { mutation ->
+                    val isSelected = selectedMutationTitle == mutation.title
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 2.dp)
+                            .clickable { selectedMutationTitle = mutation.title }
+                            .background(
+                                if (isSelected) CyberPurple.copy(alpha = 0.15f) else CyberDark.copy(alpha = 0.5f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (isSelected) CyberPurple else CyberBorder.copy(alpha = 0.3f),
+                                RoundedCornerShape(4.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .testTag("mutation_option_${mutation.title.replace(" ", "_")}")
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${"▸ ".takeIf { isSelected } ?: "  "}${mutation.icon} ${mutation.title}",
+                                color = if (isSelected) CyberPurple else CyberBrightGreen,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 9.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                            Text(
+                                text = mutation.effectSummary,
+                                color = CyberMutedText,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 7.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // Start Game Button
         Button(
             onClick = {
@@ -400,7 +499,8 @@ fun CharacterCreationView(
                     allocatedReflexPoints = reflexPoints,
                     allocatedArmorPoints = armorPoints,
                     allocatedFundPoints = fundPoints,
-                    starterKit = selectedKit
+                    starterKit = selectedKit,
+                    mutation = mutationCandidates.firstOrNull { it.title == selectedMutationTitle }
                 )
             },
             colors = ButtonDefaults.buttonColors(containerColor = CyberGreen.copy(alpha = 0.2f)),

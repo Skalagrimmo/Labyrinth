@@ -1673,19 +1673,31 @@ object GameEngine {
             weighted[random.nextInt(weighted.size)]
         }
 
-        val integrity = ((40 + (effectiveLayer * 15)) * chosen.hpMult).toInt() + random.nextInt(15)
-        val shield = ((15 + (effectiveLayer * 10)) * chosen.shieldMult).toInt() + random.nextInt(10)
-        val damage = ((8 + (effectiveLayer * 4)) * chosen.dmgMult).toInt() + random.nextInt(5)
-        val armor = (effectiveLayer + chosen.armorBonus) + random.nextInt(2)
-        val bounty = ((50 + (effectiveLayer * 25)) * chosen.bountyMult).toInt() + random.nextInt(30)
+        // ELITE check: rare signature black-ice that scales with depth. Enhanced stats,
+        // fortified protocols, doubled bounty, and a name badge so it stands out.
+        val isElite = random.nextInt(100) < (8 + effectiveLayer).coerceAtMost(20)
+        val eliteHpMult = if (isElite) 1.6f else 1f
+        val eliteShieldMult = if (isElite) 1.4f else 1f
+        val eliteDmgMult = if (isElite) 1.35f else 1f
+        val eliteArmorBonus = if (isElite) 4 else 0
+        val eliteBountyMult = if (isElite) 2f else 1f
+
+        val integrity = ((40 + (effectiveLayer * 15)) * chosen.hpMult * eliteHpMult).toInt() + random.nextInt(15)
+        val shield = ((15 + (effectiveLayer * 10)) * chosen.shieldMult * eliteShieldMult).toInt() + random.nextInt(10)
+        val damage = ((8 + (effectiveLayer * 4)) * chosen.dmgMult * eliteDmgMult).toInt() + random.nextInt(5)
+        val armor = (effectiveLayer + chosen.armorBonus + eliteArmorBonus) + random.nextInt(2)
+        val bounty = ((50 + (effectiveLayer * 25)) * chosen.bountyMult * eliteBountyMult).toInt() + random.nextInt(30)
 
         val startingEffects = chosen.statusEffects.map { (type, turns) ->
             ActiveStatusEffect(type = type, turnsRemaining = turns, sourceName = chosen.name)
+        }.toMutableList()
+        if (isElite) {
+            startingEffects.add(ActiveStatusEffect(type = StatusEffectType.FORTIFIED, turnsRemaining = 3, sourceName = "ELITE PROTOCOL"))
         }
 
         return Enemy(
             id = "enemy_${System.currentTimeMillis()}_${random.nextInt(10000)}",
-            name = chosen.name,
+            name = if (isElite) "[ELITE] ${chosen.name}" else chosen.name,
             maxIntegrity = integrity,
             integrity = integrity,
             maxShield = shield,
@@ -1694,8 +1706,9 @@ object GameEngine {
             armor = armor,
             iconAscii = chosen.asciiArt,
             bountyCredits = bounty,
-            description = chosen.description,
-            statusEffects = startingEffects.toMutableList()
+            description = if (isElite) "ELITE BLACK-ICE VARIANT // ${chosen.description}" else chosen.description,
+            statusEffects = startingEffects,
+            isElite = isElite
         )
     }
 

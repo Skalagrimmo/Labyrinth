@@ -276,8 +276,8 @@ object GameItemRegistry {
         )
     )
 
-    // Mod-defined items registered at runtime via ContentRegistry (merged into lookups
-    // and drops so a mod never needs to recompile Kotlin).
+// Mod-defined items registered at runtime via ContentRegistry (merged into lookups
+// and drops so a mod never needs to recompile Kotlin).
     private val modItems = mutableListOf<GameItem>()
 
     fun registerModItems(newItems: List<GameItem>) {
@@ -323,4 +323,56 @@ object GameItemRegistry {
         }
         return pool.first()
     }
+}
+
+// Crafting recipes: combine two items at a terminal to forge a new asset.
+data class CraftRecipe(
+    val id: String,
+    val name: String,
+    val description: String,
+    val resultItemName: String,
+    // Pairs of ingredient item name -> quantity required.
+    val ingredients: List<Pair<String, Int>>
+)
+
+object CraftingRecipes {
+    val RECIPES = listOf(
+        CraftRecipe(
+            id = "sys_patch",
+            name = "SYS-PATCH SYNTHESIS",
+            description = "Fuse two medical sticks into a high-grade emergency patch.",
+            resultItemName = "EmergencyPatch.exe",
+            ingredients = listOf("NanoMed.sys" to 2)
+        ),
+        CraftRecipe(
+            id = "cache_refit",
+            name = "CACHE REFIT",
+            description = "Convert liquidated credentials and an acid vial into a full anti-virus purge.",
+            resultItemName = "AntiVirus.sys",
+            ingredients = listOf("Decryptor.pkg" to 1, "CorrosiveAcid.sh" to 1)
+        ),
+        CraftRecipe(
+            id = "overclock",
+            name = "OVERCLOCK MODULE",
+            description = "Overclock a chipset with raw RAM to brew a combat hot-juice.",
+            resultItemName = "OverclockJuice.exe",
+            ingredients = listOf("ChipsetMod.pkg" to 1, "RAMBoost.exe" to 1)
+        ),
+        CraftRecipe(
+            id = "hardening",
+            name = "FIREWALL HARDENING",
+            description = "Plate a firewall buffer with medical micro-bots into living armor.",
+            resultItemName = "AegisBarrier.pkg",
+            ingredients = listOf("FirewallBuffer.pkg" to 1, "NanoMed.sys" to 1)
+        ),
+        CraftRecipe(
+            id = "warpack",
+            name = "WARHEAD REFIT",
+            description = "Re-prime a scavenged EMP grenade with nano-tech into a stun pulse.",
+            resultItemName = "StunPulse.dll",
+            ingredients = listOf("EMPGrenade.bin" to 1, "NanoMed.sys" to 1)
+        )
+    )
+
+    fun find(index: Int): CraftRecipe? = RECIPES.getOrNull(index)
 }

@@ -43,7 +43,7 @@ class ExplorationManager(
         var nextX = state.gridX + state.direction.dx
         var nextY = state.gridY + state.direction.dy
 
-        if (state.activeWeather == CyberWeather.DATA_STORM) {
+        if (state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) {
             if (Random.nextFloat() < 0.40f) {
                 val scrambledDirs = Direction.VALUES.filter { it != state.direction }
                 val scrambledDir = scrambledDirs.random()
@@ -71,6 +71,7 @@ class ExplorationManager(
                 soundManager.playStepSound()
                 addLog("MOVED FORWARD into sub-channel ($nextX, $nextY)")
                 checkCellTriggers(nextX, nextY, cell)
+                rollEnvironmentalEvent()
                 processWeatherOnStep()
 
                 update()
@@ -87,7 +88,7 @@ class ExplorationManager(
         var nextX = state.gridX - state.direction.dx
         var nextY = state.gridY - state.direction.dy
 
-        if (state.activeWeather == CyberWeather.DATA_STORM) {
+        if (state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) {
             if (Random.nextFloat() < 0.40f) {
                 val scrambledDirs = Direction.VALUES
                 val scrambledDir = scrambledDirs.random()
@@ -113,6 +114,7 @@ class ExplorationManager(
                 soundManager.playStepSound()
                 addLog("MOVED BACKWARD into sub-channel ($nextX, $nextY)")
                 checkCellTriggers(nextX, nextY, cell)
+                rollEnvironmentalEvent()
                 processWeatherOnStep()
 
                 update()
@@ -125,7 +127,7 @@ class ExplorationManager(
     fun turnLeft() {
         if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
         _uiState.update { state ->
-            val actualDir = if (state.activeWeather == CyberWeather.DATA_STORM && Random.nextFloat() < 0.4f) {
+            val actualDir = if ((state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) && Random.nextFloat() < 0.4f) {
                 addLog("DATA STORM STATIC: Rotation circuit scrambled!", LogType.ERROR)
                 state.direction.turnRight()
             } else {
@@ -140,7 +142,7 @@ class ExplorationManager(
     fun turnRight() {
         if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
         _uiState.update { state ->
-            val actualDir = if (state.activeWeather == CyberWeather.DATA_STORM && Random.nextFloat() < 0.4f) {
+            val actualDir = if ((state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) && Random.nextFloat() < 0.4f) {
                 addLog("DATA STORM STATIC: Rotation circuit scrambled!", LogType.ERROR)
                 state.direction.turnLeft()
             } else {
@@ -160,6 +162,11 @@ class ExplorationManager(
         val state = uiState
         if (state.screen != ActiveScreen.EXPLORATION) {
             addLog("SCAN ERROR: Sector Logic Radar only available in exploration mode.", LogType.ERROR)
+            return
+        }
+
+        if (state.activeWeather == CyberWeather.GHOST_PROTOCOL) {
+            addLog("SCAN BLOCKED: GHOST PROTOCOL saturation is blanking radar sweeps. Constructs are phased out of spectrum.", LogType.ERROR)
             return
         }
 
@@ -361,6 +368,12 @@ class ExplorationManager(
                         CyberWeather.DATA_STORM -> {
                             pendingLogs.add(Pair("ALERT: Dense signal interference static detected. Direction controllers scrambled!", LogType.ALERT))
                         }
+                        CyberWeather.APEX_STORM -> {
+                            pendingLogs.add(Pair("ALERT: Layered firewall surge overloading the sector. Expect heat bleed and vector scrambling!", LogType.ALERT))
+                        }
+                        CyberWeather.GHOST_PROTOCOL -> {
+                            pendingLogs.add(Pair("ALERT: Phasing field saturating the sector. Constructs are flickering out of spectral range!", LogType.ALERT))
+                        }
                         else -> {}
                     }
 
@@ -397,6 +410,35 @@ class ExplorationManager(
                                 pendingLogs.add(Pair("COLD SPOT FREEZE: Sluggish bus drained 1 MB RAM.", LogType.ERROR))
                             }
                         }
+                        CyberWeather.APEX_STORM -> {
+                            if (Random.nextFloat() < 0.30f) {
+                                val surgeDmg = 1 + Random.nextInt(3)
+                                integrity = (integrity - surgeDmg).coerceAtLeast(1)
+                                pendingLogs.add(Pair("APEX SURGE: Firewall flare scorched the runner for $surgeDmg integrity.", LogType.ERROR))
+                            }
+                        }
+                        CyberWeather.GHOST_PROTOCOL -> {
+                            if (Random.nextFloat() < 0.25f) {
+                                val mutableMaze = Array(currentMaze.size) { r -> currentMaze[r].copyOf() }
+                                var placed = false
+                                for (attempt in 0..24) {
+                                    if (placed) break
+                                    val rx = state.gridX + Random.nextInt(-2, 3)
+                                    val ry = state.gridY + Random.nextInt(-2, 3)
+                                    if (rx < 0 || ry < 0 || ry >= mutableMaze.size || rx >= mutableMaze[0].size) continue
+                                    if (rx == state.gridX && ry == state.gridY) continue
+                                    if (rx == 1 && ry == 1) continue
+                                    if (mutableMaze[ry][rx] == CellType.PATH) {
+                                        mutableMaze[ry][rx] = CellType.ECHO
+                                        placed = true
+                                    }
+                                }
+                                if (placed) {
+                                    currentMaze = mutableMaze
+                                    pendingLogs.add(Pair("GHOST PROTOCOL: A phased remnant flickered into reality nearby.", LogType.ALERT))
+                                }
+                            }
+                        }
                         else -> {}
                     }
 
@@ -423,6 +465,78 @@ class ExplorationManager(
     // ----------------------------------------------------
     // Cell Triggers
     // ----------------------------------------------------
+
+    /**
+     * Random ambient environmental events that occasionally fire after a movement step.
+     * Includes roaming vendors, distress data streams, phantom probes, forecast telemetry
+     * bursts, and intercepted data diodes.
+     */
+    private fun rollEnvironmentalEvent() {
+        val state = uiState
+        if (state.screen != ActiveScreen.EXPLORATION) return
+        if (Random.nextFloat() > 0.09f) return
+
+        when (1 + Random.nextInt(5)) {
+            1 -> {
+                val drop = GameItemRegistry.getRandomExplorationDrop(state.level)
+                val cost = (drop.valueCredits / 2).coerceAtLeast(10)
+                if (state.credits >= cost) {
+                    _uiState.update {
+                        it.copy(
+                            credits = it.credits - cost,
+                            inventory = it.inventory + drop.name,
+                            environmentalEventsEncountered = it.environmentalEventsEncountered + 1
+                        )
+                    }
+                    addLog("ENVIRONMENTAL EVENT: Roving vendor signal intercepted. Purchased ${drop.name} for $cost MB (half-price).", LogType.SUCCESS)
+                } else {
+                    addLog("ENVIRONMENTAL EVENT: Roving vendor signal faded before funds cleared.", LogType.ALERT)
+                }
+            }
+            2 -> {
+                val xp = 30 + Random.nextInt(40)
+                _uiState.update { it.copy(environmentalEventsEncountered = it.environmentalEventsEncountered + 1) }
+                onAddExperience(xp)
+                addLog("ENVIRONMENTAL EVENT: Distress data stream decoded. +$xp EXPERIENCE.", LogType.SUCCESS)
+            }
+            3 -> {
+                val maze = state.maze
+                var placed = false
+                for (attempt in 0..24) {
+                    if (placed) break
+                    val rx = state.gridX + Random.nextInt(-3, 4)
+                    val ry = state.gridY + Random.nextInt(-3, 4)
+                    if (rx < 1 || ry < 1 || ry >= maze.size - 1 || rx >= maze[0].size - 1) continue
+                    if (maze[ry][rx] == CellType.PATH) {
+                        val updatedMaze = maze.map { it.clone() }.toTypedArray()
+                        updatedMaze[ry][rx] = CellType.VIRUS_NODE
+                        _uiState.update {
+                            it.copy(maze = updatedMaze, environmentalEventsEncountered = it.environmentalEventsEncountered + 1)
+                        }
+                        placed = true
+                    }
+                }
+                if (placed) addLog("ENVIRONMENTAL EVENT: Phantom probe drift detected! A hostile VIRUS_NODE coalesced nearby.", LogType.ALERT)
+            }
+            4 -> {
+                _uiState.update {
+                    it.copy(stepsSinceLastEvent = it.nextEventSteps, environmentalEventsEncountered = it.environmentalEventsEncountered + 1)
+                }
+                addLog("ENVIRONMENTAL EVENT: Forecast telemetry burst! Upcoming grid weather will materialize on the next step.", LogType.SUCCESS)
+            }
+            else -> {
+                val frags = 1 + Random.nextInt(2)
+                _uiState.update {
+                    it.copy(
+                        dataFragments = it.dataFragments + frags,
+                        totalDataFragmentsExtracted = it.totalDataFragmentsExtracted + frags,
+                        environmentalEventsEncountered = it.environmentalEventsEncountered + 1
+                    )
+                }
+                addLog("ENVIRONMENTAL EVENT: Data diode intercepted. +$frags DATA FRAGMENTS.", LogType.SUCCESS)
+            }
+        }
+    }
 
     private fun checkCellTriggers(x: Int, y: Int, cell: CellType) {
         when (cell) {

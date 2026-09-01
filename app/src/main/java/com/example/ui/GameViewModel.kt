@@ -181,7 +181,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val unlockedSkills: Set<String> = emptySet(),
         val tutorialStep: Int = 0,
         val tutorialActive: Boolean = false,
-        val tutorialSeen: Boolean = false
+        val tutorialSeen: Boolean = false,
+        val selectedMutationTitle: String = "",
+        val environmentalEventsEncountered: Int = 0
     )
 
     private val _uiState = MutableStateFlow(GameUiState())
@@ -382,7 +384,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun loadGame() = persistenceManager.loadGame()
     fun hasSavedGame() = persistenceManager.hasSavedGame()
 
-    fun createCharacter(name: String, selectedClass: NetrunnerClass, startingImplant: CyberwareImplant? = null, allocatedHpPoints: Int = 0, allocatedRamPoints: Int = 0, allocatedReflexPoints: Int = 0, allocatedArmorPoints: Int = 0, allocatedFundPoints: Int = 0, starterKit: String = "STANDARD") {
+    fun createCharacter(name: String, selectedClass: NetrunnerClass, startingImplant: CyberwareImplant? = null, allocatedHpPoints: Int = 0, allocatedRamPoints: Int = 0, allocatedReflexPoints: Int = 0, allocatedArmorPoints: Int = 0, allocatedFundPoints: Int = 0, starterKit: String = "STANDARD", mutation: DigitalMutation? = null) {
         val cleanName = name.ifBlank { "Runner_${Random.nextInt(1000, 9999)}" }
         val baseProg = GameEngine.getStartingPrograms(selectedClass)
         var baseCredits = when (selectedClass) { NetrunnerClass.TECHIE, NetrunnerClass.SCRIPT_KIDDIE -> 300; NetrunnerClass.NETRUNNER -> 150; else -> 100 }
@@ -392,14 +394,22 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val chosenImplant = startingImplant ?: _uiState.value.selectedStartingImplant
         val initialImplantsMap = mapOf(chosenImplant.slot to chosenImplant)
         val starterStoredImplants = CyberwareImplantRegistry.STARTER_IMPLANTS.filter { it.slot != chosenImplant.slot }.take(2)
-        val initMaxHp = selectedClass.baseIntegrity + chosenImplant.integrityBonus + (allocatedHpPoints * 10)
+        val initMaxHp = (selectedClass.baseIntegrity + chosenImplant.integrityBonus + (allocatedHpPoints * 10))
         val initMaxRam = selectedClass.baseRam + chosenImplant.ramBonus + (allocatedRamPoints * 2)
         val initRecovery = (if (selectedClass == NetrunnerClass.NETRUNNER) 3 else 2) + chosenImplant.recoveryBonus
         val initDamage = chosenImplant.damageBonus + allocatedReflexPoints
         val initDefense = (if (selectedClass == NetrunnerClass.TECHIE) 5 else 0) + chosenImplant.defenseBonus + allocatedArmorPoints
         val startShieldMax = if (selectedClass == NetrunnerClass.STREET_SAMURAI || selectedClass == NetrunnerClass.CYBER_SHIELD) 75 else 50
         val startShieldCurrent = if (selectedClass == NetrunnerClass.STREET_SAMURAI || selectedClass == NetrunnerClass.CYBER_SHIELD) 25 else 10
-        _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION, runnerName = cleanName, runnerClass = selectedClass, selectedStartingImplant = chosenImplant, installedImplants = initialImplantsMap, storedImplants = starterStoredImplants, maxIntegrity = initMaxHp, integrity = initMaxHp, playerMaxShield = startShieldMax, playerShield = startShieldCurrent, maxRam = initMaxRam, ram = initMaxRam, ramRecoveryRate = initRecovery, damageBonus = initDamage, defenseBonus = initDefense, credits = baseCredits, totalCreditsEarned = baseCredits, installedPrograms = baseProg, inventory = startInv, level = 1, gridX = 1, gridY = 1, direction = Direction.EAST, nodesHackedCount = 0, equippedWeaponName = weaponName, hasUsedEmergencyRebootThisRun = false, kineticShieldActiveThisCombat = true, logFeed = emptyList()) }
+        val mutationTitle = mutation?.title ?: ""
+        val finalMaxHp = (initMaxHp * (mutation?.hpMult ?: 1f)).toInt() + (mutation?.integrityBonus ?: 0)
+        val finalMaxRam = initMaxRam + (mutation?.ramMaxBonus ?: 0)
+        val finalRecovery = initRecovery + (mutation?.ramRecoveryBonus ?: 0)
+        val finalDamage = initDamage + (mutation?.dmgBonus ?: 0)
+        val finalDefense = initDefense + (mutation?.defBonus ?: 0)
+        val finalShieldMax = startShieldMax + (mutation?.shieldMaxBonus ?: 0)
+        val finalCredits = baseCredits + (mutation?.creditBonus ?: 0)
+        _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION, runnerName = cleanName, runnerClass = selectedClass, selectedStartingImplant = chosenImplant, installedImplants = initialImplantsMap, storedImplants = starterStoredImplants, maxIntegrity = finalMaxHp, integrity = finalMaxHp, playerMaxShield = finalShieldMax, playerShield = startShieldCurrent, maxRam = finalMaxRam, ram = finalMaxRam, ramRecoveryRate = finalRecovery, damageBonus = finalDamage, defenseBonus = finalDefense, credits = finalCredits, totalCreditsEarned = finalCredits, installedPrograms = baseProg, inventory = startInv, level = 1, gridX = 1, gridY = 1, direction = Direction.EAST, nodesHackedCount = 0, equippedWeaponName = weaponName, hasUsedEmergencyRebootThisRun = false, kineticShieldActiveThisCombat = true, selectedMutationTitle = mutationTitle, logFeed = emptyList()) }
         if (!_uiState.value.tutorialSeen) {
             _uiState.update { it.copy(tutorialActive = true, tutorialStep = 0) }
         }
@@ -407,6 +417,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.saveProfile(profileEntity) }
         addLog("==========================================", LogType.SUCCESS); addLog("PROFILE SYNCHRONIZED: $cleanName [${selectedClass.title}]", LogType.SUCCESS); addLog("SPECIALIZATION: ${selectedClass.passiveDesc}", LogType.INFO); addLog("STARTER IMPLANT INJECTED: ${chosenImplant.name} [${chosenImplant.slot.displayName.uppercase()}]", LogType.SUCCESS)
         if (chosenImplant.passiveAbility != null) addLog("  IMPLANT PASSIVE: ${chosenImplant.passiveAbility.title} - ${chosenImplant.passiveAbility.description}", LogType.INFO)
+        if (mutation != null) {
+            addLog("MUTATION PROTOCOL INJECTED: ${mutation.icon} ${mutation.title}", LogType.SUCCESS)
+            addLog("  EFFECT: ${mutation.effectSummary}", LogType.INFO)
+        }
         addLog("INITIALIZING CYBER-SECTOR GRID...", LogType.ALERT)
         explorationManager.loadOrCreateLevel(Zone.BUILDING, 1, 1, 1)
     }
@@ -433,6 +447,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("SKILLS: 'skilltree', 'skill learn <HACKING|COMBAT|ENGINEERING> <#>', 'skill points'", LogType.INFO)
                 addLog("TUTORIAL: 'tutorial next', 'tutorial skip'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>'", LogType.INFO)
+                addLog("CRAFTING: 'craft' (list recipes), 'craft <n>' (combine at terminal)", LogType.INFO)
                 addLog("SHARING: 'export' (copy save), 'import' (paste save), 'seed' (show level seed)", LogType.INFO)
             }
             "status", "stats", "info", "xp", "level", "lvl" -> {
@@ -441,6 +456,35 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("XP: ${state.characterXp} / ${state.xpToNextLevel} (${((state.characterXp.toFloat() / state.xpToNextLevel.coerceAtLeast(1)) * 100).toInt()}%)", LogType.SUCCESS)
                 addLog("INTEGRITY: ${state.integrity}/${state.maxIntegrity} | RAM: ${state.ram}/${state.maxRam}MB | SHIELD: ${state.playerShield}/${state.playerMaxShield}", LogType.INFO)
                 addLog("CREDITS: ${state.credits}MB | DMG: +${state.damageBonus} | WEAPON: ${state.equippedWeaponName}", LogType.INFO)
+                addLog("MUTATION: ${state.selectedMutationTitle.ifEmpty { "NONE STABLE" }} | ENV EVENTS: ${state.environmentalEventsEncountered}", LogType.INFO)
+            }
+            "craft", "combine", "crafting" -> {
+                val recipeIndex = parts.getOrNull(1)?.toIntOrNull()
+                if (recipeIndex == null) {
+                    addLog("=== TERMINAL CRAFTING PROTOCOL ===", LogType.SUCCESS)
+                    addLog("Usage: 'craft <n>' where n is a recipe index.", LogType.INFO)
+                    CraftingRecipes.RECIPES.forEachIndexed { idx, recipe ->
+                        val ingredientText = recipe.ingredients.joinToString(" + ") { ingredient -> if (ingredient.second > 1) "${ingredient.first} x${ingredient.second}" else ingredient.first }
+                        addLog("[$idx] ${recipe.name}: $ingredientText -> ${recipe.resultItemName}", LogType.SUCCESS)
+                        addLog("      ${recipe.description}", LogType.INFO)
+                    }
+                } else {
+                    val recipe = CraftingRecipes.find(recipeIndex)
+                    if (recipe == null) {
+                        addLog("ERROR: Unknown recipe index '$recipeIndex'. Type 'craft' to list recipes.", LogType.ERROR)
+                    } else {
+                        val missing = recipe.ingredients.firstOrNull { ingredient -> !hasItemInInventory(ingredient.first, ingredient.second) }
+                        if (missing != null) {
+                            addLog("CRAFT FAILED: Missing ingredient '${missing.first}' (x${missing.second}).", LogType.ERROR)
+                        } else {
+                            recipe.ingredients.forEach { ingredient -> removeItemFromInventory(ingredient.first, ingredient.second) }
+                            addItemToInventory(recipe.resultItemName, 1)
+                            val ingredientText = recipe.ingredients.joinToString(" + ") { ingredient -> if (ingredient.second > 1) "${ingredient.first} x${ingredient.second}" else ingredient.first }
+                            addLog("CRAFT SUCCESSFUL: ${recipe.name} completed! [$ingredientText] -> ${recipe.resultItemName} added to inventory.", LogType.SUCCESS)
+                            soundManager.playLootCollectionSound()
+                        }
+                    }
+                }
             }
             "exit", "close" -> {
                 when (state.screen) {
