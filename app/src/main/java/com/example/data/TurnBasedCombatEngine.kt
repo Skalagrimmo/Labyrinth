@@ -5,64 +5,6 @@ import kotlin.math.min
 import kotlin.random.Random
 
 /**
- * Combat turn enum tracking active combat turn state.
- */
-enum class EngineCombatTurn {
-    PLAYER_TURN,
-    ENEMY_TURN,
-    ANIMATING,
-    COMBAT_ENDED
-}
-
-/**
- * Status effects applied during turn-based combat engine calculations.
- */
-data class CombatStatusEffect(
-    val id: String = Random.nextInt(10000, 99999).toString(),
-    val name: String,
-    val type: StatusEffectType,
-    val durationTurns: Int,
-    val potency: Int
-)
-
-/**
- * Complete immutable snapshot of the Turn-Based Combat State.
- */
-data class CombatEngineState(
-    val turn: EngineCombatTurn = EngineCombatTurn.PLAYER_TURN,
-    val turnNumber: Int = 1,
-    
-    // Player Fighter Stats
-    val playerName: String = "V-Netrunner",
-    val playerHealth: Int = 100,
-    val playerMaxHealth: Int = 100,
-    val playerShield: Int = 25,
-    val playerMaxShield: Int = 50,
-    val playerRam: Int = 12,
-    val playerMaxRam: Int = 12,
-    val playerLevel: Int = 1,
-    val playerStance: String = "Strike",
-    val isPlayerDefending: Boolean = false,
-    
-    // Hostile Cyber-Enemy Stats
-    val enemyName: String = "Arasaka ICE-Sentinel",
-    val enemyHealth: Int = 80,
-    val enemyMaxHealth: Int = 80,
-    val enemyShield: Int = 30,
-    val enemyMaxShield: Int = 30,
-    val enemyBaseDamage: Int = 15,
-    val enemyArmor: Int = 5,
-    val isEnemyStunned: Boolean = false,
-    
-    // Status Effects & Logs
-    val activeStatusEffects: List<CombatStatusEffect> = emptyList(),
-    val combatLog: List<String> = emptyList(),
-    val lastActionSummary: String = "",
-    val isCombatOver: Boolean = false,
-    val winner: CombatWinner? = null
-)
-
-/**
  * Sealed class defining all valid player tactical inputs in turn-based combat.
  */
 sealed class PlayerCombatAction {
