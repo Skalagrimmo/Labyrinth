@@ -15,15 +15,6 @@ enum class EngineCombatTurn {
 }
 
 /**
- * Outcome winner of the combat encounter.
- */
-enum class CombatWinner {
-    PLAYER,
-    ENEMY,
-    ESCAPED
-}
-
-/**
  * Status effects applied during turn-based combat engine calculations.
  */
 data class CombatStatusEffect(
