@@ -104,7 +104,7 @@ object EnemyCombatAIScript {
         )
     }
 
-    private fun evaluateOverlord(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerRam: Int): EnemyAIDecision {
+    private fun evaluateOverlord(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerRam: Int, random: Random): EnemyAIDecision {
         // Phase 2 at 60% HP: summon daemons
         if (healthRatio < 0.60f && boss.bossPhase == 1) {
             boss.bossPhase = 2
