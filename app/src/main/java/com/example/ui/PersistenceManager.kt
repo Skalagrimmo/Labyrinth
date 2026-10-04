@@ -29,85 +29,14 @@ class PersistenceManager(
     // Serialization Helpers
     // ----------------------------------------------------
 
-    private fun serializeMaze(maze: Array<Array<CellType>>): String {
-        return maze.joinToString(";") { row ->
-            row.joinToString(",") { it.name }
-        }
-    }
-
-    private fun deserializeMaze(str: String): Array<Array<CellType>> {
-        if (str.isEmpty()) return emptyArray()
-        val rows = str.split(";")
-        return rows.map { row ->
-            row.split(",").map { cellName ->
-                try {
-                    CellType.valueOf(cellName)
-                } catch (e: Exception) {
-                    CellType.WALL
-                }
-            }.toTypedArray()
-        }.toTypedArray()
-    }
-
-    private fun serializeExploredCells(cells: Set<Pair<Int, Int>>): String {
-        return cells.joinToString(";") { "${it.first},${it.second}" }
-    }
-
-    private fun deserializeExploredCells(str: String): Set<Pair<Int, Int>> {
-        if (str.isEmpty()) return emptySet()
-        return str.split(";").mapNotNull {
-            val parts = it.split(",")
-            if (parts.size == 2) {
-                val first = parts[0].toIntOrNull()
-                val second = parts[1].toIntOrNull()
-                if (first != null && second != null) {
-                    Pair(first, second)
-                } else null
-            } else null
-        }.toSet()
-    }
-
-    private fun serializeFloors(floors: Map<Int, Array<Array<CellType>>>): String {
-        return floors.map { (floor, maze) ->
-            "$floor:${serializeMaze(maze)}"
-        }.joinToString("|")
-    }
-
-    private fun deserializeFloors(str: String): Map<Int, Array<Array<CellType>>> {
-        if (str.isEmpty()) return emptyMap()
-        val map = mutableMapOf<Int, Array<Array<CellType>>>()
-        str.split("|").forEach { entry ->
-            val parts = entry.split(":", limit = 2)
-            if (parts.size == 2) {
-                val floor = parts[0].toIntOrNull()
-                if (floor != null) {
-                    map[floor] = deserializeMaze(parts[1])
-                }
-            }
-        }
-        return map
-    }
-
-    private fun serializeExploredMap(explored: Map<Int, Set<Pair<Int, Int>>>): String {
-        return explored.map { (floor, cells) ->
-            "$floor:${serializeExploredCells(cells)}"
-        }.joinToString("|")
-    }
-
-    private fun deserializeExploredMap(str: String): Map<Int, Set<Pair<Int, Int>>> {
-        if (str.isEmpty()) return emptyMap()
-        val map = mutableMapOf<Int, Set<Pair<Int, Int>>>()
-        str.split("|").forEach { entry ->
-            val parts = entry.split(":", limit = 2)
-            if (parts.size == 2) {
-                val floor = parts[0].toIntOrNull()
-                if (floor != null) {
-                    map[floor] = deserializeExploredCells(parts[1])
-                }
-            }
-        }
-        return map
-    }
+    private fun serializeMaze(maze: Array<Array<CellType>>): String = SaveDataCodec.serializeMaze(maze)
+    private fun deserializeMaze(str: String): Array<Array<CellType>> = SaveDataCodec.deserializeMaze(str)
+    private fun serializeExploredCells(cells: Set<Pair<Int, Int>>): String = SaveDataCodec.serializeExploredCells(cells)
+    private fun deserializeExploredCells(str: String): Set<Pair<Int, Int>> = SaveDataCodec.deserializeExploredCells(str)
+    private fun serializeFloors(floors: Map<Int, Array<Array<CellType>>>): String = SaveDataCodec.serializeFloors(floors)
+    private fun deserializeFloors(str: String): Map<Int, Array<Array<CellType>>> = SaveDataCodec.deserializeFloors(str)
+    private fun serializeExploredMap(explored: Map<Int, Set<Pair<Int, Int>>>): String = SaveDataCodec.serializeExploredMap(explored)
+    private fun deserializeExploredMap(str: String): Map<Int, Set<Pair<Int, Int>>> = SaveDataCodec.deserializeExploredMap(str)
 
     // ----------------------------------------------------
     // Lookup Helpers
@@ -810,12 +739,12 @@ class PersistenceManager(
         json.put("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
 
         val encoded = android.util.Base64.encodeToString(json.toString().toByteArray(), android.util.Base64.NO_WRAP)
-        return "NETCRAWLER_SAVE_v1:$encoded"
+        return SaveDataCodec.PORTABLE_SAVE_PREFIX + encoded
     }
 
     fun importSave(encoded: String): Boolean {
         try {
-            val stripped = encoded.removePrefix("NETCRAWLER_SAVE_v1:")
+            val stripped = encoded.removePrefix(SaveDataCodec.PORTABLE_SAVE_PREFIX)
             val jsonStr = String(android.util.Base64.decode(stripped, android.util.Base64.NO_WRAP))
             val json = JSONObject(jsonStr)
 
@@ -939,7 +868,7 @@ class PersistenceManager(
             return
         }
         val text = clip.getItemAt(0).text?.toString() ?: ""
-        if (!text.startsWith("NETCRAWLER_SAVE_v1:")) {
+        if (!text.startsWith(SaveDataCodec.PORTABLE_SAVE_PREFIX)) {
             onLog("CLIPBOARD DOES NOT CONTAIN A VALID NETCRAWLER SAVE.", LogType.ERROR)
             return
         }
