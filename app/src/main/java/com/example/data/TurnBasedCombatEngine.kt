@@ -53,13 +53,12 @@ object TurnBasedCombatEngine {
             }
 
             is PlayerCombatAction.Defend -> {
-                val shieldRestored = 15 + (state.playerLevel * 3)
-                val newShield = min(state.playerMaxShield, state.playerShield + shieldRestored)
+                val resolution = CombatDefendRules.resolve(state)
                 state = state.copy(
-                    playerShield = newShield,
+                    playerShield = resolution.playerShield,
                     isPlayerDefending = true
                 )
-                logs.add("🛡️ DEFENSIVE FIREWALL RAISED: Shield restored by $shieldRestored points!")
+                logs.add("🛡️ DEFENSIVE FIREWALL RAISED: Shield restored by ${resolution.shieldRestored} points!")
             }
 
             is PlayerCombatAction.RunProgram -> {
@@ -90,22 +89,18 @@ object TurnBasedCombatEngine {
             }
 
             is PlayerCombatAction.ConsumeItem -> {
-                when (action.itemName) {
-                    "NanoMed.sys" -> {
-                        val heal = 35
-                        val newHp = min(state.playerMaxHealth, state.playerHealth + heal)
-                        state = state.copy(playerHealth = newHp)
-                        logs.add("💊 CONSUMED NanoMed.sys: Reclaimed $heal Integrity.")
-                    }
-                    "RAMBoost.exe" -> {
-                        val boost = 6
-                        val newRam = min(state.playerMaxRam, state.playerRam + boost)
-                        state = state.copy(playerRam = newRam)
-                        logs.add("🧪 CONSUMED RAMBoost.exe: Allocated $boost MB RAM.")
-                    }
-                    else -> {
+                val resolution = CombatItemRules.resolve(state, action.itemName)
+                state = state.copy(
+                    playerHealth = resolution.playerHealth,
+                    playerRam = resolution.playerRam
+                )
+                when (resolution.effect) {
+                    UtilityItemEffect.HEAL ->
+                        logs.add("💊 CONSUMED NanoMed.sys: Reclaimed ${resolution.appliedAmount} Integrity.")
+                    UtilityItemEffect.RAM ->
+                        logs.add("🧪 CONSUMED RAMBoost.exe: Allocated ${resolution.appliedAmount} MB RAM.")
+                    UtilityItemEffect.NONE ->
                         logs.add("USED UTILITY ITEM: ${action.itemName}.")
-                    }
                 }
             }
 
