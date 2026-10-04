@@ -54,11 +54,13 @@ object TurnBasedCombatEngine {
                     dmgToEnemy = max(3, rawDmg - effectiveArmor)
 
                     // Apply damage to shield first, then core health
-                    val (remShield, remHealth) = applyDamageToShieldAndHealth(
+                    val damageResolution = CombatDamageRules.resolveShieldFirst(
                         currentShield = state.enemyShield,
                         currentHealth = state.enemyHealth,
                         damage = dmgToEnemy
                     )
+                    val remShield = damageResolution.remainingShield
+                    val remHealth = damageResolution.remainingHealth
 
                     state = state.copy(
                         enemyShield = remShield,
@@ -292,15 +294,5 @@ object TurnBasedCombatEngine {
         )
     }
 
-    private fun applyDamageToShieldAndHealth(
-        currentShield: Int,
-        currentHealth: Int,
-        damage: Int
-    ): Pair<Int, Int> {
-        val remShield = max(0, currentShield - damage)
-        val shieldAbsorbed = currentShield - remShield
-        val hpDamage = damage - shieldAbsorbed
-        val remHp = max(0, currentHealth - hpDamage)
-        return Pair(remShield, remHp)
-    }
+}
 }
