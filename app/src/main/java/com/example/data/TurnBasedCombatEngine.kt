@@ -105,7 +105,8 @@ object TurnBasedCombatEngine {
             }
 
             is PlayerCombatAction.ScanEnemy -> {
-                state = state.copy(isEnemyStunned = true)
+                val scan = CombatScanRules.resolve()
+                state = state.copy(isEnemyStunned = scan.isEnemyStunned)
                 logs.add("🔍 SYSTEM SCAN COMPLETE: Enemy telemetry analyzed. Hostile signal stunned for 1 turn!")
             }
 
