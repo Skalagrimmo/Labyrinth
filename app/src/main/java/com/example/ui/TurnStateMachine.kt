@@ -10,6 +10,29 @@ import com.example.data.TurnPhase
  * Coroutine pacing, Room synchronization and UI event emission remain in GameTurnViewModel.
  */
 object TurnStateMachine {
+    fun transition(state: GameTurnUiState, target: TurnStateEnum): GameTurnUiState =
+        when (target) {
+            TurnStateEnum.PLAYER -> state.copy(
+                turnStateEnum = TurnStateEnum.PLAYER,
+                isInputLocked = false,
+                isPlayerTurn = true,
+                isEnemyActing = false,
+                turnPhase = TurnPhase.PLAYER_INPUT,
+                turnState = TurnState.PlayerTurn(state.currentTurn, isInputEnabled = true),
+                statusBanner = "ROUND ${state.currentTurn}: YOUR TURN"
+            )
+            TurnStateEnum.ENEMY -> beginEnemyTurn(
+                state,
+                state.activeEnemyName ?: "Hostile Target"
+            )
+            TurnStateEnum.PROCESSING -> state.copy(
+                turnStateEnum = TurnStateEnum.PROCESSING,
+                isInputLocked = true,
+                turnPhase = TurnPhase.ROUND_MAINTENANCE,
+                statusBanner = "PROCESSING TURN ACTIONS..."
+            )
+        }
+
     fun initialize(state: GameTurnUiState, enemyName: String, initialTurn: Int = 1): GameTurnUiState =
         state.copy(
             currentTurn = initialTurn,
