@@ -234,12 +234,23 @@ abstract class GameDatabase : RoomDatabase() {
     }
 }
 
+interface SaveRepository {
+    suspend fun insert(record: RunRecord)
+    suspend fun clearAll()
+    suspend fun saveProfile(profile: CharacterProfileEntity)
+    suspend fun saveGameProgress(
+        saveProgress: GameSaveProgressEntity,
+        inventoryItems: List<InventoryItemEntity>
+    )
+    suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity?
+}
+
 class GameRepository(
     private val runRecordDao: RunRecordDao,
     private val characterProfileDao: CharacterProfileDao,
     private val gameSaveProgressDao: GameSaveProgressDao,
     private val inventoryItemDao: InventoryItemDao
-) {
+) : SaveRepository {
     val allRunRecords: Flow<List<RunRecord>> = runRecordDao.getAllRecords()
     val allCharacterProfiles: Flow<List<CharacterProfileEntity>> = characterProfileDao.getAllProfiles()
     val currentSaveProgress: Flow<GameSaveProgressEntity?> = gameSaveProgressDao.getSaveProgress("current_save")
