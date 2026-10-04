@@ -14,7 +14,7 @@ import kotlinx.coroutines.launch
 class PersistenceManager(
     private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
     private val application: Application,
-    private val repository: GameRepository,
+    private val repository: SaveRepository,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
     private val onRestoreComplete: () -> Unit
