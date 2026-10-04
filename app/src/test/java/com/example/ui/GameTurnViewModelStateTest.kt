@@ -54,7 +54,7 @@ class GameTurnViewModelStateTest {
 
         val record = TurnActionRecord(
             roundNumber = 1, actorName = "Daemon", isPlayer = false,
-            actionType = CombatActionType.ATTACK, summary = "Pulse", damageDealt = 4
+            actionType = CombatActionType.STRIKE, summary = "Pulse", damageDealt = 4
         )
         vm.recordEnemyAction(record)
         val s = vm.turnUiState.value
