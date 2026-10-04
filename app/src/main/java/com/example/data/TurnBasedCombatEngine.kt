@@ -5,36 +5,6 @@ import kotlin.math.min
 import kotlin.random.Random
 
 /**
- * Sealed class defining all valid player tactical inputs in turn-based combat.
- */
-sealed class PlayerCombatAction {
-    data class Strike(val stance: String = "Strike") : PlayerCombatAction()
-    object Defend : PlayerCombatAction()
-    data class RunProgram(
-        val programName: String,
-        val ramCost: Int,
-        val damage: Int,
-        val heal: Int,
-        val shield: Int
-    ) : PlayerCombatAction()
-    data class ConsumeItem(val itemName: String) : PlayerCombatAction()
-    object ScanEnemy : PlayerCombatAction()
-    object Flee : PlayerCombatAction()
-}
-
-/**
- * Engine result container returned after state calculation.
- */
-data class CombatTurnResult(
-    val newState: CombatEngineState,
-    val logMessages: List<String>,
-    val damageDealtToEnemy: Int = 0,
-    val damageDealtToPlayer: Int = 0,
-    val wasCrit: Boolean = false,
-    val wasMiss: Boolean = false
-)
-
-/**
  * Dedicated Turn-Based Combat System Engine.
  * Encapsulates game state management, turn execution sequence, Morrowind-style dice calculations,
  * status effect ticks, and AI combat decision trees.
