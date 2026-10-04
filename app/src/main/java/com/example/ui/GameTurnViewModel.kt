@@ -767,32 +767,11 @@ class GameTurnViewModel(
      */
     fun initializeEncounter(enemyName: String, initialTurn: Int = 1) {
         activeTurnJob?.cancel()
-        _turnUiState.update { state ->
-            state.copy(
-                currentTurn = initialTurn,
-                turnStateEnum = TurnStateEnum.PLAYER,
-                turnState = TurnState.PlayerTurn(initialTurn, isInputEnabled = true),
-                turnPhase = TurnPhase.PLAYER_INPUT,
-                isInputLocked = false,
-                isPlayerTurn = true,
-                isEnemyActing = false,
-                activeEnemyName = enemyName,
-                lastPlayerAction = null,
-                lastEnemyAction = null,
-                actionHistory = emptyList(),
-                totalPlayerActions = 0,
-                totalEnemyTurns = 0,
-                statusBanner = "ROUND $initialTurn: READY"
-            )
-        }
+        _turnUiState.value = TurnStateMachine.initialize(_turnUiState.value, enemyName, initialTurn)
         _turnEvents.tryEmit(TurnCombatEvent.TurnStarted(initialTurn, isPlayer = true))
         _turnEvents.tryEmit(TurnCombatEvent.InputUnlocked(initialTurn))
     }
 
-    /**
-     * Submits a player action into the turn lifecycle.
-     * Automatically locks user input and advances state to resolving.
-     */
     fun startPlayerAction(
         actionType: CombatActionType,
         description: String,
@@ -804,176 +783,69 @@ class GameTurnViewModel(
         isMiss: Boolean = false,
         statusApplied: String? = null
     ): TurnActionRecord {
-        val currentTurn = _turnUiState.value.currentTurn
         val record = TurnActionRecord(
-            roundNumber = currentTurn,
-            actorName = actorName,
-            isPlayer = true,
-            actionType = actionType,
-            summary = description,
-            damageDealt = damageDealt,
-            shieldAbsorbed = shieldAbsorbed,
-            healAmount = healAmount,
-            isCrit = isCrit,
-            isMiss = isMiss,
-            statusApplied = statusApplied
+            roundNumber = _turnUiState.value.currentTurn, actorName = actorName, isPlayer = true,
+            actionType = actionType, summary = description, damageDealt = damageDealt,
+            shieldAbsorbed = shieldAbsorbed, healAmount = healAmount, isCrit = isCrit,
+            isMiss = isMiss, statusApplied = statusApplied
         )
-
-        _turnUiState.update { state ->
-            state.copy(
-                turnStateEnum = TurnStateEnum.PROCESSING,
-                isInputLocked = true,
-                isPlayerTurn = false,
-                turnState = TurnState.PlayerResolving(currentTurn, actionType, description),
-                turnPhase = TurnPhase.PLAYER_RESOLVING,
-                lastPlayerAction = record,
-                actionHistory = state.actionHistory + record,
-                totalPlayerActions = state.totalPlayerActions + 1,
-                statusBanner = description
-            )
-        }
-
+        _turnUiState.value = TurnStateMachine.startPlayerAction(_turnUiState.value, record)
         _turnEvents.tryEmit(TurnCombatEvent.InputLocked("Player action resolving: $description"))
         _turnEvents.tryEmit(TurnCombatEvent.ActionExecuted(record))
         _turnEvents.tryEmit(TurnCombatEvent.PhaseChanged(TurnPhase.PLAYER_RESOLVING))
         return record
     }
 
-    /**
-     * Transitions from player action resolution into the enemy/NPC turn cycle.
-     * Guarantees input remains strictly locked during the hostile AI cycle.
-     */
     fun beginEnemyTurnCycle(
         enemyName: String,
         enemyIntent: String? = null,
         enemyActionExecution: (suspend () -> TurnActionRecord)? = null
     ) {
-        val currentTurn = _turnUiState.value.currentTurn
         activeTurnJob?.cancel()
-
-        _turnUiState.update { state ->
-            state.copy(
-                turnStateEnum = TurnStateEnum.ENEMY,
-                isInputLocked = true,
-                isPlayerTurn = false,
-                isEnemyActing = true,
-                activeEnemyName = enemyName,
-                turnState = TurnState.EnemyTurn(currentTurn, enemyName, enemyIntent),
-                turnPhase = TurnPhase.ENEMY_RESOLVING,
-                statusBanner = "⚠️ $enemyName ACTING..."
-            )
-        }
-
+        _turnUiState.value = TurnStateMachine.beginEnemyTurn(_turnUiState.value, enemyName, enemyIntent)
         _turnEvents.tryEmit(TurnCombatEvent.EnemyCycleStarted(enemyName))
         _turnEvents.tryEmit(TurnCombatEvent.PhaseChanged(TurnPhase.ENEMY_RESOLVING))
 
         if (enemyActionExecution != null) {
             activeTurnJob = viewModelScope.launch {
-                delay(600) // Sensory pacing delay
+                delay(600)
                 _turnUiState.update { it.copy(turnStateEnum = TurnStateEnum.PROCESSING) }
-                val record = enemyActionExecution()
-                recordEnemyAction(record)
+                recordEnemyAction(enemyActionExecution())
                 delay(600)
                 concludeTurnCycleAndAdvance()
             }
         }
     }
 
-    /**
-     * Records hostile NPC/Enemy action telemetry and updates state machine.
-     */
     fun recordEnemyAction(record: TurnActionRecord) {
-        _turnUiState.update { state ->
-            state.copy(
-                lastEnemyAction = record,
-                actionHistory = state.actionHistory + record,
-                totalEnemyTurns = state.totalEnemyTurns + 1,
-                turnState = TurnState.EnemyResolving(state.currentTurn, record.actorName, record.summary),
-                statusBanner = record.summary
-            )
-        }
+        _turnUiState.value = TurnStateMachine.recordEnemyAction(_turnUiState.value, record)
         _turnEvents.tryEmit(TurnCombatEvent.ActionExecuted(record))
     }
 
-    /**
-     * Executes round maintenance, increments the turn counter,
-     * unlocks user input, and restores the player turn state.
-     */
     fun concludeTurnCycleAndAdvance(
         ramRecovery: Int = 2,
         onMaintenanceComplete: (() -> Unit)? = null
     ) {
         val completedTurn = _turnUiState.value.currentTurn
-        val nextTurn = completedTurn + 1
-
-        _turnUiState.update { state ->
-            state.copy(
-                turnStateEnum = TurnStateEnum.PROCESSING,
-                turnState = TurnState.TurnMaintenance(completedTurn, nextTurn),
-                turnPhase = TurnPhase.ROUND_MAINTENANCE,
-                statusBanner = "ROUND $nextTurn MAINTENANCE"
-            )
-        }
-
+        _turnUiState.value = TurnStateMachine.beginMaintenance(_turnUiState.value)
         _turnEvents.tryEmit(TurnCombatEvent.PhaseChanged(TurnPhase.ROUND_MAINTENANCE))
         _turnEvents.tryEmit(TurnCombatEvent.MaintenanceTick(completedTurn, ramRecovery))
-
         onMaintenanceComplete?.invoke()
-
-        // Unlock player input and set next round
-        _turnUiState.update { state ->
-            state.copy(
-                currentTurn = nextTurn,
-                turnStateEnum = TurnStateEnum.PLAYER,
-                turnState = TurnState.PlayerTurn(nextTurn, isInputEnabled = true),
-                turnPhase = TurnPhase.PLAYER_INPUT,
-                isInputLocked = false,
-                isPlayerTurn = true,
-                isEnemyActing = false,
-                statusBanner = "ROUND $nextTurn: READY"
-            )
-        }
-
+        _turnUiState.value = TurnStateMachine.advanceToPlayer(_turnUiState.value)
+        val nextTurn = _turnUiState.value.currentTurn
         _turnEvents.tryEmit(TurnCombatEvent.TurnStarted(nextTurn, isPlayer = true))
         _turnEvents.tryEmit(TurnCombatEvent.InputUnlocked(nextTurn))
         _turnEvents.tryEmit(TurnCombatEvent.PhaseChanged(TurnPhase.PLAYER_INPUT))
     }
 
-    /**
-     * Ends the encounter cleanly in victory, defeat, or escape.
-     */
     fun endEncounter(winner: CombatWinner, reason: String) {
         activeTurnJob?.cancel()
         val totalTurns = _turnUiState.value.currentTurn
-        val endPhase = when (winner) {
-            CombatWinner.PLAYER -> TurnPhase.COMBAT_VICTORY
-            CombatWinner.ENEMY -> TurnPhase.COMBAT_DEFEAT
-            CombatWinner.ESCAPED -> TurnPhase.COMBAT_VICTORY
-        }
-
-        _turnUiState.update { state ->
-            state.copy(
-                turnStateEnum = TurnStateEnum.PROCESSING,
-                isInputLocked = true,
-                isPlayerTurn = false,
-                isEnemyActing = false,
-                turnState = TurnState.EncounterConcluded(totalTurns, winner, reason),
-                turnPhase = endPhase,
-                statusBanner = when (winner) {
-                    CombatWinner.PLAYER -> "🏆 VICTORY: $reason"
-                    CombatWinner.ENEMY -> "💀 DEFEAT: $reason"
-                    CombatWinner.ESCAPED -> "🏃 EVADED: $reason"
-                }
-            )
-        }
-
-        _turnEvents.tryEmit(TurnCombatEvent.PhaseChanged(endPhase))
+        _turnUiState.value = TurnStateMachine.conclude(_turnUiState.value, winner, reason)
+        _turnEvents.tryEmit(TurnCombatEvent.PhaseChanged(_turnUiState.value.turnPhase))
         _turnEvents.tryEmit(TurnCombatEvent.EncounterFinished(winner, totalTurns))
     }
 
-    /**
-     * Resets the turn manager to Idle state.
-     */
     fun resetToIdle() {
         activeTurnJob?.cancel()
         _turnUiState.update {
