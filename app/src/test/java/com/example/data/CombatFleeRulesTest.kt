@@ -27,8 +27,8 @@ class CombatFleeRulesTest {
     @Test
     fun `failed flee keeps combat active`() {
         val random = object : Random() {
-            override fun nextBits(bitCount: Int): Int =
-                if (bitCount == 7) 99 else 0
+            override fun nextInt(until: Int): Int = until - 1
+            override fun nextBits(bitCount: Int): Int = 0
         }
         val result = CombatFleeRules.resolve(random)
         assertEquals(false, result.escaped)
