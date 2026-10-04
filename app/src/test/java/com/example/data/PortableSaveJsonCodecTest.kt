@@ -1,9 +1,13 @@
 package com.example.data
 
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class PortableSaveJsonCodecTest {
     @Test
     fun `json codec preserves legacy field names and round trips payload`() {
@@ -16,9 +20,9 @@ class PortableSaveJsonCodecTest {
         val json = PortableSaveJsonCodec.encode(payload)
         val decoded = PortableSaveJsonCodec.decode(json)
 
-        assertTrue(json.contains("\"runnerName\""))
-        assertTrue(json.contains("\"installedPrograms\""))
-        assertTrue(json.contains("\"mazeData\""))
+        assertTrue(json.contains(""runnerName""))
+        assertTrue(json.contains(""installedPrograms""))
+        assertTrue(json.contains(""mazeData""))
         assertEquals(payload, decoded)
     }
 
