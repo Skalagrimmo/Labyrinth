@@ -30,7 +30,7 @@ class GameTurnViewModelStateTest {
     fun `player action locks input and enters resolving phase`() {
         val vm = GameTurnViewModel()
         vm.initializeEncounter("ICE")
-        val record = vm.startPlayerAction(CombatActionType.ATTACK, "Strike", damageDealt = 8)
+        val record = vm.startPlayerAction(CombatActionType.STRIKE, "Strike", damageDealt = 8)
         val s = vm.turnUiState.value
 
         assertEquals(TurnStateEnum.PROCESSING, s.turnStateEnum)
