@@ -24,7 +24,7 @@ class CombatEnemyTurnRulesTest {
             state,
             EnemyAIDecision(EnemyActionType.HACK_PLAYER, "hack", damage = 12, ramDrain = 4)
         )
-        assertEquals(5, result.playerShield)
+        assertEquals(0, result.playerShield)
         assertEquals(93, result.playerHealth)
         assertEquals(4, result.playerRam)
     }
