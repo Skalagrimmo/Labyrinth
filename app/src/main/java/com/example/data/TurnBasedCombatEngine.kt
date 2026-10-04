@@ -162,12 +162,13 @@ object TurnBasedCombatEngine {
         // Handle enemy stun
         if (state.isEnemyStunned) {
             logs.add("⚡ ENEMY STUNNED: ${state.enemyName} is recalibrating and skips action.")
+            val stun = CombatStunRules.resolve(state)
             state = state.copy(
-                isEnemyStunned = false,
-                turn = EngineCombatTurn.PLAYER_TURN,
-                turnNumber = state.turnNumber + 1,
-                playerRam = min(state.playerMaxRam, state.playerRam + 2),
-                isPlayerDefending = false,
+                isEnemyStunned = stun.isEnemyStunned,
+                turn = stun.turn,
+                turnNumber = stun.turnNumber,
+                playerRam = stun.playerRam,
+                isPlayerDefending = stun.isPlayerDefending,
                 combatLog = state.combatLog + logs
             )
             return CombatTurnResult(state, logs)
