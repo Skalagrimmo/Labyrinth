@@ -9,8 +9,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
 
 class PersistenceManager(
     private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
@@ -687,77 +685,45 @@ class PersistenceManager(
 
     fun exportSave(): String {
         val state = uiState
-        val json = JSONObject()
-        json.put("version", PortableSaveEnvelope.VERSION)
-        json.put("runnerName", state.runnerName)
-        json.put("runnerClass", state.runnerClass.name)
-        json.put("level", state.level)
-        json.put("integrity", state.integrity)
-        json.put("maxIntegrity", state.maxIntegrity)
-        json.put("playerShield", state.playerShield)
-        json.put("playerMaxShield", state.playerMaxShield)
-        json.put("ram", state.ram)
-        json.put("maxRam", state.maxRam)
-        json.put("ramRecoveryRate", state.ramRecoveryRate)
-        json.put("credits", state.credits)
-        json.put("damageBonus", state.damageBonus)
-        json.put("defenseBonus", state.defenseBonus)
-        json.put("characterLevel", state.characterLevel)
-        json.put("characterXp", state.characterXp)
-        json.put("xpToNextLevel", state.xpToNextLevel)
-        json.put("gridX", state.gridX)
-        json.put("gridY", state.gridY)
-        json.put("direction", state.direction.name)
-        json.put("currentZone", state.currentZone.name)
-        json.put("buildingFloor", state.buildingFloor)
-        json.put("collectorsLevel", state.collectorsLevel)
-        json.put("cityDistrictIndex", state.cityDistrictIndex)
-        json.put("hasElevatorKeycard", state.hasElevatorKeycard)
-        json.put("nodesHackedCount", state.nodesHackedCount)
-        json.put("totalCreditsEarned", state.totalCreditsEarned)
-        json.put("dataFragments", state.dataFragments)
-        json.put("totalDataFragmentsExtracted", state.totalDataFragmentsExtracted)
-        json.put("skillPoints", state.skillPoints)
-        json.put("unlockedSkills", state.unlockedSkills.joinToString(","))
-        json.put("tutorialStep", state.tutorialStep)
-        json.put("tutorialActive", state.tutorialActive)
-        json.put("tutorialSeen", state.tutorialSeen)
-        json.put("activeWeather", state.activeWeather.name)
-        json.put("weatherTurnsLeft", state.weatherTurnsLeft)
-        json.put("levelSeed", state.levelSeed)
-        json.put("inventory", JSONArray(state.inventory))
-        json.put("installedPrograms", JSONArray(state.installedPrograms.map { it.id }))
-        json.put("exploredCellsCsv", serializeExploredCells(state.exploredCells))
-        json.put("mazeData", serializeMaze(state.maze))
-        json.put("originalMazeData", state.originalMaze?.let { serializeMaze(it) } ?: "")
-        json.put("buildingFloorsData", serializeFloors(state.buildingFloors))
-        json.put("buildingExploredData", serializeExploredMap(state.buildingExplored))
-        json.put("collectorsLevelsData", serializeFloors(state.collectorsLevels))
-        json.put("collectorsExploredData", serializeExploredMap(state.collectorsExplored))
-        json.put("cityDistrictsData", serializeFloors(state.cityDistricts))
-        json.put("cityExploredData", serializeExploredMap(state.cityExplored))
-        json.put("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
-
-        return PortableSaveEnvelope.encodeJson(json.toString())
+        val payload = PortableSavePayload(
+            runnerName = state.runnerName, runnerClass = state.runnerClass.name, level = state.level,
+            integrity = state.integrity, maxIntegrity = state.maxIntegrity, playerShield = state.playerShield,
+            playerMaxShield = state.playerMaxShield, ram = state.ram, maxRam = state.maxRam,
+            ramRecoveryRate = state.ramRecoveryRate, credits = state.credits, damageBonus = state.damageBonus,
+            defenseBonus = state.defenseBonus, characterLevel = state.characterLevel, characterXp = state.characterXp,
+            xpToNextLevel = state.xpToNextLevel, gridX = state.gridX, gridY = state.gridY,
+            direction = state.direction.name, currentZone = state.currentZone.name, buildingFloor = state.buildingFloor,
+            collectorsLevel = state.collectorsLevel, cityDistrictIndex = state.cityDistrictIndex,
+            hasElevatorKeycard = state.hasElevatorKeycard, nodesHackedCount = state.nodesHackedCount,
+            totalCreditsEarned = state.totalCreditsEarned, dataFragments = state.dataFragments,
+            totalDataFragmentsExtracted = state.totalDataFragmentsExtracted, skillPoints = state.skillPoints,
+            unlockedSkillsCsv = state.unlockedSkills.joinToString(","), tutorialStep = state.tutorialStep,
+            tutorialActive = state.tutorialActive, tutorialSeen = state.tutorialSeen,
+            activeWeather = state.activeWeather.name, weatherTurnsLeft = state.weatherTurnsLeft, levelSeed = state.levelSeed,
+            inventory = state.inventory, installedProgramIds = state.installedPrograms.map { it.id },
+            exploredCellsCsv = serializeExploredCells(state.exploredCells), mazeData = serializeMaze(state.maze),
+            originalMazeData = state.originalMaze?.let { serializeMaze(it) } ?: "",
+            buildingFloorsData = serializeFloors(state.buildingFloors), buildingExploredData = serializeExploredMap(state.buildingExplored),
+            collectorsLevelsData = serializeFloors(state.collectorsLevels), collectorsExploredData = serializeExploredMap(state.collectorsExplored),
+            cityDistrictsData = serializeFloors(state.cityDistricts), cityExploredData = serializeExploredMap(state.cityExplored),
+            installedImplantsCsv = state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" }
+        )
+        return PortableSaveEnvelope.encodeJson(PortableSaveJsonCodec.encode(payload))
     }
 
     fun importSave(encoded: String): Boolean {
         try {
-            val json = JSONObject(PortableSaveEnvelope.decodeJson(encoded))
+            val payload = PortableSaveJsonCodec.decode(PortableSaveEnvelope.decodeJson(encoded))
 
-            val maze = deserializeMaze(json.optString("mazeData", ""))
+            val maze = deserializeMaze(payload.mazeData)
             if (maze.isEmpty()) { onLog("IMPORT FAILED: Invalid maze data.", LogType.ERROR); return false }
 
-            val inventory = mutableListOf<String>()
-            val invArr = json.optJSONArray("inventory")
-            if (invArr != null) { for (i in 0 until invArr.length()) inventory.add(invArr.getString(i)) }
+            val inventory = payload.inventory.toMutableList()
 
-            val programs = mutableListOf<Program>()
-            val progArr = json.optJSONArray("installedPrograms")
-            if (progArr != null) { for (i in 0 until progArr.length()) programs.add(getProgramById(progArr.getString(i))) }
+            val programs = payload.installedProgramIds.mapTo(mutableListOf()) { getProgramById(it) }
 
             val installedImplants = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
-            val implCsv = json.optString("installedImplantsCsv", "")
+            val implCsv = payload.installedImplantsCsv
             if (implCsv.isNotEmpty()) {
                 implCsv.split(",").forEach { entry ->
                     val parts = entry.split(":", limit = 2)
@@ -770,7 +736,7 @@ class PersistenceManager(
             }
 
             val logFeed = mutableListOf<LogMessage>()
-            val ls = json.optString("logFeedSerialized", "")
+            val ls = payload.logFeedSerialized
             if (ls.isNotEmpty()) {
                 ls.split("$$").forEach { entry ->
                     val parts = entry.split("||")
@@ -781,59 +747,59 @@ class PersistenceManager(
                 }
             }
 
-            val gameState = try { GameState.valueOf(json.optString("gameStateName", "EXPLORATION")) } catch (_: Exception) { GameState.EXPLORATION }
+            val gameState = try { GameState.valueOf(payload.gameStateName) } catch (_: Exception) { GameState.EXPLORATION }
 
             _uiState.update {
                 it.copy(
                     screen = ActiveScreen.EXPLORATION,
-                    runnerName = json.optString("runnerName", ""),
-                    runnerClass = try { NetrunnerClass.valueOf(json.optString("runnerClass", "CODE_SLASHER")) } catch (_: Exception) { NetrunnerClass.CODE_SLASHER },
-                    level = json.optInt("level", 1),
-                    integrity = json.optInt("integrity", 100),
-                    maxIntegrity = json.optInt("maxIntegrity", 100),
-                    playerShield = json.optInt("playerShield", 10),
-                    playerMaxShield = json.optInt("playerMaxShield", 50),
-                    ram = json.optInt("ram", 12),
-                    maxRam = json.optInt("maxRam", 12),
-                    ramRecoveryRate = json.optInt("ramRecoveryRate", 2),
-                    credits = json.optInt("credits", 100),
-                    damageBonus = json.optInt("damageBonus", 0),
-                    defenseBonus = json.optInt("defenseBonus", 0),
-                    characterLevel = json.optInt("characterLevel", 1),
-                    characterXp = json.optInt("characterXp", 0),
-                    xpToNextLevel = json.optInt("xpToNextLevel", 100),
-                    gridX = json.optInt("gridX", 1),
-                    gridY = json.optInt("gridY", 1),
-                    direction = try { Direction.valueOf(json.optString("direction", "EAST")) } catch (_: Exception) { Direction.EAST },
-                    currentZone = try { Zone.valueOf(json.optString("currentZone", "BUILDING")) } catch (_: Exception) { Zone.BUILDING },
-                    buildingFloor = json.optInt("buildingFloor", 1),
-                    collectorsLevel = json.optInt("collectorsLevel", 1),
-                    cityDistrictIndex = json.optInt("cityDistrictIndex", 0),
-                    hasElevatorKeycard = json.optBoolean("hasElevatorKeycard", false),
-                    nodesHackedCount = json.optInt("nodesHackedCount", 0),
-                    totalCreditsEarned = json.optInt("totalCreditsEarned", 100),
-                    dataFragments = json.optInt("dataFragments", 0),
-                    totalDataFragmentsExtracted = json.optInt("totalDataFragmentsExtracted", 0),
-                    skillPoints = json.optInt("skillPoints", 0),
-                    unlockedSkills = json.optString("unlockedSkills", "").split(",").filter { it.isNotBlank() }.toSet(),
-                    tutorialStep = json.optInt("tutorialStep", 0),
-                    tutorialActive = json.optBoolean("tutorialActive", false),
-                    tutorialSeen = json.optBoolean("tutorialSeen", false),
-                    activeWeather = try { CyberWeather.valueOf(json.optString("activeWeather", "CLEAR")) } catch (_: Exception) { CyberWeather.CLEAR },
-                    weatherTurnsLeft = json.optInt("weatherTurnsLeft", 0),
-                    levelSeed = json.optLong("levelSeed", 0L),
+                    runnerName = payload.runnerName,
+                    runnerClass = try { NetrunnerClass.valueOf(payload.runnerClass) } catch (_: Exception) { NetrunnerClass.CODE_SLASHER },
+                    level = payload.level,
+                    integrity = payload.integrity,
+                    maxIntegrity = payload.maxIntegrity,
+                    playerShield = payload.playerShield,
+                    playerMaxShield = payload.playerMaxShield,
+                    ram = payload.ram,
+                    maxRam = payload.maxRam,
+                    ramRecoveryRate = payload.ramRecoveryRate,
+                    credits = payload.credits,
+                    damageBonus = payload.damageBonus,
+                    defenseBonus = payload.defenseBonus,
+                    characterLevel = payload.characterLevel,
+                    characterXp = payload.characterXp,
+                    xpToNextLevel = payload.xpToNextLevel,
+                    gridX = payload.gridX,
+                    gridY = payload.gridY,
+                    direction = try { Direction.valueOf(payload.direction) } catch (_: Exception) { Direction.EAST },
+                    currentZone = try { Zone.valueOf(payload.currentZone) } catch (_: Exception) { Zone.BUILDING },
+                    buildingFloor = payload.buildingFloor,
+                    collectorsLevel = payload.collectorsLevel,
+                    cityDistrictIndex = payload.cityDistrictIndex,
+                    hasElevatorKeycard = payload.hasElevatorKeycard,
+                    nodesHackedCount = payload.nodesHackedCount,
+                    totalCreditsEarned = payload.totalCreditsEarned,
+                    dataFragments = payload.dataFragments,
+                    totalDataFragmentsExtracted = payload.totalDataFragmentsExtracted,
+                    skillPoints = payload.skillPoints,
+                    unlockedSkills = payload.unlockedSkillsCsv.split(",").filter { it.isNotBlank() }.toSet(),
+                    tutorialStep = payload.tutorialStep,
+                    tutorialActive = payload.tutorialActive,
+                    tutorialSeen = payload.tutorialSeen,
+                    activeWeather = try { CyberWeather.valueOf(payload.activeWeather) } catch (_: Exception) { CyberWeather.CLEAR },
+                    weatherTurnsLeft = payload.weatherTurnsLeft,
+                    levelSeed = payload.levelSeed,
                     inventory = inventory,
                     installedPrograms = programs,
                     installedImplants = installedImplants,
-                    exploredCells = deserializeExploredCells(json.optString("exploredCellsCsv", "")),
+                    exploredCells = deserializeExploredCells(payload.exploredCellsCsv),
                     maze = maze,
-                    originalMaze = json.optString("originalMazeData", "").let { s -> if (s.isNotEmpty()) deserializeMaze(s) else null },
-                    buildingFloors = deserializeFloors(json.optString("buildingFloorsData", "")),
-                    buildingExplored = deserializeExploredMap(json.optString("buildingExploredData", "")),
-                    collectorsLevels = deserializeFloors(json.optString("collectorsLevelsData", "")),
-                    collectorsExplored = deserializeExploredMap(json.optString("collectorsExploredData", "")),
-                    cityDistricts = deserializeFloors(json.optString("cityDistrictsData", "")),
-                    cityExplored = deserializeExploredMap(json.optString("cityExploredData", "")),
+                    originalMaze = payload.originalMazeData.let { s -> if (s.isNotEmpty()) deserializeMaze(s) else null },
+                    buildingFloors = deserializeFloors(payload.buildingFloorsData),
+                    buildingExplored = deserializeExploredMap(payload.buildingExploredData),
+                    collectorsLevels = deserializeFloors(payload.collectorsLevelsData),
+                    collectorsExplored = deserializeExploredMap(payload.collectorsExploredData),
+                    cityDistricts = deserializeFloors(payload.cityDistrictsData),
+                    cityExplored = deserializeExploredMap(payload.cityExploredData),
                     gameState = gameState,
                     logFeed = logFeed
                 )
