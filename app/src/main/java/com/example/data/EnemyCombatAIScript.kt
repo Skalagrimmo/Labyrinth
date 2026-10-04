@@ -45,21 +45,22 @@ object EnemyCombatAIScript {
         boss: Enemy,
         playerHealth: Int,
         playerMaxHealth: Int,
-        playerRam: Int
+        playerRam: Int,
+        random: Random = Random.Default
     ): EnemyAIDecision {
         val healthRatio = boss.integrity.toFloat() / boss.maxIntegrity.coerceAtLeast(1)
         val shieldRatio = boss.shield.toFloat() / boss.maxShield.coerceAtLeast(1)
         val turn = boss.turnCounter
 
         return when (boss.bossType) {
-            BossType.FIREWALL_SENTINEL -> evaluateSentinel(boss, healthRatio, shieldRatio, turn, playerHealth, playerRam)
-            BossType.DAEMON_OVERLORD -> evaluateOverlord(boss, healthRatio, shieldRatio, turn, playerHealth, playerRam)
-            BossType.BLACK_ICE_COLOSSUS -> evaluateColossus(boss, healthRatio, shieldRatio, turn, playerHealth, playerMaxHealth, playerRam)
-            null -> evaluateAction(boss.integrity, boss.maxIntegrity, boss.shield, boss.maxShield, boss.damage, playerHealth, playerRam)
+            BossType.FIREWALL_SENTINEL -> evaluateSentinel(boss, healthRatio, shieldRatio, turn, playerHealth, playerRam, random)
+            BossType.DAEMON_OVERLORD -> evaluateOverlord(boss, healthRatio, shieldRatio, turn, playerHealth, playerRam, random)
+            BossType.BLACK_ICE_COLOSSUS -> evaluateColossus(boss, healthRatio, shieldRatio, turn, playerHealth, playerMaxHealth, playerRam, random)
+            null -> evaluateAction(boss.integrity, boss.maxIntegrity, boss.shield, boss.maxShield, boss.damage, playerHealth, playerRam, random = random)
         }
     }
 
-    private fun evaluateSentinel(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerRam: Int): EnemyAIDecision {
+    private fun evaluateSentinel(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerRam: Int, random: Random): EnemyAIDecision {
         // Phase 2 at 50% HP: gains counter-attack ability
         if (healthRatio < 0.50f && boss.bossPhase == 1) {
             boss.bossPhase = 2
@@ -94,7 +95,7 @@ object EnemyCombatAIScript {
         }
 
         // Default: heavy attack
-        val dmg = boss.damage + Random.nextInt(-2, 6)
+        val dmg = boss.damage + random.nextInt(-2, 6)
         return EnemyAIDecision(
             actionType = EnemyActionType.ATTACK,
             actionName = "Sentinel Strike",
@@ -140,17 +141,17 @@ object EnemyCombatAIScript {
         }
 
         // 30% chance: shadow step (dodge hint)
-        if (Random.nextInt(100) < 30) {
+        if (random.nextInt(100) < 30) {
             return EnemyAIDecision(
                 actionType = EnemyActionType.ATTACK,
                 actionName = "Shadow Step Strike",
-                damage = boss.damage + Random.nextInt(5, 12),
-                logMessage = "👤 SHADOW STEP: Daemon Overlord phased through defenses for ${boss.damage + Random.nextInt(5, 12)} damage!"
+                damage = boss.damage + random.nextInt(5, 12),
+                logMessage = "👤 SHADOW STEP: Daemon Overlord phased through defenses."
             )
         }
 
         // Default: heavy attack
-        val dmg = boss.damage + Random.nextInt(-2, 5)
+        val dmg = boss.damage + random.nextInt(-2, 5)
         return EnemyAIDecision(
             actionType = EnemyActionType.ATTACK,
             actionName = "Overlord Assault",
@@ -159,7 +160,7 @@ object EnemyCombatAIScript {
         )
     }
 
-    private fun evaluateColossus(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerMaxHealth: Int, playerRam: Int): EnemyAIDecision {
+    private fun evaluateColossus(boss: Enemy, healthRatio: Float, shieldRatio: Float, turn: Int, playerHealth: Int, playerMaxHealth: Int, playerRam: Int, random: Random): EnemyAIDecision {
         // Phase 2 at 65% HP: adaptive armor
         if (healthRatio < 0.65f && boss.bossPhase == 1) {
             boss.bossPhase = 2
@@ -188,13 +189,13 @@ object EnemyCombatAIScript {
             return EnemyAIDecision(
                 actionType = EnemyActionType.ATTACK,
                 actionName = "Phase Shift Strike",
-                damage = boss.damage + Random.nextInt(8, 18),
-                logMessage = "🌀 PHASE SHIFT: Black ICE Colossus phased through reality for ${boss.damage + Random.nextInt(8, 18)} devastating damage!"
+                damage = boss.damage + random.nextInt(8, 18),
+                logMessage = "🌀 PHASE SHIFT: Black ICE Colossus phased through reality."
             )
         }
 
         // 25% chance: heal
-        if (Random.nextInt(100) < 25 && healthRatio < 0.70f) {
+        if (random.nextInt(100) < 25 && healthRatio < 0.70f) {
             val heal = (boss.maxIntegrity * 0.15f).toInt()
             return EnemyAIDecision(
                 actionType = EnemyActionType.HEAL,
@@ -205,7 +206,7 @@ object EnemyCombatAIScript {
         }
 
         // Default: massive attack
-        val dmg = boss.damage + Random.nextInt(-2, 8)
+        val dmg = boss.damage + random.nextInt(-2, 8)
         return EnemyAIDecision(
             actionType = EnemyActionType.ATTACK,
             actionName = "Colossus Slam",
@@ -234,7 +235,8 @@ object EnemyCombatAIScript {
         enemyBaseDamage: Int,
         playerHealth: Int,
         playerRam: Int,
-        proximityDistance: Int = 1
+        proximityDistance: Int = 1,
+        random: Random = Random.Default
     ): EnemyAIDecision {
         val healthRatio = enemyHealth.toFloat() / enemyMaxHealth.coerceAtLeast(1)
         val shieldRatio = enemyShield.toFloat() / enemyMaxShield.coerceAtLeast(1)
@@ -247,7 +249,7 @@ object EnemyCombatAIScript {
 
         // 1. CRITICAL HEALTH RECOVERY CHECK: If health < 30% and random trigger or low shield, attempt HEAL or FORTIFY
         if (healthRatio < 0.30f) {
-            val roll = Random.nextInt(100)
+            val roll = random.nextInt(100)
             if (roll < 65) {
                 val repairAmount = (enemyMaxHealth * 0.25f).toInt().coerceAtLeast(12)
                 return EnemyAIDecision(
@@ -260,7 +262,7 @@ object EnemyCombatAIScript {
         }
 
         // 2. FORTIFY ICE CHECK: If shields completely depleted
-        if (shieldRatio <= 0.0f && Random.nextInt(100) < 50) {
+        if (shieldRatio <= 0.0f && random.nextInt(100) < 50) {
             val shieldRebuild = (enemyMaxShield * 0.5f).toInt().coerceAtLeast(15)
             return EnemyAIDecision(
                 actionType = EnemyActionType.FORTIFY_ICE,
@@ -274,9 +276,9 @@ object EnemyCombatAIScript {
         return when (proximity) {
             CombatProximity.MELEE_CLOSE -> {
                 // Close range: High physical attack bias, occasional RAM hack
-                val roll = Random.nextInt(100)
+                val roll = random.nextInt(100)
                 if (roll < 70) {
-                    val dmg = enemyBaseDamage + Random.nextInt(-2, 5)
+                    val dmg = enemyBaseDamage + random.nextInt(-2, 5)
                     EnemyAIDecision(
                         actionType = EnemyActionType.ATTACK,
                         actionName = "Kinetic Sub-Laser Strike",
@@ -298,9 +300,9 @@ object EnemyCombatAIScript {
 
             CombatProximity.MEDIUM_RANGE -> {
                 // Medium range: Balanced hack vs attack
-                val roll = Random.nextInt(100)
+                val roll = random.nextInt(100)
                 if (roll < 50) {
-                    val hackDmg = enemyBaseDamage + Random.nextInt(0, 4)
+                    val hackDmg = enemyBaseDamage + random.nextInt(0, 4)
                     val drainedRam = if (playerRam > 0) 2 else 0
                     EnemyAIDecision(
                         actionType = EnemyActionType.HACK_PLAYER,
@@ -310,7 +312,7 @@ object EnemyCombatAIScript {
                         logMessage = "🌐 PACKET STREAM HACK: Target flooded network buffer for $hackDmg digital damage!"
                     )
                 } else {
-                    val dmg = enemyBaseDamage + Random.nextInt(-1, 3)
+                    val dmg = enemyBaseDamage + random.nextInt(-1, 3)
                     EnemyAIDecision(
                         actionType = EnemyActionType.ATTACK,
                         actionName = "Plasma Railgun Burst",
@@ -322,9 +324,9 @@ object EnemyCombatAIScript {
 
             CombatProximity.LONG_RANGE -> {
                 // Long range: Preference for hacking and ICE buffer
-                val roll = Random.nextInt(100)
+                val roll = random.nextInt(100)
                 if (roll < 60) {
-                    val hackDmg = (enemyBaseDamage * 0.9f).toInt() + Random.nextInt(1, 4)
+                    val hackDmg = (enemyBaseDamage * 0.9f).toInt() + random.nextInt(1, 4)
                     EnemyAIDecision(
                         actionType = EnemyActionType.HACK_PLAYER,
                         actionName = "Long-Range Trojan Buffer Overflow",
