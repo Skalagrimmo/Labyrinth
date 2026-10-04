@@ -32,42 +32,22 @@ object TurnBasedCombatEngine {
         // 1. Process player action
         when (action) {
             is PlayerCombatAction.Strike -> {
-                val baseChance = 75
-                val hitChance = (baseChance + state.playerLevel * 2 + state.playerRam).coerceIn(25, 95)
-                val roll = random.nextInt(100)
+                val resolution = CombatStrikeRules.resolve(state, random)
+                wasMiss = resolution.wasMiss
+                wasCrit = resolution.wasCrit
+                dmgToEnemy = resolution.damageDealt
 
-                if (roll >= hitChance) {
-                    wasMiss = true
-                    logs.add("⚔️ STRIKE MISSED! Weapon swung wide [Roll: $roll vs Chance: $hitChance%].")
+                if (resolution.wasMiss) {
+                    logs.add("⚔️ STRIKE MISSED! Weapon swung wide [Roll: ${resolution.hitRoll} vs Chance: ${resolution.hitChance}%].")
                 } else {
-                    val baseDmg = 18
-                    var rawDmg = baseDmg + (state.playerLevel * 3)
-                    
-                    // Crit check
-                    if (random.nextInt(100) < 20) {
-                        wasCrit = true
-                        rawDmg = (rawDmg * 1.75f).toInt()
+                    if (resolution.wasCrit) {
                         logs.add("💥 CRITICAL STRIKE! Dealt maximum kinetic damage!")
                     }
-
-                    val effectiveArmor = if (wasCrit) (state.enemyArmor * 0.5f).toInt() else state.enemyArmor
-                    dmgToEnemy = max(3, rawDmg - effectiveArmor)
-
-                    // Apply damage to shield first, then core health
-                    val damageResolution = CombatDamageRules.resolveShieldFirst(
-                        currentShield = state.enemyShield,
-                        currentHealth = state.enemyHealth,
-                        damage = dmgToEnemy
-                    )
-                    val remShield = damageResolution.remainingShield
-                    val remHealth = damageResolution.remainingHealth
-
                     state = state.copy(
-                        enemyShield = remShield,
-                        enemyHealth = remHealth,
+                        enemyShield = resolution.enemyShield,
+                        enemyHealth = resolution.enemyHealth,
                         playerStance = "Strike"
                     )
-
                     logs.add("⚔️ HIT! Dealt $dmgToEnemy damage to ${state.enemyName}.")
                 }
             }
