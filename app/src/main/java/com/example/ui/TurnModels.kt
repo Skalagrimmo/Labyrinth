@@ -2,7 +2,7 @@ package com.example.ui
 
 import com.example.data.CombatActionType
 import com.example.data.CombatWinner
-import com.example.data.FloorObstacleEntity
+import com.example.data.FloorObstacle
 import com.example.data.TurnActionRecord
 import com.example.data.TurnPhase
 
@@ -85,7 +85,7 @@ data class GameTurnUiState(
     val playerY: Int = 1,
     val playerFacing: String = "NORTH",
     val npcs: List<NpcPosition> = emptyList(),
-    val obstacles: List<FloorObstacleEntity> = emptyList(),
+    val obstacles: List<FloorObstacle> = emptyList(),
     val mapId: String = "current_save_L1_F0",
     val floorIndex: Int = 0,
     val levelNumber: Int = 1
