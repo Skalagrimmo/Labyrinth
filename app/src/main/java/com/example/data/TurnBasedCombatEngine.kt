@@ -199,7 +199,7 @@ object TurnBasedCombatEngine {
         )
 
         // Check player defeat
-        val isDefeated = remPlayerHp <= 0
+        val isDefeated = state.playerHealth <= 0
         val winner = if (isDefeated) CombatWinner.ENEMY else null
 
         if (isDefeated) {
@@ -207,13 +207,9 @@ object TurnBasedCombatEngine {
         }
 
         // RAM recovery tick at turn end
-        val recoveredRam = min(state.playerMaxRam, newPlayerRam + 2)
+        val recoveredRam = min(state.playerMaxRam, state.playerRam + 2)
 
         state = state.copy(
-            enemyHealth = newEnemyHealth,
-            enemyShield = newEnemyShield,
-            playerShield = remPlayerShield,
-            playerHealth = remPlayerHp,
             playerRam = recoveredRam,
             isPlayerDefending = false,
             turn = if (isDefeated) EngineCombatTurn.COMBAT_ENDED else EngineCombatTurn.PLAYER_TURN,
