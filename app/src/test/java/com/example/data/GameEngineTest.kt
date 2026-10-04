@@ -77,4 +77,29 @@ class GameEngineTest {
 
         assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
     }
+
+
+    @Test
+    fun `building floor facade preserves environment generator output`() {
+        val direct = EnvironmentGenerator.generateBuildingFloor(floor = 2, seed = 1200L)
+        val facade = GameEngine.generateBuildingFloor(floor = 2, seed = 1200L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
+
+    @Test
+    fun `collector tunnels facade preserves environment generator output`() {
+        val direct = EnvironmentGenerator.generateCollectorTunnels(level = 2, seed = 2200L)
+        val facade = GameEngine.generateCollectorTunnels(level = 2, seed = 2200L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
+
+    @Test
+    fun `city sector facade preserves environment generator output`() {
+        val direct = EnvironmentGenerator.generateCitySector(districtIndex = 3, seed = 3200L)
+        val facade = GameEngine.generateCitySector(districtIndex = 3, seed = 3200L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
 }
