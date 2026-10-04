@@ -688,7 +688,7 @@ class PersistenceManager(
     fun exportSave(): String {
         val state = uiState
         val json = JSONObject()
-        json.put("version", 1)
+        json.put("version", PortableSaveEnvelope.VERSION)
         json.put("runnerName", state.runnerName)
         json.put("runnerClass", state.runnerClass.name)
         json.put("level", state.level)
@@ -738,15 +738,12 @@ class PersistenceManager(
         json.put("cityExploredData", serializeExploredMap(state.cityExplored))
         json.put("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
 
-        val encoded = android.util.Base64.encodeToString(json.toString().toByteArray(), android.util.Base64.NO_WRAP)
-        return SaveDataCodec.PORTABLE_SAVE_PREFIX + encoded
+        return PortableSaveEnvelope.encodeJson(json.toString())
     }
 
     fun importSave(encoded: String): Boolean {
         try {
-            val stripped = encoded.removePrefix(SaveDataCodec.PORTABLE_SAVE_PREFIX)
-            val jsonStr = String(android.util.Base64.decode(stripped, android.util.Base64.NO_WRAP))
-            val json = JSONObject(jsonStr)
+            val json = JSONObject(PortableSaveEnvelope.decodeJson(encoded))
 
             val maze = deserializeMaze(json.optString("mazeData", ""))
             if (maze.isEmpty()) { onLog("IMPORT FAILED: Invalid maze data.", LogType.ERROR); return false }
@@ -868,7 +865,7 @@ class PersistenceManager(
             return
         }
         val text = clip.getItemAt(0).text?.toString() ?: ""
-        if (!text.startsWith(SaveDataCodec.PORTABLE_SAVE_PREFIX)) {
+        if (!PortableSaveEnvelope.hasSupportedPrefix(text)) {
             onLog("CLIPBOARD DOES NOT CONTAIN A VALID NETCRAWLER SAVE.", LogType.ERROR)
             return
         }
