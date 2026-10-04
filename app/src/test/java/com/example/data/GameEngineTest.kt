@@ -139,4 +139,37 @@ class GameEngineTest {
 
         assertEquals("", frame)
     }
+
+
+    @Test
+    fun `content facade preserves built in catalog`() {
+        assertEquals(GameContentCatalog.getStoreCyberware(), GameEngine.getStoreCyberware())
+        for (runnerClass in NetrunnerClass.entries) {
+            assertEquals(
+                GameContentCatalog.getStartingPrograms(runnerClass),
+                GameEngine.getStartingPrograms(runnerClass)
+            )
+        }
+    }
+
+    @Test
+    fun `hacking puzzle generation is reproducible with injected RNG`() {
+        val first = HackingPuzzleGenerator.generate(difficulty = 3, random = kotlin.random.Random(1337))
+        val second = HackingPuzzleGenerator.generate(difficulty = 3, random = kotlin.random.Random(1337))
+
+        assertEquals(first.grid.map { it.toList() }, second.grid.map { it.toList() })
+        assertEquals(first.targetSequence, second.targetSequence)
+        assertEquals(first.bufferLimit, second.bufferLimit)
+    }
+
+    @Test
+    fun `hacking puzzle keeps expected dimensions and buffer scaling`() {
+        val puzzle = HackingPuzzleGenerator.generate(difficulty = 4, random = kotlin.random.Random(7))
+
+        assertEquals(5, puzzle.grid.size)
+        assertTrue(puzzle.grid.all { it.size == 5 })
+        assertEquals(9, puzzle.bufferLimit)
+        assertTrue(puzzle.targetSequence.isNotEmpty())
+        assertTrue(puzzle.targetSequence.size <= 6)
+    }
 }
