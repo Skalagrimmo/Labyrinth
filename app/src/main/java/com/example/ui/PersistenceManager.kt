@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Base64
 import com.example.data.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -684,13 +685,21 @@ class PersistenceManager(
     // ----------------------------------------------------
 
     fun exportSave(): String =
-        PortableSaveEnvelope.encodeJson(
-            PortableSaveJsonCodec.encode(PortableSaveStateMapper.toPayload(uiState))
+        PortableSaveEnvelope.wrapBase64(
+            Base64.encodeToString(
+                PortableSaveJsonCodec.encode(PortableSaveStateMapper.toPayload(uiState)).toByteArray(Charsets.UTF_8),
+                Base64.NO_WRAP
+            )
         )
 
     fun importSave(encoded: String): Boolean {
         return try {
-            val payload = PortableSaveJsonCodec.decode(PortableSaveEnvelope.decodeJson(encoded))
+            val payload = PortableSaveJsonCodec.decode(
+                String(
+                    Base64.decode(PortableSaveEnvelope.unwrapBase64(encoded), Base64.DEFAULT),
+                    Charsets.UTF_8
+                )
+            )
             val restored = PortableSaveStateMapper.restore(
                 current = uiState,
                 payload = payload,
