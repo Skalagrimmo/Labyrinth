@@ -13,6 +13,27 @@ import org.junit.Test
 class GameEngineTest {
 
     @Test
+    fun `generateMaze is reproducible for an explicit seed`() {
+        val first = GameEngine.generateMaze(width = 24, height = 24, layer = 4, seed = 424242L)
+        val second = GameEngine.generateMaze(width = 24, height = 24, layer = 4, seed = 424242L)
+
+        assertEquals(first.map { it.toList() }, second.map { it.toList() })
+    }
+
+    @Test
+    fun `generated maze preserves traversal invariants`() {
+        val maze = GameEngine.generateMaze(width = 24, height = 24, layer = 2, seed = 9001L)
+
+        assertEquals(CellType.SAFE_ZONE, maze[1][1])
+        assertTrue(maze.first().all { it == CellType.WALL })
+        assertTrue(maze.last().all { it == CellType.WALL })
+        assertTrue(maze.all { row -> row.first() == CellType.WALL && row.last() == CellType.WALL })
+
+        val portals = maze.sumOf { row -> row.count { it == CellType.ENCRYPTED_PORTAL } }
+        assertEquals(1, portals)
+    }
+
+    @Test
     fun `spawnEnemy produces a valid enemy at any layer`() {
         val enemy = GameEngine.spawnEnemy(layer = 3)
         assertTrue(enemy.name.isNotBlank())
