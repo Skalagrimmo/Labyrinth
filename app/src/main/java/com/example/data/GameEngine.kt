@@ -1658,114 +1658,14 @@ object GameEngine {
      * Higher tiers (and tougher archetypes) unlock as the player descends.
      * Mod-registered archetypes (via [registerEnemyArchetypes]) are merged in.
      */
-    fun spawnEnemy(layer: Int): Enemy {
-        val random = Random(System.currentTimeMillis())
-        val effectiveLayer = layer.coerceAtLeast(1)
-
-        // Merge hardcoded catalog with any mod-registered archetypes.
-        val pool = ENEMY_ARCHETYPES + registeredEnemyArchetypes
-
-        // Only spawn archetypes whose minTier <= effectiveLayer; weight by staleness to
-        // favour newer/threatening archetypes while keeping variety.
-        val candidates = pool.filter { it.minTier <= effectiveLayer }
-        val chosen = if (candidates.isEmpty()) pool.first()
-        else {
-            val weighted = mutableListOf<EnemyArchetype>()
-            for (c in candidates) {
-                val weight = 2 + (effectiveLayer - c.minTier)
-                repeat(weight) { weighted.add(c) }
-            }
-            weighted[random.nextInt(weighted.size)]
-        }
-
-        // ELITE check: rare signature black-ice that scales with depth. Enhanced stats,
-        // fortified protocols, doubled bounty, and a name badge so it stands out.
-        val isElite = random.nextInt(100) < (8 + effectiveLayer).coerceAtMost(20)
-        val eliteHpMult = if (isElite) 1.6f else 1f
-        val eliteShieldMult = if (isElite) 1.4f else 1f
-        val eliteDmgMult = if (isElite) 1.35f else 1f
-        val eliteArmorBonus = if (isElite) 4 else 0
-        val eliteBountyMult = if (isElite) 2f else 1f
-
-        val integrity = ((40 + (effectiveLayer * 15)) * chosen.hpMult * eliteHpMult).toInt() + random.nextInt(15)
-        val shield = ((15 + (effectiveLayer * 10)) * chosen.shieldMult * eliteShieldMult).toInt() + random.nextInt(10)
-        val damage = ((8 + (effectiveLayer * 4)) * chosen.dmgMult * eliteDmgMult).toInt() + random.nextInt(5)
-        val armor = (effectiveLayer + chosen.armorBonus + eliteArmorBonus) + random.nextInt(2)
-        val bounty = ((50 + (effectiveLayer * 25)) * chosen.bountyMult * eliteBountyMult).toInt() + random.nextInt(30)
-
-        val startingEffects = chosen.statusEffects.map { (type, turns) ->
-            ActiveStatusEffect(type = type, turnsRemaining = turns, sourceName = chosen.name)
-        }.toMutableList()
-        if (isElite) {
-            startingEffects.add(ActiveStatusEffect(type = StatusEffectType.FORTIFIED, turnsRemaining = 3, sourceName = "ELITE PROTOCOL"))
-        }
-
-        return Enemy(
-            id = "enemy_${System.currentTimeMillis()}_${random.nextInt(10000)}",
-            name = if (isElite) "[ELITE] ${chosen.name}" else chosen.name,
-            maxIntegrity = integrity,
-            integrity = integrity,
-            maxShield = shield,
-            shield = shield,
-            damage = damage,
-            armor = armor,
-            iconAscii = chosen.asciiArt,
-            bountyCredits = bounty,
-            description = if (isElite) "ELITE BLACK-ICE VARIANT // ${chosen.description}" else chosen.description,
-            statusEffects = startingEffects,
-            isElite = isElite
+    fun spawnEnemy(layer: Int): Enemy =
+        EnemyFactory.create(
+            layer = layer,
+            archetypes = ENEMY_ARCHETYPES + registeredEnemyArchetypes
         )
-    }
 
-    fun spawnBoss(bossType: BossType, level: Int): Enemy {
-        return when (bossType) {
-            BossType.FIREWALL_SENTINEL -> Enemy(
-                id = "boss_sentinel_${System.currentTimeMillis()}",
-                name = "Firewall Sentinel",
-                maxIntegrity = 250 + (level * 20),
-                integrity = 250 + (level * 20),
-                maxShield = 100 + (level * 15),
-                shield = 100 + (level * 15),
-                damage = 22 + (level * 3),
-                armor = 8 + level,
-                iconAscii = "   _______\n  | SENT |\n  |inel._|\n  |_______|\n  /||\\ ||\\\n / ||\\ || \\",
-                bountyCredits = 400 + (level * 60),
-                description = "Ancient defensive sub-routine guarding the deepest corporate firewalls. Regenerates shields and locks down systems.",
-                isBoss = true,
-                bossType = BossType.FIREWALL_SENTINEL
-            )
-            BossType.DAEMON_OVERLORD -> Enemy(
-                id = "boss_overlord_${System.currentTimeMillis()}",
-                name = "Daemon Overlord",
-                maxIntegrity = 350 + (level * 25),
-                integrity = 350 + (level * 25),
-                maxShield = 80 + (level * 10),
-                shield = 80 + (level * 10),
-                damage = 30 + (level * 4),
-                armor = 6 + level,
-                iconAscii = "   .d8888.\n  d88' '88b\n  88     88\n  Y8b   d8P\n   Y8888P'\n    '||'\n    [OVERLORD]",
-                bountyCredits = 600 + (level * 80),
-                description = "Supreme daemon ruling the collector sub-grid. Summons lesser daemons and drains neural resources.",
-                isBoss = true,
-                bossType = BossType.DAEMON_OVERLORD
-            )
-            BossType.BLACK_ICE_COLOSSUS -> Enemy(
-                id = "boss_colossus_${System.currentTimeMillis()}",
-                name = "Black ICE Colossus",
-                maxIntegrity = 500 + (level * 30),
-                integrity = 500 + (level * 30),
-                maxShield = 150 + (level * 20),
-                shield = 150 + (level * 20),
-                damage = 42 + (level * 5),
-                armor = 12 + (level * 2),
-                iconAscii = "  _________\n |  BLACK  |\n |   ICE   |\n | COLOSSUS|\n |_________|\n  |||   |||\n  |||   |||\n  ===   ===",
-                bountyCredits = 1000 + (level * 100),
-                description = "Apex security construct of the Metro Core. Adapts defenses and unleashes devastating neural storms.",
-                isBoss = true,
-                bossType = BossType.BLACK_ICE_COLOSSUS
-            )
-        }
-    }
+    fun spawnBoss(bossType: BossType, level: Int): Enemy =
+        BossFactory.create(bossType = bossType, level = level)
 
     // Hacking puzzle matrix generator
     fun generateHackingPuzzle(difficulty: Int): HackingPuzzle {
