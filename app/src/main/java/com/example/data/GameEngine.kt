@@ -7,8 +7,13 @@ object GameEngine {
 
     // Procedural Maze Generator
     // Returns a 2D Array of CellType of size width x height
-    fun generateMaze(width: Int = 10, height: Int = 10, layer: Int = 1): Array<Array<CellType>> {
-        val seedRandom = Random(System.currentTimeMillis() + layer * 123)
+    fun generateMaze(
+        width: Int = 10,
+        height: Int = 10,
+        layer: Int = 1,
+        seed: Long = System.currentTimeMillis() + layer * 123L
+    ): Array<Array<CellType>> {
+        val seedRandom = Random(seed)
         var grid = Array(height) { Array(width) { CellType.WALL } }
         for (attempt in 1..3) {
             grid = Array(height) { Array(width) { CellType.WALL } }
