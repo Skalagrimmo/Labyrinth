@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.random.Random
 
 /**
  * Characterization tests for deterministic combat paths.
@@ -84,4 +85,47 @@ class TurnBasedCombatEngineTest {
         assertEquals(EngineCombatTurn.COMBAT_ENDED, result.newState.turn)
         assertFalse(result.newState.enemyHealth > 0)
     }
+
+    @Test
+    fun `same seed produces identical strike result`() {
+        val state = CombatEngineState(enemyShield = 0, enemyHealth = 100, enemyMaxHealth = 100)
+        val first = TurnBasedCombatEngine.processPlayerAction(
+            PlayerCombatAction.Strike(),
+            state,
+            Random(12345)
+        )
+        val second = TurnBasedCombatEngine.processPlayerAction(
+            PlayerCombatAction.Strike(),
+            state,
+            Random(12345)
+        )
+
+        assertEquals(first, second)
+    }
+
+    @Test
+    fun `same seed produces identical flee result`() {
+        val state = CombatEngineState()
+        val first = TurnBasedCombatEngine.processPlayerAction(PlayerCombatAction.Flee, state, Random(77))
+        val second = TurnBasedCombatEngine.processPlayerAction(PlayerCombatAction.Flee, state, Random(77))
+
+        assertEquals(first, second)
+    }
+
+    @Test
+    fun `same seed produces identical enemy turn`() {
+        val state = CombatEngineState(
+            enemyHealth = 80,
+            enemyMaxHealth = 80,
+            enemyShield = 30,
+            enemyMaxShield = 30,
+            playerHealth = 100,
+            playerRam = 12
+        )
+        val first = TurnBasedCombatEngine.processEnemyTurn(state, proximityDistance = 2, random = Random(2026))
+        val second = TurnBasedCombatEngine.processEnemyTurn(state, proximityDistance = 2, random = Random(2026))
+
+        assertEquals(first, second)
+    }
 }
+
