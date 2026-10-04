@@ -83,41 +83,29 @@ object TurnBasedCombatEngine {
             }
 
             is PlayerCombatAction.RunProgram -> {
-                if (state.playerRam < action.ramCost) {
+                val resolution = CombatProgramRules.resolve(state, action)
+                if (!resolution.canExecute) {
                     logs.add("⚠️ INSUFFICIENT RAM: Requires ${action.ramCost} MB RAM.")
                     return CombatTurnResult(currentState, logs)
                 }
 
-                val newRam = state.playerRam - action.ramCost
-                var newEnemyShield = state.enemyShield
-                var newEnemyHealth = state.enemyHealth
-                var newPlayerHealth = state.playerHealth
-                var newPlayerShield = state.playerShield
-
+                dmgToEnemy = resolution.damageDealt
                 if (action.damage > 0) {
-                    dmgToEnemy = action.damage + (state.playerLevel * 2)
-                    val (rShield, rHealth) = applyDamageToShieldAndHealth(newEnemyShield, newEnemyHealth, dmgToEnemy)
-                    newEnemyShield = rShield
-                    newEnemyHealth = rHealth
                     logs.add("⚡ EXPLOIT EXECUTED: ${action.programName} dealt $dmgToEnemy digital damage!")
                 }
-
                 if (action.heal > 0) {
-                    newPlayerHealth = min(state.playerMaxHealth, newPlayerHealth + action.heal)
                     logs.add("🩹 SYSTEM REPAIR: Restored ${action.heal} integrity.")
                 }
-
                 if (action.shield > 0) {
-                    newPlayerShield = min(state.playerMaxShield, newPlayerShield + action.shield)
                     logs.add("🛡️ HARDENED SHIELD: Boosted defense by ${action.shield}.")
                 }
 
                 state = state.copy(
-                    playerRam = newRam,
-                    enemyShield = newEnemyShield,
-                    enemyHealth = newEnemyHealth,
-                    playerHealth = newPlayerHealth,
-                    playerShield = newPlayerShield
+                    playerRam = resolution.remainingRam,
+                    enemyShield = resolution.enemyShield,
+                    enemyHealth = resolution.enemyHealth,
+                    playerHealth = resolution.playerHealth,
+                    playerShield = resolution.playerShield
                 )
             }
 
