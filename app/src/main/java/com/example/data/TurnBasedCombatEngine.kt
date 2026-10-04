@@ -110,13 +110,13 @@ object TurnBasedCombatEngine {
             }
 
             is PlayerCombatAction.Flee -> {
-                val fleeChance = 65
-                if (random.nextInt(100) < fleeChance) {
+                val flee = CombatFleeRules.resolve(random)
+                if (flee.escaped) {
                     logs.add("🏃 ESCAPE SUCCESSFUL! Dissolved neural link and retreated.")
                     val finalState = state.copy(
-                        isCombatOver = true,
-                        winner = CombatWinner.ESCAPED,
-                        turn = EngineCombatTurn.COMBAT_ENDED,
+                        isCombatOver = flee.isCombatOver,
+                        winner = flee.winner,
+                        turn = flee.turn,
                         combatLog = state.combatLog + logs
                     )
                     return CombatTurnResult(finalState, logs)
