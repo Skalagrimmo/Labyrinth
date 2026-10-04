@@ -198,24 +198,19 @@ object TurnBasedCombatEngine {
             playerRam = resolution.playerRam
         )
 
-        // Check player defeat
-        val isDefeated = state.playerHealth <= 0
-        val winner = if (isDefeated) CombatWinner.ENEMY else null
-
-        if (isDefeated) {
+        // Finalize turn through the pure maintenance rule.
+        val maintenance = CombatTurnMaintenanceRules.resolve(state)
+        if (maintenance.isCombatOver) {
             logs.add("💀 SYSTEM OVERLOAD: Core Integrity breached. Player defeated.")
         }
 
-        // RAM recovery tick at turn end
-        val recoveredRam = min(state.playerMaxRam, state.playerRam + 2)
-
         state = state.copy(
-            playerRam = recoveredRam,
-            isPlayerDefending = false,
-            turn = if (isDefeated) EngineCombatTurn.COMBAT_ENDED else EngineCombatTurn.PLAYER_TURN,
-            turnNumber = state.turnNumber + 1,
-            isCombatOver = isDefeated,
-            winner = winner,
+            playerRam = maintenance.playerRam,
+            isPlayerDefending = maintenance.isPlayerDefending,
+            turn = maintenance.turn,
+            turnNumber = maintenance.turnNumber,
+            isCombatOver = maintenance.isCombatOver,
+            winner = maintenance.winner,
             combatLog = state.combatLog + logs
         )
 
