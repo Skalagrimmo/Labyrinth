@@ -54,45 +54,10 @@ object GameEngine {
     fun getStartingPrograms(runnerClass: NetrunnerClass): List<Program> =
         GameContentCatalog.getStartingPrograms(runnerClass)
 
-    // Generates a fully loaded enemy depending on the cyberspace layer
-    /**
-     * Enemy archetype catalog. Each archetype defines a distinct combat profile
-     * (tank, glass-cannon, shield-heavy, healer, debuffer...) with stat multipliers,
-     * optional starting status effects, and a unique ASCII portrait.
-     */
-    data class EnemyArchetype(
-        val name: String,
-        val description: String,
-        val asciiArt: String,
-        val minTier: Int,          // minimum depth/layer at which this enemy can appear
-        val hpMult: Float = 1.0f,
-        val shieldMult: Float = 1.0f,
-        val dmgMult: Float = 1.0f,
-        val armorBonus: Int = 0,
-        val bountyMult: Float = 1.0f,
-        val statusEffects: List<Pair<StatusEffectType, Int>> = emptyList() // (type, turns)
-    )
-
-    /**
-     * Mod-registered enemy archetypes dynamically added at runtime.
-     * Populated by [ContentRegistry] when a mod document is loaded.
-     */
-    val registeredEnemyArchetypes = mutableListOf<EnemyArchetype>()
-
-    /** Registers additional enemy archetypes from mods. */
-    fun registerEnemyArchetypes(archetypes: List<EnemyArchetype>) {
-        registeredEnemyArchetypes.addAll(archetypes)
-    }
-
-    /**
-     * Spawns a procedurally chosen enemy scaled to the current depth/layer.
-     * Higher tiers (and tougher archetypes) unlock as the player descends.
-     * Mod-registered archetypes (via [registerEnemyArchetypes]) are merged in.
-     */
     fun spawnEnemy(layer: Int): Enemy =
         EnemyFactory.create(
             layer = layer,
-            archetypes = GameContentCatalog.enemyArchetypes + registeredEnemyArchetypes
+            archetypes = GameContentCatalog.enemyArchetypes + EnemyArchetypeRegistry.registeredArchetypes()
         )
 
     fun spawnBoss(bossType: BossType, level: Int): Enemy =
