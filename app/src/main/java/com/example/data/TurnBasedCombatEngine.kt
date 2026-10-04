@@ -188,42 +188,15 @@ object TurnBasedCombatEngine {
 
         logs.add(decision.logMessage)
 
-        var newEnemyHealth = state.enemyHealth
-        var newEnemyShield = state.enemyShield
-        var remPlayerShield = state.playerShield
-        var remPlayerHp = state.playerHealth
-        var newPlayerRam = state.playerRam
-
-        when (decision.actionType) {
-            EnemyActionType.ATTACK, EnemyActionType.HACK_PLAYER -> {
-                var rawDmg = decision.damage
-                if (state.isPlayerDefending) {
-                    rawDmg = (rawDmg * 0.35f).toInt().coerceAtLeast(2)
-                    logs.add("🛡️ FIREWALL DAMPENING: Player defense reduced incoming impact to $rawDmg!")
-                }
-                dmgToPlayer = rawDmg
-                val (rShield, rHp) = applyDamageToShieldAndHealth(
-                    currentShield = state.playerShield,
-                    currentHealth = state.playerHealth,
-                    damage = dmgToPlayer
-                )
-                remPlayerShield = rShield
-                remPlayerHp = rHp
-
-                if (decision.ramDrain > 0) {
-                    newPlayerRam = max(0, state.playerRam - decision.ramDrain)
-                    logs.add("💾 RAM DRAIN: Player RAM capacity depleted by ${decision.ramDrain} MB.")
-                }
-            }
-
-            EnemyActionType.HEAL -> {
-                newEnemyHealth = min(state.enemyMaxHealth, state.enemyHealth + decision.healAmount)
-            }
-
-            EnemyActionType.FORTIFY_ICE -> {
-                newEnemyShield = min(state.enemyMaxShield, state.enemyShield + decision.shieldAmount)
-            }
-        }
+        val resolution = CombatEnemyTurnRules.resolve(state, decision)
+        dmgToPlayer = resolution.damageDealtToPlayer
+        state = state.copy(
+            enemyHealth = resolution.enemyHealth,
+            enemyShield = resolution.enemyShield,
+            playerShield = resolution.playerShield,
+            playerHealth = resolution.playerHealth,
+            playerRam = resolution.playerRam
+        )
 
         // Check player defeat
         val isDefeated = remPlayerHp <= 0
