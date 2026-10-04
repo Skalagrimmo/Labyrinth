@@ -68,4 +68,13 @@ class GameEngineTest {
             assertTrue(boss.name.isNotBlank())
         }
     }
+
+
+    @Test
+    fun `game engine maze facade preserves MazeGenerator output`() {
+        val direct = MazeGenerator.generate(width = 24, height = 24, layer = 3, seed = 8675309L)
+        val facade = GameEngine.generateMaze(width = 24, height = 24, layer = 3, seed = 8675309L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
 }
