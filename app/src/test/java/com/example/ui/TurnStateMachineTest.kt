@@ -11,7 +11,7 @@ import org.junit.Test
 
 class TurnStateMachineTest {
     private fun action(player: Boolean, name: String = if (player) "Player" else "ICE") =
-        TurnActionRecord(1, name, player, CombatActionType.ATTACK, if (player) "Strike" else "Pulse")
+        TurnActionRecord(1, name, player, CombatActionType.STRIKE, if (player) "Strike" else "Pulse")
 
     @Test
     fun `pure lifecycle advances one complete round`() {
