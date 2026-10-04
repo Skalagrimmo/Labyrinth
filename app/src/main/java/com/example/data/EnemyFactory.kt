@@ -9,7 +9,7 @@ import kotlin.random.Random
 object EnemyFactory {
     fun create(
         layer: Int,
-        archetypes: List<GameEngine.EnemyArchetype>,
+        archetypes: List<EnemyArchetype>,
         random: Random = Random.Default,
         idTimeMillis: Long = System.currentTimeMillis()
     ): Enemy {
