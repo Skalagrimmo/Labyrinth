@@ -7,7 +7,7 @@ import org.junit.Test
 
 class EnemyFactoryTest {
     private val archetypes = listOf(
-        GameEngine.EnemyArchetype(
+        EnemyArchetype(
             name = "Test ICE",
             description = "Deterministic test archetype",
             asciiArt = "[ICE]",
