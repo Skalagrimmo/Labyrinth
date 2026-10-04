@@ -8,7 +8,7 @@ import com.example.data.CombatWinner
 import com.example.data.Direction
 import com.example.data.FloorMapDao
 import com.example.data.FloorObstacleDao
-import com.example.data.FloorObstacleEntity
+import com.example.data.toDomain
 import com.example.data.GameEngine
 import com.example.data.GridEntityCoordinateEntity
 import com.example.data.PlayerEntity
@@ -156,7 +156,7 @@ class GameTurnViewModel(
     fun loadObstaclesForMap(mapId: String) {
         if (floorObstacleDao != null) {
             viewModelScope.launch {
-                val obs = floorObstacleDao.getObstaclesForMapSync(mapId)
+                val obs = floorObstacleDao.getObstaclesForMapSync(mapId).map { it.toDomain() }
                 _turnUiState.update { it.copy(obstacles = obs) }
             }
         }
