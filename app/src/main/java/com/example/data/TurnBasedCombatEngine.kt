@@ -127,13 +127,14 @@ object TurnBasedCombatEngine {
             }
         }
 
-        // 2. Check if enemy defeated
-        if (state.enemyHealth <= 0) {
+        // 2. Resolve combat victory
+        val victory = CombatVictoryRules.resolve(state)
+        if (victory.isVictory) {
             logs.add("🏆 VICTORY! Hostile ${state.enemyName} system purged.")
             val victoryState = state.copy(
-                isCombatOver = true,
-                winner = CombatWinner.PLAYER,
-                turn = EngineCombatTurn.COMBAT_ENDED,
+                isCombatOver = victory.isCombatOver,
+                winner = victory.winner,
+                turn = victory.turn,
                 combatLog = state.combatLog + logs
             )
             return CombatTurnResult(victoryState, logs, damageDealtToEnemy = dmgToEnemy, wasCrit = wasCrit, wasMiss = wasMiss)
