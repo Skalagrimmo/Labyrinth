@@ -1,7 +1,5 @@
 package com.example.data
 
-import kotlin.random.Random
-
 /** Combat turn enum tracking active combat turn state. */
 enum class EngineCombatTurn {
     PLAYER_TURN,
@@ -12,7 +10,7 @@ enum class EngineCombatTurn {
 
 /** Status effect snapshot used by combat calculations. */
 data class CombatStatusEffect(
-    val id: String = Random.nextInt(10000, 99999).toString(),
+    val id: String,
     val name: String,
     val type: StatusEffectType,
     val durationTurns: Int,
@@ -47,3 +45,23 @@ data class CombatEngineState(
     val isCombatOver: Boolean = false,
     val winner: CombatWinner? = null
 )
+
+/**
+ * Explicit factory for status-effect identity. Randomness is supplied by the caller,
+ * keeping the immutable domain model deterministic and side-effect free.
+ */
+object CombatStatusEffectFactory {
+    fun create(
+        name: String,
+        type: StatusEffectType,
+        durationTurns: Int,
+        potency: Int,
+        random: kotlin.random.Random = kotlin.random.Random.Default
+    ): CombatStatusEffect = CombatStatusEffect(
+        id = random.nextInt(10000, 99999).toString(),
+        name = name,
+        type = type,
+        durationTurns = durationTurns,
+        potency = potency
+    )
+}
