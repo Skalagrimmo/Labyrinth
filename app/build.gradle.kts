@@ -94,6 +94,8 @@ dependencies {
   testImplementation(libs.junit)
   testImplementation(libs.kotlinx.coroutines.test)
   testImplementation(libs.robolectric)
+  // JVM tests need a real JSON implementation; production keeps Android org.json for API compatibility.
+  testImplementation("org.json:json:20240303")
   testImplementation(libs.roborazzi)
   testImplementation(libs.roborazzi.compose)
   testImplementation(libs.roborazzi.junit.rule)
