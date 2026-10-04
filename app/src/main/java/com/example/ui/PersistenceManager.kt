@@ -683,135 +683,27 @@ class PersistenceManager(
     // Export / Import (Offline-first sharing)
     // ----------------------------------------------------
 
-    fun exportSave(): String {
-        val state = uiState
-        val payload = PortableSavePayload(
-            runnerName = state.runnerName, runnerClass = state.runnerClass.name, level = state.level,
-            integrity = state.integrity, maxIntegrity = state.maxIntegrity, playerShield = state.playerShield,
-            playerMaxShield = state.playerMaxShield, ram = state.ram, maxRam = state.maxRam,
-            ramRecoveryRate = state.ramRecoveryRate, credits = state.credits, damageBonus = state.damageBonus,
-            defenseBonus = state.defenseBonus, characterLevel = state.characterLevel, characterXp = state.characterXp,
-            xpToNextLevel = state.xpToNextLevel, gridX = state.gridX, gridY = state.gridY,
-            direction = state.direction.name, currentZone = state.currentZone.name, buildingFloor = state.buildingFloor,
-            collectorsLevel = state.collectorsLevel, cityDistrictIndex = state.cityDistrictIndex,
-            hasElevatorKeycard = state.hasElevatorKeycard, nodesHackedCount = state.nodesHackedCount,
-            totalCreditsEarned = state.totalCreditsEarned, dataFragments = state.dataFragments,
-            totalDataFragmentsExtracted = state.totalDataFragmentsExtracted, skillPoints = state.skillPoints,
-            unlockedSkillsCsv = state.unlockedSkills.joinToString(","), tutorialStep = state.tutorialStep,
-            tutorialActive = state.tutorialActive, tutorialSeen = state.tutorialSeen,
-            activeWeather = state.activeWeather.name, weatherTurnsLeft = state.weatherTurnsLeft, levelSeed = state.levelSeed,
-            inventory = state.inventory, installedProgramIds = state.installedPrograms.map { it.id },
-            exploredCellsCsv = serializeExploredCells(state.exploredCells), mazeData = serializeMaze(state.maze),
-            originalMazeData = state.originalMaze?.let { serializeMaze(it) } ?: "",
-            buildingFloorsData = serializeFloors(state.buildingFloors), buildingExploredData = serializeExploredMap(state.buildingExplored),
-            collectorsLevelsData = serializeFloors(state.collectorsLevels), collectorsExploredData = serializeExploredMap(state.collectorsExplored),
-            cityDistrictsData = serializeFloors(state.cityDistricts), cityExploredData = serializeExploredMap(state.cityExplored),
-            installedImplantsCsv = state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" }
+    fun exportSave(): String =
+        PortableSaveEnvelope.encodeJson(
+            PortableSaveJsonCodec.encode(PortableSaveStateMapper.toPayload(uiState))
         )
-        return PortableSaveEnvelope.encodeJson(PortableSaveJsonCodec.encode(payload))
-    }
 
     fun importSave(encoded: String): Boolean {
-        try {
+        return try {
             val payload = PortableSaveJsonCodec.decode(PortableSaveEnvelope.decodeJson(encoded))
-
-            val maze = deserializeMaze(payload.mazeData)
-            if (maze.isEmpty()) { onLog("IMPORT FAILED: Invalid maze data.", LogType.ERROR); return false }
-
-            val inventory = payload.inventory.toMutableList()
-
-            val programs = payload.installedProgramIds.mapTo(mutableListOf()) { getProgramById(it) }
-
-            val installedImplants = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
-            val implCsv = payload.installedImplantsCsv
-            if (implCsv.isNotEmpty()) {
-                implCsv.split(",").forEach { entry ->
-                    val parts = entry.split(":", limit = 2)
-                    if (parts.size == 2) {
-                        val slot = try { ImplantBodySlot.valueOf(parts[0]) } catch (_: Exception) { null }
-                        val implant = if (parts[1].isNotEmpty()) CyberwareImplantRegistry.STARTER_IMPLANTS.find { it.id == parts[1] } else null
-                        if (slot != null) installedImplants[slot] = implant
-                    }
-                }
-            }
-
-            val logFeed = mutableListOf<LogMessage>()
-            val ls = payload.logFeedSerialized
-            if (ls.isNotEmpty()) {
-                ls.split("$$").forEach { entry ->
-                    val parts = entry.split("||")
-                    if (parts.size >= 2) {
-                        val type = try { LogType.valueOf(parts[1]) } catch (_: Exception) { LogType.INFO }
-                        logFeed.add(LogMessage(parts[0], type))
-                    }
-                }
-            }
-
-            val gameState = try { GameState.valueOf(payload.gameStateName) } catch (_: Exception) { GameState.EXPLORATION }
-
-            _uiState.update {
-                it.copy(
-                    screen = ActiveScreen.EXPLORATION,
-                    runnerName = payload.runnerName,
-                    runnerClass = try { NetrunnerClass.valueOf(payload.runnerClass) } catch (_: Exception) { NetrunnerClass.CODE_SLASHER },
-                    level = payload.level,
-                    integrity = payload.integrity,
-                    maxIntegrity = payload.maxIntegrity,
-                    playerShield = payload.playerShield,
-                    playerMaxShield = payload.playerMaxShield,
-                    ram = payload.ram,
-                    maxRam = payload.maxRam,
-                    ramRecoveryRate = payload.ramRecoveryRate,
-                    credits = payload.credits,
-                    damageBonus = payload.damageBonus,
-                    defenseBonus = payload.defenseBonus,
-                    characterLevel = payload.characterLevel,
-                    characterXp = payload.characterXp,
-                    xpToNextLevel = payload.xpToNextLevel,
-                    gridX = payload.gridX,
-                    gridY = payload.gridY,
-                    direction = try { Direction.valueOf(payload.direction) } catch (_: Exception) { Direction.EAST },
-                    currentZone = try { Zone.valueOf(payload.currentZone) } catch (_: Exception) { Zone.BUILDING },
-                    buildingFloor = payload.buildingFloor,
-                    collectorsLevel = payload.collectorsLevel,
-                    cityDistrictIndex = payload.cityDistrictIndex,
-                    hasElevatorKeycard = payload.hasElevatorKeycard,
-                    nodesHackedCount = payload.nodesHackedCount,
-                    totalCreditsEarned = payload.totalCreditsEarned,
-                    dataFragments = payload.dataFragments,
-                    totalDataFragmentsExtracted = payload.totalDataFragmentsExtracted,
-                    skillPoints = payload.skillPoints,
-                    unlockedSkills = payload.unlockedSkillsCsv.split(",").filter { it.isNotBlank() }.toSet(),
-                    tutorialStep = payload.tutorialStep,
-                    tutorialActive = payload.tutorialActive,
-                    tutorialSeen = payload.tutorialSeen,
-                    activeWeather = try { CyberWeather.valueOf(payload.activeWeather) } catch (_: Exception) { CyberWeather.CLEAR },
-                    weatherTurnsLeft = payload.weatherTurnsLeft,
-                    levelSeed = payload.levelSeed,
-                    inventory = inventory,
-                    installedPrograms = programs,
-                    installedImplants = installedImplants,
-                    exploredCells = deserializeExploredCells(payload.exploredCellsCsv),
-                    maze = maze,
-                    originalMaze = payload.originalMazeData.let { s -> if (s.isNotEmpty()) deserializeMaze(s) else null },
-                    buildingFloors = deserializeFloors(payload.buildingFloorsData),
-                    buildingExplored = deserializeExploredMap(payload.buildingExploredData),
-                    collectorsLevels = deserializeFloors(payload.collectorsLevelsData),
-                    collectorsExplored = deserializeExploredMap(payload.collectorsExploredData),
-                    cityDistricts = deserializeFloors(payload.cityDistrictsData),
-                    cityExplored = deserializeExploredMap(payload.cityExploredData),
-                    gameState = gameState,
-                    logFeed = logFeed
-                )
-            }
-
+            val restored = PortableSaveStateMapper.restore(
+                current = uiState,
+                payload = payload,
+                programLookup = ::getProgramById,
+                implantLookup = { id -> CyberwareImplantRegistry.STARTER_IMPLANTS.find { it.id == id } }
+            )
+            _uiState.value = restored
             onLog("SAVE DATA IMPORTED SUCCESSFULLY.", LogType.SUCCESS)
             onRestoreComplete()
-            return true
-
+            true
         } catch (e: Exception) {
             onLog("IMPORT FAILED: Corrupt save data - ${e.localizedMessage}", LogType.ERROR)
-            return false
+            false
         }
     }
 
