@@ -65,4 +65,28 @@ class TurnStateMachineTest {
         assertEquals(4, concluded.totalTurns)
         assertTrue(s.isInputLocked)
     }
+
+    @Test
+    fun `generic transitions preserve legacy flags and phases`() {
+        var s = TurnStateMachine.initialize(GameTurnUiState(), "ICE", 2)
+
+        s = TurnStateMachine.transition(s, TurnStateEnum.PROCESSING)
+        assertEquals(TurnStateEnum.PROCESSING, s.turnStateEnum)
+        assertEquals(TurnPhase.ROUND_MAINTENANCE, s.turnPhase)
+        assertTrue(s.isInputLocked)
+
+        s = TurnStateMachine.transition(s, TurnStateEnum.ENEMY)
+        assertEquals(TurnStateEnum.ENEMY, s.turnStateEnum)
+        assertEquals(TurnPhase.ENEMY_RESOLVING, s.turnPhase)
+        assertTrue(s.isEnemyActing)
+        assertFalse(s.isPlayerTurn)
+
+        s = TurnStateMachine.transition(s, TurnStateEnum.PLAYER)
+        assertEquals(TurnStateEnum.PLAYER, s.turnStateEnum)
+        assertEquals(TurnPhase.PLAYER_INPUT, s.turnPhase)
+        assertFalse(s.isInputLocked)
+        assertTrue(s.isPlayerTurn)
+        assertFalse(s.isEnemyActing)
+        assertEquals(2, s.currentTurn)
+    }
 }
