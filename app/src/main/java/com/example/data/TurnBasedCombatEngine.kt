@@ -113,7 +113,8 @@ object TurnBasedCombatEngine {
      */
     fun processPlayerAction(
         action: PlayerCombatAction,
-        currentState: CombatEngineState
+        currentState: CombatEngineState,
+        random: Random = Random.Default
     ): CombatTurnResult {
         if (currentState.isCombatOver) {
             return CombatTurnResult(currentState, listOf("Combat has already concluded."))
@@ -130,7 +131,7 @@ object TurnBasedCombatEngine {
             is PlayerCombatAction.Strike -> {
                 val baseChance = 75
                 val hitChance = (baseChance + state.playerLevel * 2 + state.playerRam).coerceIn(25, 95)
-                val roll = Random.nextInt(100)
+                val roll = random.nextInt(100)
 
                 if (roll >= hitChance) {
                     wasMiss = true
@@ -140,7 +141,7 @@ object TurnBasedCombatEngine {
                     var rawDmg = baseDmg + (state.playerLevel * 3)
                     
                     // Crit check
-                    if (Random.nextInt(100) < 20) {
+                    if (random.nextInt(100) < 20) {
                         wasCrit = true
                         rawDmg = (rawDmg * 1.75f).toInt()
                         logs.add("💥 CRITICAL STRIKE! Dealt maximum kinetic damage!")
@@ -242,7 +243,7 @@ object TurnBasedCombatEngine {
 
             is PlayerCombatAction.Flee -> {
                 val fleeChance = 65
-                if (Random.nextInt(100) < fleeChance) {
+                if (random.nextInt(100) < fleeChance) {
                     logs.add("🏃 ESCAPE SUCCESSFUL! Dissolved neural link and retreated.")
                     val finalState = state.copy(
                         isCombatOver = true,
@@ -279,7 +280,8 @@ object TurnBasedCombatEngine {
      */
     fun processEnemyTurn(
         currentState: CombatEngineState,
-        proximityDistance: Int = 1
+        proximityDistance: Int = 1,
+        random: Random = Random.Default
     ): CombatTurnResult {
         if (currentState.isCombatOver) {
             return CombatTurnResult(currentState, emptyList())
@@ -312,7 +314,8 @@ object TurnBasedCombatEngine {
             enemyBaseDamage = state.enemyBaseDamage,
             playerHealth = state.playerHealth,
             playerRam = state.playerRam,
-            proximityDistance = proximityDistance
+            proximityDistance = proximityDistance,
+            random = random
         )
 
         logs.add(decision.logMessage)
