@@ -9,15 +9,23 @@ class PortableSaveEnvelopeTest {
     @Test
     fun `portable envelope round trips utf8 json`() {
         val json = """{"version":1,"runnerName":"Венед","mazeData":"SAFE_ZONE,PATH"}"""
-        val encoded = PortableSaveEnvelope.encodeJson(json)
+        val encoded = PortableSaveEnvelope.wrapBase64(
+            java.util.Base64.getEncoder().encodeToString(json.toByteArray(Charsets.UTF_8))
+        )
 
         assertTrue(encoded.startsWith("NETCRAWLER_SAVE_v1:"))
-        assertEquals(json, PortableSaveEnvelope.decodeJson(encoded))
+        assertEquals(
+            json,
+            String(
+                java.util.Base64.getDecoder().decode(PortableSaveEnvelope.unwrapBase64(encoded)),
+                Charsets.UTF_8
+            )
+        )
     }
 
     @Test(expected = IllegalArgumentException::class)
     fun `decoder rejects unsupported prefix`() {
-        PortableSaveEnvelope.decodeJson("LABYRINTH_SAVE_v2:AAAA")
+        PortableSaveEnvelope.unwrapBase64("LABYRINTH_SAVE_v2:AAAA")
     }
 
     @Test
