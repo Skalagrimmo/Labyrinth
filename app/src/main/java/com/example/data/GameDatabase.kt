@@ -20,7 +20,7 @@ interface RunRecordDao {
     fun getAllRecords(): Flow<List<RunRecord>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    override suspend fun insertRecord(record: RunRecord)
+    suspend fun insertRecord(record: RunRecord)
 
     @Query("DELETE FROM run_records")
     suspend fun clearRecords()
@@ -35,7 +35,7 @@ interface CharacterProfileDao {
     fun getProfileById(profileId: String): Flow<CharacterProfileEntity?>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    override suspend fun insertProfile(profile: CharacterProfileEntity)
+    suspend fun insertProfile(profile: CharacterProfileEntity)
 
     @Update
     suspend fun updateProfile(profile: CharacterProfileEntity)
@@ -53,10 +53,10 @@ interface GameSaveProgressDao {
     fun getSaveProgress(slotId: String = "current_save"): Flow<GameSaveProgressEntity?>
 
     @Query("SELECT * FROM game_save_progress WHERE saveSlotId = :slotId LIMIT 1")
-    override suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity?
+    suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    override suspend fun insertSaveProgress(saveProgress: GameSaveProgressEntity)
+    suspend fun insertSaveProgress(saveProgress: GameSaveProgressEntity)
 
     @Update
     suspend fun updateSaveProgress(saveProgress: GameSaveProgressEntity)
@@ -74,10 +74,10 @@ interface InventoryItemDao {
     fun getInventoryItems(slotId: String = "current_save"): Flow<List<InventoryItemEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    override suspend fun insertItem(item: InventoryItemEntity)
+    suspend fun insertItem(item: InventoryItemEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    override suspend fun insertItems(items: List<InventoryItemEntity>)
+    suspend fun insertItems(items: List<InventoryItemEntity>)
 
     @Update
     suspend fun updateItem(item: InventoryItemEntity)
@@ -235,14 +235,14 @@ abstract class GameDatabase : RoomDatabase() {
 }
 
 interface SaveRepository {
-    override suspend fun insert(record: RunRecord)
-    override suspend fun clearAll()
-    override suspend fun saveProfile(profile: CharacterProfileEntity)
-    override suspend fun saveGameProgress(
+    suspend fun insert(record: RunRecord)
+    suspend fun clearAll()
+    suspend fun saveProfile(profile: CharacterProfileEntity)
+    suspend fun saveGameProgress(
         saveProgress: GameSaveProgressEntity,
         inventoryItems: List<InventoryItemEntity>
     )
-    override suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity?
+    suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity?
 }
 
 class GameRepository(
@@ -283,7 +283,7 @@ class GameRepository(
         }
     }
 
-    override suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity? =
+    suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             gameSaveProgressDao.getSaveProgressSync(slotId)
         }
@@ -293,7 +293,7 @@ class GameRepository(
         inventoryItemDao.clearInventoryForSlot(slotId)
     }
 
-    override suspend fun insertInventoryItem(item: InventoryItemEntity) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    suspend fun insertInventoryItem(item: InventoryItemEntity) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         inventoryItemDao.insertItem(item)
     }
 }
