@@ -20,7 +20,7 @@ class CombatEngineModelsTest {
     fun `status effect ids are reproducible with seeded identity source`() {
         fun create() = CombatStatusEffectFactory.create(
             name = "Burn",
-            type = StatusEffectType.BURN,
+            type = StatusEffectType.POISONED,
             durationTurns = 3,
             potency = 5,
             random = Random(42)
