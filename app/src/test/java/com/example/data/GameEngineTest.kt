@@ -102,4 +102,41 @@ class GameEngineTest {
 
         assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
     }
+
+
+    @Test
+    fun `perspective facade preserves extracted renderer output`() {
+        val grid = Array(8) { Array(8) { CellType.PATH } }
+        grid[3][4] = CellType.DATA_STORE
+        grid[2][4] = CellType.WALL
+
+        val direct = AsciiPerspectiveRenderer.render(
+            grid = grid,
+            px = 4,
+            py = 4,
+            dir = Direction.NORTH,
+            activeWeather = CyberWeather.CLEAR
+        )
+        val facade = GameEngine.render3DPerspective(
+            grid = grid,
+            px = 4,
+            py = 4,
+            dir = Direction.NORTH,
+            activeWeather = CyberWeather.CLEAR
+        )
+
+        assertEquals(direct, facade)
+    }
+
+    @Test
+    fun `perspective renderer handles an empty grid`() {
+        val frame = AsciiPerspectiveRenderer.render(
+            grid = emptyArray(),
+            px = 0,
+            py = 0,
+            dir = Direction.NORTH
+        )
+
+        assertEquals("", frame)
+    }
 }
