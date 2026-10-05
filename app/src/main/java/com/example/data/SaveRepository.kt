@@ -1,3 +1,7 @@
+package com.example.data
+
+import kotlinx.coroutines.flow.Flow
+
 interface SaveRepository {
     suspend fun insert(record: RunRecord)
     suspend fun clearAll()
