@@ -20,7 +20,7 @@ class LegacySaveStateCodecTest {
         val codec = LegacySaveStateCodec(
             storage = storage,
             programLookup = { id -> Program(id, id, "restored", ramCost = 1) },
-            cyberwareLookup = { id -> Cyberware(id, id, "restored") }
+            cyberwareLookup = { id -> Cyberware(id, id, "restored", cost = 0) }
         )
         val state = GameViewModel.GameUiState(
             runnerName = "Legacy Runner",
@@ -50,11 +50,11 @@ class LegacySaveStateCodecTest {
             inventory = listOf("NanoMed.sys", "RAMBoost.exe"),
             installedPrograms = listOf(Program("ice", "ICE", "test", ramCost = 2)),
             exploredCells = setOf(1 to 2, 3 to 4),
-            activeWeather = CyberWeather.STORM,
+            activeWeather = CyberWeather.DATA_STORM,
             weatherTurnsLeft = 4,
             stepsSinceLastEvent = 8,
             nextEventSteps = 19,
-            predictedWeather = CyberWeather.RAIN,
+            predictedWeather = CyberWeather.COLD_SPOT,
             nodesHackedCount = 11,
             totalCreditsEarned = 999,
             skillPoints = 3,
@@ -64,7 +64,7 @@ class LegacySaveStateCodecTest {
             tutorialSeen = true,
             maze = arrayOf(
                 arrayOf(CellType.SAFE_ZONE, CellType.WALL),
-                arrayOf(CellType.PATH, CellType.EXIT)
+                arrayOf(CellType.PATH, CellType.ENCRYPTED_PORTAL)
             ),
             originalMaze = arrayOf(arrayOf(CellType.PATH)),
             buildingFloors = mapOf(1 to arrayOf(arrayOf(CellType.PATH))),
@@ -74,7 +74,7 @@ class LegacySaveStateCodecTest {
             cityDistricts = mapOf(3 to arrayOf(arrayOf(CellType.EXIT))),
             cityExplored = mapOf(3 to setOf(2 to 2)),
             gameState = GameState.COMBAT_START,
-            logFeed = listOf(LogMessage("legacy", LogType.COMBAT, 1234L))
+            logFeed = listOf(LogMessage("legacy", LogType.ALERT, 1234L))
         )
 
         codec.save(state)
