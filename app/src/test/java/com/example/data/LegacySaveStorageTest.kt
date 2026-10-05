@@ -1,14 +1,14 @@
 package com.example.data
 
 import android.content.Context
-import androidx.test.core.app.ApplicationProvider
+import org.robolectric.RuntimeEnvironment
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LegacySaveStorageTest {
-    private val context = ApplicationProvider.getApplicationContext<Context>()
+    private val context = RuntimeEnvironment.getApplication()
 
     @Test
     fun `storage preserves typed values and defaults`() {
