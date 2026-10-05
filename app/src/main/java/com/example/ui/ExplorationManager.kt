@@ -40,17 +40,17 @@ class ExplorationManager(
         if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
 
         val state = uiState
-        var nextX = state.gridX + state.direction.dx
-        var nextY = state.gridY + state.direction.dy
-
-        if (state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) {
-            if (Random.nextFloat() < 0.40f) {
-                val scrambledDirs = Direction.VALUES.filter { it != state.direction }
-                val scrambledDir = scrambledDirs.random()
-                nextX = state.gridX + scrambledDir.dx
-                nextY = state.gridY + scrambledDir.dy
-                addLog("DATA STORM STATIC: Scrambled movement vector! Redirected forward path.", LogType.ERROR)
-            }
+        val movement = ExplorationMovementRules.resolveMove(
+            x = state.gridX,
+            y = state.gridY,
+            direction = state.direction,
+            forward = true,
+            weather = state.activeWeather
+        )
+        val nextX = movement.nextX
+        val nextY = movement.nextY
+        if (movement.wasScrambled) {
+            addLog("DATA STORM STATIC: Scrambled movement vector! Redirected forward path.", LogType.ERROR)
         }
 
         if (isValidMove(nextX, nextY)) {
@@ -85,17 +85,17 @@ class ExplorationManager(
         if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
 
         val state = uiState
-        var nextX = state.gridX - state.direction.dx
-        var nextY = state.gridY - state.direction.dy
-
-        if (state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) {
-            if (Random.nextFloat() < 0.40f) {
-                val scrambledDirs = Direction.VALUES
-                val scrambledDir = scrambledDirs.random()
-                nextX = state.gridX + scrambledDir.dx
-                nextY = state.gridY + scrambledDir.dy
-                addLog("DATA STORM STATIC: Scrambled movement vector! Redirected backward path.", LogType.ERROR)
-            }
+        val movement = ExplorationMovementRules.resolveMove(
+            x = state.gridX,
+            y = state.gridY,
+            direction = state.direction,
+            forward = false,
+            weather = state.activeWeather
+        )
+        val nextX = movement.nextX
+        val nextY = movement.nextY
+        if (movement.wasScrambled) {
+            addLog("DATA STORM STATIC: Scrambled movement vector! Redirected backward path.", LogType.ERROR)
         }
 
         if (isValidMove(nextX, nextY)) {
@@ -127,13 +127,15 @@ class ExplorationManager(
     fun turnLeft() {
         if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
         _uiState.update { state ->
-            val actualDir = if ((state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) && Random.nextFloat() < 0.4f) {
+            val turn = ExplorationMovementRules.resolveTurn(
+                direction = state.direction,
+                turnLeft = true,
+                weather = state.activeWeather
+            )
+            if (turn.wasScrambled) {
                 addLog("DATA STORM STATIC: Rotation circuit scrambled!", LogType.ERROR)
-                state.direction.turnRight()
-            } else {
-                state.direction.turnLeft()
             }
-            state.copy(direction = actualDir)
+            state.copy(direction = turn.direction)
         }
         updatePerspective()
         addLog("ROTATED VECTOR 90 LEFT.")
@@ -142,13 +144,15 @@ class ExplorationManager(
     fun turnRight() {
         if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
         _uiState.update { state ->
-            val actualDir = if ((state.activeWeather == CyberWeather.DATA_STORM || state.activeWeather == CyberWeather.APEX_STORM) && Random.nextFloat() < 0.4f) {
+            val turn = ExplorationMovementRules.resolveTurn(
+                direction = state.direction,
+                turnLeft = false,
+                weather = state.activeWeather
+            )
+            if (turn.wasScrambled) {
                 addLog("DATA STORM STATIC: Rotation circuit scrambled!", LogType.ERROR)
-                state.direction.turnLeft()
-            } else {
-                state.direction.turnRight()
             }
-            state.copy(direction = actualDir)
+            state.copy(direction = turn.direction)
         }
         updatePerspective()
         addLog("ROTATED VECTOR 90 RIGHT.")
@@ -182,33 +186,15 @@ class ExplorationManager(
         if (maze.isEmpty()) return
 
         val scanRadius = 8
-        val foundEnemies = mutableSetOf<Pair<Int, Int>>()
-        val foundLoot = mutableSetOf<Pair<Int, Int>>()
-        val scannedCells = mutableSetOf<Pair<Int, Int>>()
-
-        val rowCount = maze.size
-        val colCount = maze[0].size
-
-        for (dy in -scanRadius..scanRadius) {
-            for (dx in -scanRadius..scanRadius) {
-                val nx = px + dx
-                val ny = py + dy
-                if (nx in 0 until colCount && ny in 0 until rowCount) {
-                    if (dx * dx + dy * dy <= scanRadius * scanRadius) {
-                        scannedCells.add(Pair(nx, ny))
-                        val cell = maze[ny][nx]
-                        when (cell) {
-                            CellType.VIRUS_NODE -> foundEnemies.add(Pair(nx, ny))
-                            CellType.DATA_STORE, CellType.SECRET_CACHE, CellType.ENCRYPTED_PORTAL,
-                            CellType.ELEVATOR, CellType.STAIRS_UP, CellType.STAIRS_DOWN -> foundLoot.add(Pair(nx, ny))
-                            else -> {}
-                        }
-                    }
-                }
-            }
-        }
-
-        val updatedExplored = state.exploredCells + scannedCells
+        val scan = ExplorationScanRules.scan(
+            maze = maze,
+            originX = px,
+            originY = py,
+            radius = scanRadius
+        )
+        val foundEnemies = scan.foundEnemies
+        val foundLoot = scan.foundLoot
+        val updatedExplored = state.exploredCells + scan.scannedCells
         val now = System.currentTimeMillis()
 
         var svdagSummary: com.example.data.svdag.SvdagScanSummary? = null
@@ -266,9 +252,12 @@ class ExplorationManager(
 
     private fun recoverRamOnMove() {
         _uiState.update { state ->
-            val gained = if (Random.nextInt(100) < 40) 1 else 0
-            val newRam = minOf(state.maxRam, state.ram + gained)
-            state.copy(ram = newRam)
+            state.copy(
+                ram = ExplorationMovementRules.recoverRam(
+                    ram = state.ram,
+                    maxRam = state.maxRam
+                )
+            )
         }
     }
 
@@ -639,21 +628,12 @@ class ExplorationManager(
         val maze = state.maze
         if (maze.isEmpty()) return
 
-        var foundEnemy: Pair<Int, Int>? = null
-        val radius = 2
-        for (dy in -radius..radius) {
-            for (dx in -radius..radius) {
-                val nx = playerX + dx
-                val ny = playerY + dy
-                if (ny in maze.indices && nx in maze[0].indices) {
-                    if (maze[ny][nx] == CellType.VIRUS_NODE) {
-                        foundEnemy = Pair(nx, ny)
-                        break
-                    }
-                }
-            }
-            if (foundEnemy != null) break
-        }
+        val foundEnemy = ExplorationThreatScanRules.findFirstHostile(
+            maze = maze,
+            originX = playerX,
+            originY = playerY,
+            radius = 2
+        )
 
         if (foundEnemy != null) {
             onTriggerCombat(foundEnemy.first, foundEnemy.second)
@@ -1020,22 +1000,15 @@ class ExplorationManager(
 
     fun revealCellsAround(x: Int, y: Int) {
         _uiState.update { state ->
-            val updatedRevealed = state.exploredCells.toMutableSet()
-            updatedRevealed.add(Pair(x, y))
-
-            val radius = 3
-            for (dy in -radius..radius) {
-                for (dx in -radius..radius) {
-                    val nx = x + dx
-                    val ny = y + dy
-                    if (ny in state.maze.indices && nx in state.maze[0].indices) {
-                        if (dx * dx + dy * dy <= radius * radius + 1) {
-                            updatedRevealed.add(Pair(nx, ny))
-                        }
-                    }
-                }
-            }
-            state.copy(exploredCells = updatedRevealed)
+            val revealedNow = ExplorationVisibilityRules.revealAround(
+                maze = state.maze,
+                originX = x,
+                originY = y,
+                radius = 3
+            )
+            state.copy(
+                exploredCells = state.exploredCells + revealedNow
+            )
         }
     }
 

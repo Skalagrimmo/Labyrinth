@@ -4,22 +4,28 @@ import android.app.Application
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.util.Base64
 import com.example.data.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.json.JSONArray
-import org.json.JSONObject
 
 class PersistenceManager(
     private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
     private val application: Application,
-    private val repository: GameRepository,
+    private val repository: SaveRepository,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
-    private val onRestoreComplete: () -> Unit
+    private val onRestoreComplete: () -> Unit,
+    private val legacySaveStorage: LegacySaveStorage = AndroidLegacySaveStorage(application)
 ) {
+
+    private val legacySaveCodec = LegacySaveStateCodec(
+        storage = legacySaveStorage,
+        programLookup = ::getProgramById,
+        cyberwareLookup = ::getCyberwareById
+    )
 
     private val uiState get() = _uiState.value
 
@@ -29,85 +35,14 @@ class PersistenceManager(
     // Serialization Helpers
     // ----------------------------------------------------
 
-    private fun serializeMaze(maze: Array<Array<CellType>>): String {
-        return maze.joinToString(";") { row ->
-            row.joinToString(",") { it.name }
-        }
-    }
-
-    private fun deserializeMaze(str: String): Array<Array<CellType>> {
-        if (str.isEmpty()) return emptyArray()
-        val rows = str.split(";")
-        return rows.map { row ->
-            row.split(",").map { cellName ->
-                try {
-                    CellType.valueOf(cellName)
-                } catch (e: Exception) {
-                    CellType.WALL
-                }
-            }.toTypedArray()
-        }.toTypedArray()
-    }
-
-    private fun serializeExploredCells(cells: Set<Pair<Int, Int>>): String {
-        return cells.joinToString(";") { "${it.first},${it.second}" }
-    }
-
-    private fun deserializeExploredCells(str: String): Set<Pair<Int, Int>> {
-        if (str.isEmpty()) return emptySet()
-        return str.split(";").mapNotNull {
-            val parts = it.split(",")
-            if (parts.size == 2) {
-                val first = parts[0].toIntOrNull()
-                val second = parts[1].toIntOrNull()
-                if (first != null && second != null) {
-                    Pair(first, second)
-                } else null
-            } else null
-        }.toSet()
-    }
-
-    private fun serializeFloors(floors: Map<Int, Array<Array<CellType>>>): String {
-        return floors.map { (floor, maze) ->
-            "$floor:${serializeMaze(maze)}"
-        }.joinToString("|")
-    }
-
-    private fun deserializeFloors(str: String): Map<Int, Array<Array<CellType>>> {
-        if (str.isEmpty()) return emptyMap()
-        val map = mutableMapOf<Int, Array<Array<CellType>>>()
-        str.split("|").forEach { entry ->
-            val parts = entry.split(":", limit = 2)
-            if (parts.size == 2) {
-                val floor = parts[0].toIntOrNull()
-                if (floor != null) {
-                    map[floor] = deserializeMaze(parts[1])
-                }
-            }
-        }
-        return map
-    }
-
-    private fun serializeExploredMap(explored: Map<Int, Set<Pair<Int, Int>>>): String {
-        return explored.map { (floor, cells) ->
-            "$floor:${serializeExploredCells(cells)}"
-        }.joinToString("|")
-    }
-
-    private fun deserializeExploredMap(str: String): Map<Int, Set<Pair<Int, Int>>> {
-        if (str.isEmpty()) return emptyMap()
-        val map = mutableMapOf<Int, Set<Pair<Int, Int>>>()
-        str.split("|").forEach { entry ->
-            val parts = entry.split(":", limit = 2)
-            if (parts.size == 2) {
-                val floor = parts[0].toIntOrNull()
-                if (floor != null) {
-                    map[floor] = deserializeExploredCells(parts[1])
-                }
-            }
-        }
-        return map
-    }
+    private fun serializeMaze(maze: Array<Array<CellType>>): String = SaveDataCodec.serializeMaze(maze)
+    private fun deserializeMaze(str: String): Array<Array<CellType>> = SaveDataCodec.deserializeMaze(str)
+    private fun serializeExploredCells(cells: Set<Pair<Int, Int>>): String = SaveDataCodec.serializeExploredCells(cells)
+    private fun deserializeExploredCells(str: String): Set<Pair<Int, Int>> = SaveDataCodec.deserializeExploredCells(str)
+    private fun serializeFloors(floors: Map<Int, Array<Array<CellType>>>): String = SaveDataCodec.serializeFloors(floors)
+    private fun deserializeFloors(str: String): Map<Int, Array<Array<CellType>>> = SaveDataCodec.deserializeFloors(str)
+    private fun serializeExploredMap(explored: Map<Int, Set<Pair<Int, Int>>>): String = SaveDataCodec.serializeExploredMap(explored)
+    private fun deserializeExploredMap(str: String): Map<Int, Set<Pair<Int, Int>>> = SaveDataCodec.deserializeExploredMap(str)
 
     // ----------------------------------------------------
     // Lookup Helpers
@@ -257,20 +192,18 @@ class PersistenceManager(
     // Save / Load
     // ----------------------------------------------------
 
-    fun hasSavedGame(): Boolean {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        return sharedPrefs.getBoolean("has_saved_game", false)
-    }
+    fun hasSavedGame(): Boolean =
+        legacySaveStorage.getBoolean("has_saved_game", false)
 
     fun markTutorialSeen() {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        sharedPrefs.edit().putBoolean("tutorial_seen", true).apply()
+        legacySaveStorage.edit {
+            putBoolean("tutorial_seen", true)
+        }
     }
 
-    fun isTutorialSeen(): Boolean {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        return sharedPrefs.getBoolean("tutorial_seen", false)
-    }
+    fun isTutorialSeen(): Boolean =
+        legacySaveStorage.getBoolean("tutorial_seen", false)
+
 
     fun saveGame() {
         val state = uiState
@@ -357,69 +290,7 @@ class PersistenceManager(
             repository.saveGameProgress(saveProgressEntity, inventoryEntities)
         }
 
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        sharedPrefs.edit().apply {
-            putBoolean("has_saved_game", true)
-            putString("runnerName", state.runnerName)
-            putString("runnerClass", state.runnerClass.name)
-            putInt("maxIntegrity", state.maxIntegrity)
-            putInt("integrity", state.integrity)
-            putInt("playerMaxShield", state.playerMaxShield)
-            putInt("playerShield", state.playerShield)
-            putInt("maxRam", state.maxRam)
-            putInt("ram", state.ram)
-            putInt("ramRecoveryRate", state.ramRecoveryRate)
-            putInt("credits", state.credits)
-            putInt("damageBonus", state.damageBonus)
-            putInt("defenseBonus", state.defenseBonus)
-            putInt("characterLevel", state.characterLevel)
-            putInt("characterXp", state.characterXp)
-            putInt("xpToNextLevel", state.xpToNextLevel)
-            putInt("gridX", state.gridX)
-            putInt("gridY", state.gridY)
-            putString("direction", state.direction.name)
-            putInt("level", state.level)
-            putString("currentZone", state.currentZone.name)
-            putInt("buildingFloor", state.buildingFloor)
-            putInt("collectorsLevel", state.collectorsLevel)
-            putInt("cityDistrictIndex", state.cityDistrictIndex)
-            putBoolean("hasElevatorKeycard", state.hasElevatorKeycard)
-
-            putString("inventory", state.inventory.joinToString(","))
-            putString("installedCyberware", state.installedCyberware.joinToString(",") { it.id })
-            putString("installedPrograms", state.installedPrograms.joinToString(",") { it.id })
-            putString("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
-            putString("storedImplantsCsv", state.storedImplants.joinToString(",") { it.id })
-            putInt("skillPoints", state.skillPoints)
-            putString("unlockedSkills", state.unlockedSkills.joinToString(","))
-            putInt("tutorialStep", state.tutorialStep)
-            putBoolean("tutorialActive", state.tutorialActive)
-            putBoolean("tutorialSeen", state.tutorialSeen)
-            putString("exploredCells", serializeExploredCells(state.exploredCells))
-
-            putString("activeWeather", state.activeWeather.name)
-            putInt("weatherTurnsLeft", state.weatherTurnsLeft)
-            putInt("stepsSinceLastEvent", state.stepsSinceLastEvent)
-            putInt("nextEventSteps", state.nextEventSteps)
-            putString("predictedWeather", state.predictedWeather?.name ?: "")
-
-            putInt("nodesHackedCount", state.nodesHackedCount)
-            putInt("totalCreditsEarned", state.totalCreditsEarned)
-
-            putString("maze", serializeMaze(state.maze))
-            putString("originalMaze", state.originalMaze?.let { serializeMaze(it) } ?: "")
-            putString("buildingFloors", serializeFloors(state.buildingFloors))
-            putString("buildingExplored", serializeExploredMap(state.buildingExplored))
-            putString("collectorsLevels", serializeFloors(state.collectorsLevels))
-            putString("collectorsExplored", serializeExploredMap(state.collectorsExplored))
-            putString("cityDistricts", serializeFloors(state.cityDistricts))
-            putString("cityExplored", serializeExploredMap(state.cityExplored))
-
-            putString("gameState", state.gameState.name)
-            putString("logFeed", state.logFeed.joinToString("$$") { "${it.text}||${it.type.name}||${it.timestamp}" })
-
-            apply()
-        }
+        legacySaveCodec.save(state)
         onLog("COGNITIVE STATE PERSISTED TO ROOM DATABASE & CHIP STORAGE.", LogType.SUCCESS)
     }
 
@@ -567,359 +438,61 @@ class PersistenceManager(
                 }
             }
 
-            loadFromSharedPreferences()
+            loadFromLegacyStorage()
         }
     }
 
-    private fun loadFromSharedPreferences() {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        if (!sharedPrefs.getBoolean("has_saved_game", false)) {
+    private fun loadFromLegacyStorage() {
+        if (!legacySaveStorage.getBoolean("has_saved_game", false)) {
             onLog("ERROR: NO RESTORE POINT FOUND.", LogType.ERROR)
             return
         }
 
         try {
-            val runnerClass = try {
-                NetrunnerClass.valueOf(sharedPrefs.getString("runnerClass", "") ?: "CODE_SLASHER")
-            } catch (e: Exception) {
-                NetrunnerClass.CODE_SLASHER
-            }
-
-            val direction = try {
-                Direction.valueOf(sharedPrefs.getString("direction", "") ?: "EAST")
-            } catch (e: Exception) {
-                Direction.EAST
-            }
-
-            val currentZone = try {
-                Zone.valueOf(sharedPrefs.getString("currentZone", "") ?: "BUILDING")
-            } catch (e: Exception) {
-                Zone.BUILDING
-            }
-
-            val activeWeather = try {
-                CyberWeather.valueOf(sharedPrefs.getString("activeWeather", "") ?: "CLEAR")
-            } catch (e: Exception) {
-                CyberWeather.CLEAR
-            }
-
-            val predictedWeatherStr = sharedPrefs.getString("predictedWeather", "") ?: ""
-            val predictedWeather = if (predictedWeatherStr.isNotEmpty()) {
-                try {
-                    CyberWeather.valueOf(predictedWeatherStr)
-                } catch (e: Exception) {
-                    null
-                }
-            } else null
-
-            val gameState = try {
-                GameState.valueOf(sharedPrefs.getString("gameState", "") ?: "EXPLORATION")
-            } catch (e: Exception) {
-                GameState.EXPLORATION
-            }
-
-            val invStr = sharedPrefs.getString("inventory", "") ?: ""
-            val inventory = if (invStr.isEmpty()) emptyList() else invStr.split(",")
-
-            val cyberStr = sharedPrefs.getString("installedCyberware", "") ?: ""
-            val installedCyberware = if (cyberStr.isEmpty()) emptyList() else cyberStr.split(",").map { getCyberwareById(it) }
-
-            val progStr = sharedPrefs.getString("installedPrograms", "") ?: ""
-            val installedPrograms = if (progStr.isEmpty()) emptyList() else progStr.split(",").map { getProgramById(it) }
-
-            val implantsStr = sharedPrefs.getString("installedImplantsCsv", "") ?: ""
-            val installedImplantsMap = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
-            if (implantsStr.isNotEmpty()) {
-                implantsStr.split(",").forEach { entry ->
-                    val parts = entry.split(":")
-                    if (parts.size == 2) {
-                        try {
-                            val slot = ImplantBodySlot.valueOf(parts[0])
-                            val implant = CyberwareImplantRegistry.getImplantById(parts[1])
-                            if (implant != null) {
-                                installedImplantsMap[slot] = implant
-                            }
-                        } catch (e: Exception) {}
-                    }
-                }
-            }
-
-            val storedImplantsStr = sharedPrefs.getString("storedImplantsCsv", "") ?: ""
-            val storedImplantsList = if (storedImplantsStr.isEmpty()) emptyList() else storedImplantsStr.split(",").mapNotNull { CyberwareImplantRegistry.getImplantById(it) }
-
-            val logStr = sharedPrefs.getString("logFeed", "") ?: ""
-            val logFeed = if (logStr.isEmpty()) emptyList() else logStr.split("$$").mapNotNull { line ->
-                val parts = line.split("||")
-                if (parts.size == 3) {
-                    val text = parts[0]
-                    val type = try { LogType.valueOf(parts[1]) } catch(e: Exception) { LogType.INFO }
-                    val ts = parts[2].toLongOrNull() ?: System.currentTimeMillis()
-                    LogMessage(text, type, ts)
-                } else null
-            }
-
-            val mazeStr = sharedPrefs.getString("maze", "") ?: ""
-            val maze = deserializeMaze(mazeStr)
-
-            val originalMazeStr = sharedPrefs.getString("originalMaze", "") ?: ""
-            val originalMaze = if (originalMazeStr.isEmpty()) null else deserializeMaze(originalMazeStr)
-
-            val buildingFloorsStr = sharedPrefs.getString("buildingFloors", "") ?: ""
-            val buildingFloors = deserializeFloors(buildingFloorsStr)
-
-            val buildingExploredStr = sharedPrefs.getString("buildingExplored", "") ?: ""
-            val buildingExplored = deserializeExploredMap(buildingExploredStr)
-
-            val collectorsLevelsStr = sharedPrefs.getString("collectorsLevels", "") ?: ""
-            val collectorsLevels = deserializeFloors(collectorsLevelsStr)
-
-            val collectorsExploredStr = sharedPrefs.getString("collectorsExplored", "") ?: ""
-            val collectorsExplored = deserializeExploredMap(collectorsExploredStr)
-
-            val cityDistrictsStr = sharedPrefs.getString("cityDistricts", "") ?: ""
-            val cityDistricts = deserializeFloors(cityDistrictsStr)
-
-            val cityExploredStr = sharedPrefs.getString("cityExplored", "") ?: ""
-            val cityExplored = deserializeExploredMap(cityExploredStr)
-
-            val exploredCellsStr = sharedPrefs.getString("exploredCells", "") ?: ""
-            val exploredCells = deserializeExploredCells(exploredCellsStr)
-
-            _uiState.update {
-                it.copy(
-                    screen = ActiveScreen.EXPLORATION,
-                    runnerName = sharedPrefs.getString("runnerName", "") ?: "",
-                    runnerClass = runnerClass,
-                    maxIntegrity = sharedPrefs.getInt("maxIntegrity", 100),
-                    integrity = sharedPrefs.getInt("integrity", 100),
-                    playerMaxShield = sharedPrefs.getInt("playerMaxShield", 50),
-                    playerShield = sharedPrefs.getInt("playerShield", 10),
-                    maxRam = sharedPrefs.getInt("maxRam", 12),
-                    ram = sharedPrefs.getInt("ram", 12),
-                    ramRecoveryRate = sharedPrefs.getInt("ramRecoveryRate", 2),
-                    credits = sharedPrefs.getInt("credits", 100),
-                    damageBonus = sharedPrefs.getInt("damageBonus", 0),
-                    defenseBonus = sharedPrefs.getInt("defenseBonus", 0),
-                    characterLevel = sharedPrefs.getInt("characterLevel", 1),
-                    characterXp = sharedPrefs.getInt("characterXp", 0),
-                    xpToNextLevel = sharedPrefs.getInt("xpToNextLevel", 100),
-                    gridX = sharedPrefs.getInt("gridX", 1),
-                    gridY = sharedPrefs.getInt("gridY", 1),
-                    direction = direction,
-                    level = sharedPrefs.getInt("level", 1),
-                    currentZone = currentZone,
-                    buildingFloor = sharedPrefs.getInt("buildingFloor", 1),
-                    collectorsLevel = sharedPrefs.getInt("collectorsLevel", 1),
-                    cityDistrictIndex = sharedPrefs.getInt("cityDistrictIndex", 0),
-                    hasElevatorKeycard = sharedPrefs.getBoolean("hasElevatorKeycard", false),
-                    inventory = inventory,
-                    installedCyberware = installedCyberware,
-                    installedPrograms = installedPrograms,
-                    installedImplants = installedImplantsMap,
-                    storedImplants = storedImplantsList,
-                    exploredCells = exploredCells,
-                    activeWeather = activeWeather,
-                    weatherTurnsLeft = sharedPrefs.getInt("weatherTurnsLeft", 0),
-                    stepsSinceLastEvent = sharedPrefs.getInt("stepsSinceLastEvent", 0),
-                    nextEventSteps = sharedPrefs.getInt("nextEventSteps", 30),
-                    predictedWeather = predictedWeather,
-                    nodesHackedCount = sharedPrefs.getInt("nodesHackedCount", 0),
-                    totalCreditsEarned = sharedPrefs.getInt("totalCreditsEarned", 100),
-                    skillPoints = sharedPrefs.getInt("skillPoints", 0),
-                    unlockedSkills = (sharedPrefs.getString("unlockedSkills", "") ?: "")
-                        .split(",").filter { it.isNotBlank() }.toSet(),
-                    tutorialStep = sharedPrefs.getInt("tutorialStep", 0),
-                    tutorialActive = sharedPrefs.getBoolean("tutorialActive", false),
-                    tutorialSeen = sharedPrefs.getBoolean("tutorialSeen", false),
-                    maze = maze,
-                    originalMaze = originalMaze,
-                    buildingFloors = buildingFloors,
-                    buildingExplored = buildingExplored,
-                    collectorsLevels = collectorsLevels,
-                    collectorsExplored = collectorsExplored,
-                    cityDistricts = cityDistricts,
-                    cityExplored = cityExplored,
-                    gameState = gameState,
-                    logFeed = logFeed
-                )
-            }
-
+            val restored = legacySaveCodec.load(uiState)
+                ?: return
+            _uiState.value = restored
             onLog("COGNITIVE RESTORE POINT ESTABLISHED (SECONDARY CHIP).", LogType.SUCCESS)
             onRestoreComplete()
-
         } catch (e: Exception) {
             onLog("RESTORE ERROR: COMPILING CORRUPT SYSTEM CHIP - ${e.localizedMessage}", LogType.ERROR)
         }
     }
 
+
     // ----------------------------------------------------
     // Export / Import (Offline-first sharing)
     // ----------------------------------------------------
 
-    fun exportSave(): String {
-        val state = uiState
-        val json = JSONObject()
-        json.put("version", 1)
-        json.put("runnerName", state.runnerName)
-        json.put("runnerClass", state.runnerClass.name)
-        json.put("level", state.level)
-        json.put("integrity", state.integrity)
-        json.put("maxIntegrity", state.maxIntegrity)
-        json.put("playerShield", state.playerShield)
-        json.put("playerMaxShield", state.playerMaxShield)
-        json.put("ram", state.ram)
-        json.put("maxRam", state.maxRam)
-        json.put("ramRecoveryRate", state.ramRecoveryRate)
-        json.put("credits", state.credits)
-        json.put("damageBonus", state.damageBonus)
-        json.put("defenseBonus", state.defenseBonus)
-        json.put("characterLevel", state.characterLevel)
-        json.put("characterXp", state.characterXp)
-        json.put("xpToNextLevel", state.xpToNextLevel)
-        json.put("gridX", state.gridX)
-        json.put("gridY", state.gridY)
-        json.put("direction", state.direction.name)
-        json.put("currentZone", state.currentZone.name)
-        json.put("buildingFloor", state.buildingFloor)
-        json.put("collectorsLevel", state.collectorsLevel)
-        json.put("cityDistrictIndex", state.cityDistrictIndex)
-        json.put("hasElevatorKeycard", state.hasElevatorKeycard)
-        json.put("nodesHackedCount", state.nodesHackedCount)
-        json.put("totalCreditsEarned", state.totalCreditsEarned)
-        json.put("dataFragments", state.dataFragments)
-        json.put("totalDataFragmentsExtracted", state.totalDataFragmentsExtracted)
-        json.put("skillPoints", state.skillPoints)
-        json.put("unlockedSkills", state.unlockedSkills.joinToString(","))
-        json.put("tutorialStep", state.tutorialStep)
-        json.put("tutorialActive", state.tutorialActive)
-        json.put("tutorialSeen", state.tutorialSeen)
-        json.put("activeWeather", state.activeWeather.name)
-        json.put("weatherTurnsLeft", state.weatherTurnsLeft)
-        json.put("levelSeed", state.levelSeed)
-        json.put("inventory", JSONArray(state.inventory))
-        json.put("installedPrograms", JSONArray(state.installedPrograms.map { it.id }))
-        json.put("exploredCellsCsv", serializeExploredCells(state.exploredCells))
-        json.put("mazeData", serializeMaze(state.maze))
-        json.put("originalMazeData", state.originalMaze?.let { serializeMaze(it) } ?: "")
-        json.put("buildingFloorsData", serializeFloors(state.buildingFloors))
-        json.put("buildingExploredData", serializeExploredMap(state.buildingExplored))
-        json.put("collectorsLevelsData", serializeFloors(state.collectorsLevels))
-        json.put("collectorsExploredData", serializeExploredMap(state.collectorsExplored))
-        json.put("cityDistrictsData", serializeFloors(state.cityDistricts))
-        json.put("cityExploredData", serializeExploredMap(state.cityExplored))
-        json.put("installedImplantsCsv", state.installedImplants.entries.joinToString(",") { "${it.key.name}:${it.value?.id ?: ""}" })
-
-        val encoded = android.util.Base64.encodeToString(json.toString().toByteArray(), android.util.Base64.NO_WRAP)
-        return "NETCRAWLER_SAVE_v1:$encoded"
-    }
+    fun exportSave(): String =
+        PortableSaveEnvelope.wrapBase64(
+            Base64.encodeToString(
+                PortableSaveJsonCodec.encode(PortableSaveStateMapper.toPayload(uiState)).toByteArray(Charsets.UTF_8),
+                Base64.NO_WRAP
+            )
+        )
 
     fun importSave(encoded: String): Boolean {
-        try {
-            val stripped = encoded.removePrefix("NETCRAWLER_SAVE_v1:")
-            val jsonStr = String(android.util.Base64.decode(stripped, android.util.Base64.NO_WRAP))
-            val json = JSONObject(jsonStr)
-
-            val maze = deserializeMaze(json.optString("mazeData", ""))
-            if (maze.isEmpty()) { onLog("IMPORT FAILED: Invalid maze data.", LogType.ERROR); return false }
-
-            val inventory = mutableListOf<String>()
-            val invArr = json.optJSONArray("inventory")
-            if (invArr != null) { for (i in 0 until invArr.length()) inventory.add(invArr.getString(i)) }
-
-            val programs = mutableListOf<Program>()
-            val progArr = json.optJSONArray("installedPrograms")
-            if (progArr != null) { for (i in 0 until progArr.length()) programs.add(getProgramById(progArr.getString(i))) }
-
-            val installedImplants = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
-            val implCsv = json.optString("installedImplantsCsv", "")
-            if (implCsv.isNotEmpty()) {
-                implCsv.split(",").forEach { entry ->
-                    val parts = entry.split(":", limit = 2)
-                    if (parts.size == 2) {
-                        val slot = try { ImplantBodySlot.valueOf(parts[0]) } catch (_: Exception) { null }
-                        val implant = if (parts[1].isNotEmpty()) CyberwareImplantRegistry.STARTER_IMPLANTS.find { it.id == parts[1] } else null
-                        if (slot != null) installedImplants[slot] = implant
-                    }
-                }
-            }
-
-            val logFeed = mutableListOf<LogMessage>()
-            val ls = json.optString("logFeedSerialized", "")
-            if (ls.isNotEmpty()) {
-                ls.split("$$").forEach { entry ->
-                    val parts = entry.split("||")
-                    if (parts.size >= 2) {
-                        val type = try { LogType.valueOf(parts[1]) } catch (_: Exception) { LogType.INFO }
-                        logFeed.add(LogMessage(parts[0], type))
-                    }
-                }
-            }
-
-            val gameState = try { GameState.valueOf(json.optString("gameStateName", "EXPLORATION")) } catch (_: Exception) { GameState.EXPLORATION }
-
-            _uiState.update {
-                it.copy(
-                    screen = ActiveScreen.EXPLORATION,
-                    runnerName = json.optString("runnerName", ""),
-                    runnerClass = try { NetrunnerClass.valueOf(json.optString("runnerClass", "CODE_SLASHER")) } catch (_: Exception) { NetrunnerClass.CODE_SLASHER },
-                    level = json.optInt("level", 1),
-                    integrity = json.optInt("integrity", 100),
-                    maxIntegrity = json.optInt("maxIntegrity", 100),
-                    playerShield = json.optInt("playerShield", 10),
-                    playerMaxShield = json.optInt("playerMaxShield", 50),
-                    ram = json.optInt("ram", 12),
-                    maxRam = json.optInt("maxRam", 12),
-                    ramRecoveryRate = json.optInt("ramRecoveryRate", 2),
-                    credits = json.optInt("credits", 100),
-                    damageBonus = json.optInt("damageBonus", 0),
-                    defenseBonus = json.optInt("defenseBonus", 0),
-                    characterLevel = json.optInt("characterLevel", 1),
-                    characterXp = json.optInt("characterXp", 0),
-                    xpToNextLevel = json.optInt("xpToNextLevel", 100),
-                    gridX = json.optInt("gridX", 1),
-                    gridY = json.optInt("gridY", 1),
-                    direction = try { Direction.valueOf(json.optString("direction", "EAST")) } catch (_: Exception) { Direction.EAST },
-                    currentZone = try { Zone.valueOf(json.optString("currentZone", "BUILDING")) } catch (_: Exception) { Zone.BUILDING },
-                    buildingFloor = json.optInt("buildingFloor", 1),
-                    collectorsLevel = json.optInt("collectorsLevel", 1),
-                    cityDistrictIndex = json.optInt("cityDistrictIndex", 0),
-                    hasElevatorKeycard = json.optBoolean("hasElevatorKeycard", false),
-                    nodesHackedCount = json.optInt("nodesHackedCount", 0),
-                    totalCreditsEarned = json.optInt("totalCreditsEarned", 100),
-                    dataFragments = json.optInt("dataFragments", 0),
-                    totalDataFragmentsExtracted = json.optInt("totalDataFragmentsExtracted", 0),
-                    skillPoints = json.optInt("skillPoints", 0),
-                    unlockedSkills = json.optString("unlockedSkills", "").split(",").filter { it.isNotBlank() }.toSet(),
-                    tutorialStep = json.optInt("tutorialStep", 0),
-                    tutorialActive = json.optBoolean("tutorialActive", false),
-                    tutorialSeen = json.optBoolean("tutorialSeen", false),
-                    activeWeather = try { CyberWeather.valueOf(json.optString("activeWeather", "CLEAR")) } catch (_: Exception) { CyberWeather.CLEAR },
-                    weatherTurnsLeft = json.optInt("weatherTurnsLeft", 0),
-                    levelSeed = json.optLong("levelSeed", 0L),
-                    inventory = inventory,
-                    installedPrograms = programs,
-                    installedImplants = installedImplants,
-                    exploredCells = deserializeExploredCells(json.optString("exploredCellsCsv", "")),
-                    maze = maze,
-                    originalMaze = json.optString("originalMazeData", "").let { s -> if (s.isNotEmpty()) deserializeMaze(s) else null },
-                    buildingFloors = deserializeFloors(json.optString("buildingFloorsData", "")),
-                    buildingExplored = deserializeExploredMap(json.optString("buildingExploredData", "")),
-                    collectorsLevels = deserializeFloors(json.optString("collectorsLevelsData", "")),
-                    collectorsExplored = deserializeExploredMap(json.optString("collectorsExploredData", "")),
-                    cityDistricts = deserializeFloors(json.optString("cityDistrictsData", "")),
-                    cityExplored = deserializeExploredMap(json.optString("cityExploredData", "")),
-                    gameState = gameState,
-                    logFeed = logFeed
+        return try {
+            val payload = PortableSaveJsonCodec.decode(
+                String(
+                    Base64.decode(PortableSaveEnvelope.unwrapBase64(encoded), Base64.DEFAULT),
+                    Charsets.UTF_8
                 )
-            }
-
+            )
+            val restored = PortableSaveStateMapper.restore(
+                current = uiState,
+                payload = payload,
+                programLookup = ::getProgramById,
+                implantLookup = { id -> CyberwareImplantRegistry.STARTER_IMPLANTS.find { it.id == id } }
+            )
+            _uiState.value = restored
             onLog("SAVE DATA IMPORTED SUCCESSFULLY.", LogType.SUCCESS)
             onRestoreComplete()
-            return true
-
+            true
         } catch (e: Exception) {
             onLog("IMPORT FAILED: Corrupt save data - ${e.localizedMessage}", LogType.ERROR)
-            return false
+            false
         }
     }
 
@@ -939,7 +512,7 @@ class PersistenceManager(
             return
         }
         val text = clip.getItemAt(0).text?.toString() ?: ""
-        if (!text.startsWith("NETCRAWLER_SAVE_v1:")) {
+        if (!PortableSaveEnvelope.hasSupportedPrefix(text)) {
             onLog("CLIPBOARD DOES NOT CONTAIN A VALID NETCRAWLER SAVE.", LogType.ERROR)
             return
         }
