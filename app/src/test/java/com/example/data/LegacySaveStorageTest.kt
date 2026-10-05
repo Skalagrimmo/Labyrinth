@@ -2,11 +2,16 @@ package com.example.data
 
 import android.content.Context
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.junit.runner.RunWith
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [35])
 class LegacySaveStorageTest {
     private val context = RuntimeEnvironment.getApplication()
 
