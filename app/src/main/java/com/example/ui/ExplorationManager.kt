@@ -186,33 +186,15 @@ class ExplorationManager(
         if (maze.isEmpty()) return
 
         val scanRadius = 8
-        val foundEnemies = mutableSetOf<Pair<Int, Int>>()
-        val foundLoot = mutableSetOf<Pair<Int, Int>>()
-        val scannedCells = mutableSetOf<Pair<Int, Int>>()
-
-        val rowCount = maze.size
-        val colCount = maze[0].size
-
-        for (dy in -scanRadius..scanRadius) {
-            for (dx in -scanRadius..scanRadius) {
-                val nx = px + dx
-                val ny = py + dy
-                if (nx in 0 until colCount && ny in 0 until rowCount) {
-                    if (dx * dx + dy * dy <= scanRadius * scanRadius) {
-                        scannedCells.add(Pair(nx, ny))
-                        val cell = maze[ny][nx]
-                        when (cell) {
-                            CellType.VIRUS_NODE -> foundEnemies.add(Pair(nx, ny))
-                            CellType.DATA_STORE, CellType.SECRET_CACHE, CellType.ENCRYPTED_PORTAL,
-                            CellType.ELEVATOR, CellType.STAIRS_UP, CellType.STAIRS_DOWN -> foundLoot.add(Pair(nx, ny))
-                            else -> {}
-                        }
-                    }
-                }
-            }
-        }
-
-        val updatedExplored = state.exploredCells + scannedCells
+        val scan = ExplorationScanRules.scan(
+            maze = maze,
+            originX = px,
+            originY = py,
+            radius = scanRadius
+        )
+        val foundEnemies = scan.foundEnemies
+        val foundLoot = scan.foundLoot
+        val updatedExplored = state.exploredCells + scan.scannedCells
         val now = System.currentTimeMillis()
 
         var svdagSummary: com.example.data.svdag.SvdagScanSummary? = null
