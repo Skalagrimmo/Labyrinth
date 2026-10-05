@@ -442,10 +442,11 @@ class CombatManager(
             if (program.heal > 0) { val healed = minOf(state.maxIntegrity - state.integrity, program.heal); _uiState.update { it.copy(integrity = it.integrity + healed) }; onLog("System integrity patch compiled: +$healed% Integrity.", LogType.SUCCESS) }
             if (program.shield > 0) { val shieldHealed = minOf(state.playerMaxShield - state.playerShield, program.shield); _uiState.update { it.copy(playerShield = it.playerShield + shieldHealed) }; onLog("Temporary firewalls reinforced: +$shieldHealed Shield Barrier.", LogType.SUCCESS) }
 
-            if (program.statusEffectToApply != null) {
+            val statusEffectType = program.statusEffectToApply
+            if (statusEffectType != null) {
                 val turns = if (program.statusEffectTurns > 0) program.statusEffectTurns else 2
-                if (program.statusEffectTargetSelf) applyStatusEffectToPlayer(program.statusEffectToApply, turns, program.statusEffectMagnitude, program.name)
-                else applyStatusEffectToEnemy(program.statusEffectToApply, turns, program.statusEffectMagnitude, program.name)
+                if (program.statusEffectTargetSelf) applyStatusEffectToPlayer(statusEffectType, turns, program.statusEffectMagnitude, program.name)
+                else applyStatusEffectToEnemy(statusEffectType, turns, program.statusEffectMagnitude, program.name)
             }
 
             _uiState.update { it.copy(combatFlashEnemy = actualDmg > 0, enemyDamagePopup = if (actualDmg > 0) "-$actualDmg HP" else null, showShieldEffect = program.heal > 0 || program.shield > 0) }
@@ -579,8 +580,9 @@ class CombatManager(
     private fun handleCombatVictory(enemy: Enemy) {
         soundManager.playLootCollectionSound()
         val state = _uiState.value
-        val lootDrop = if (enemy.isBoss && enemy.bossType != null) {
-            CombatLootDropSystem.generateBossLootDrop(enemy.bossType, state.level)
+        val bossType = enemy.bossType
+        val lootDrop = if (enemy.isBoss && bossType != null) {
+            CombatLootDropSystem.generateBossLootDrop(bossType, state.level)
         } else {
             CombatLootDropSystem.generateLootDrop(enemy.name, state.level, enemy.bountyCredits)
         }
