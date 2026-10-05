@@ -15,10 +15,10 @@ class PersistenceManager(
     private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
     private val application: Application,
     private val repository: SaveRepository,
-    private val legacySaveStorage: LegacySaveStorage = AndroidLegacySaveStorage(application),
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
-    private val onRestoreComplete: () -> Unit
+    private val onRestoreComplete: () -> Unit,
+    private val legacySaveStorage: LegacySaveStorage = AndroidLegacySaveStorage(application)
 ) {
 
     private val uiState get() = _uiState.value
