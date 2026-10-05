@@ -283,7 +283,7 @@ class GameRepository(
         }
     }
 
-    suspend fun getSaveProgressSync(slotId: String = "current_save"): GameSaveProgressEntity? =
+    override suspend fun getSaveProgressSync(slotId: String): GameSaveProgressEntity? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             gameSaveProgressDao.getSaveProgressSync(slotId)
         }
