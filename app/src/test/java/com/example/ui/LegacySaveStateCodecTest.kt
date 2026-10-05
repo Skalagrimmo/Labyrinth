@@ -14,7 +14,7 @@ class LegacySaveStateCodecTest {
     @Test
     fun `codec round trips legacy state fields and serialized maps`() {
         val storage = AndroidLegacySaveStorage(
-            android.app.Application(),
+            org.robolectric.RuntimeEnvironment.getApplication(),
             "legacy_codec_test"
         )
         val codec = LegacySaveStateCodec(
@@ -71,7 +71,7 @@ class LegacySaveStateCodecTest {
             buildingExplored = mapOf(1 to setOf(0 to 0)),
             collectorsLevels = mapOf(2 to arrayOf(arrayOf(CellType.WALL))),
             collectorsExplored = mapOf(2 to setOf(1 to 1)),
-            cityDistricts = mapOf(3 to arrayOf(arrayOf(CellType.EXIT))),
+            cityDistricts = mapOf(3 to arrayOf(arrayOf(CellType.ENCRYPTED_PORTAL))),
             cityExplored = mapOf(3 to setOf(2 to 2)),
             gameState = GameState.COMBAT_START,
             logFeed = listOf(LogMessage("legacy", LogType.ALERT, 1234L))
