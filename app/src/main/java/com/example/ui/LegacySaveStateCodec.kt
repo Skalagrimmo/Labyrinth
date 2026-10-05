@@ -1,13 +1,6 @@
 package com.example.ui
 
-import com.example.data.CellType
-import com.example.data.CyberWeather
-import com.example.data.Direction
-import com.example.data.GameState
-import com.example.data.GameViewModel
 import com.example.data.LegacySaveStorage
-import com.example.data.NetrunnerClass
-import com.example.data.Zone
 
 /**
  * Encodes and decodes the original SharedPreferences save contract.
