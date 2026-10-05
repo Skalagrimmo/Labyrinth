@@ -26,3 +26,6 @@ rootProject.name = "Netcrawler"
 
 include(":app")
 include(":core:model")
+include(":core:content")
+include(":core:engine")
+include(":core:model")

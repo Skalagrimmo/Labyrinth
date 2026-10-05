@@ -74,6 +74,8 @@ ksp {
 // This makes it easy to add them back in the future if needed.
 dependencies {
   implementation(project(":core:model"))
+  implementation(project(":core:content"))
+  implementation(project(":core:engine"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
