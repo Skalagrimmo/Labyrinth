@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.data.LegacySaveStorage
+import com.example.data.*
 
 /**
  * Encodes and decodes the original SharedPreferences save contract.
