@@ -1000,22 +1000,15 @@ class ExplorationManager(
 
     fun revealCellsAround(x: Int, y: Int) {
         _uiState.update { state ->
-            val updatedRevealed = state.exploredCells.toMutableSet()
-            updatedRevealed.add(Pair(x, y))
-
-            val radius = 3
-            for (dy in -radius..radius) {
-                for (dx in -radius..radius) {
-                    val nx = x + dx
-                    val ny = y + dy
-                    if (ny in state.maze.indices && nx in state.maze[0].indices) {
-                        if (dx * dx + dy * dy <= radius * radius + 1) {
-                            updatedRevealed.add(Pair(nx, ny))
-                        }
-                    }
-                }
-            }
-            state.copy(exploredCells = updatedRevealed)
+            val revealedNow = ExplorationVisibilityRules.revealAround(
+                maze = state.maze,
+                originX = x,
+                originY = y,
+                radius = 3
+            )
+            state.copy(
+                exploredCells = state.exploredCells + revealedNow
+            )
         }
     }
 
