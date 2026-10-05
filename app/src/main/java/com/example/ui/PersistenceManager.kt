@@ -15,6 +15,7 @@ class PersistenceManager(
     private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
     private val application: Application,
     private val repository: SaveRepository,
+    private val legacySaveStorage: LegacySaveStorage = AndroidLegacySaveStorage(application),
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
     private val onRestoreComplete: () -> Unit
@@ -185,20 +186,18 @@ class PersistenceManager(
     // Save / Load
     // ----------------------------------------------------
 
-    fun hasSavedGame(): Boolean {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        return sharedPrefs.getBoolean("has_saved_game", false)
-    }
+    fun hasSavedGame(): Boolean =
+        legacySaveStorage.getBoolean("has_saved_game", false)
 
     fun markTutorialSeen() {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        sharedPrefs.edit().putBoolean("tutorial_seen", true).apply()
+        legacySaveStorage.edit {
+            putBoolean("tutorial_seen", true)
+        }
     }
 
-    fun isTutorialSeen(): Boolean {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        return sharedPrefs.getBoolean("tutorial_seen", false)
-    }
+    fun isTutorialSeen(): Boolean =
+        legacySaveStorage.getBoolean("tutorial_seen", false)
+
 
     fun saveGame() {
         val state = uiState
@@ -285,8 +284,7 @@ class PersistenceManager(
             repository.saveGameProgress(saveProgressEntity, inventoryEntities)
         }
 
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        sharedPrefs.edit().apply {
+        legacySaveStorage.edit {
             putBoolean("has_saved_game", true)
             putString("runnerName", state.runnerName)
             putString("runnerClass", state.runnerClass.name)
@@ -346,7 +344,6 @@ class PersistenceManager(
             putString("gameState", state.gameState.name)
             putString("logFeed", state.logFeed.joinToString("$$") { "${it.text}||${it.type.name}||${it.timestamp}" })
 
-            apply()
         }
         onLog("COGNITIVE STATE PERSISTED TO ROOM DATABASE & CHIP STORAGE.", LogType.SUCCESS)
     }
@@ -495,43 +492,42 @@ class PersistenceManager(
                 }
             }
 
-            loadFromSharedPreferences()
+            loadFromLegacyStorage()
         }
     }
 
-    private fun loadFromSharedPreferences() {
-        val sharedPrefs = application.getSharedPreferences("netcrawler_save_prefs", Context.MODE_PRIVATE)
-        if (!sharedPrefs.getBoolean("has_saved_game", false)) {
+    private fun loadFromLegacyStorage() {
+        if (!legacySaveStorage.getBoolean("has_saved_game", false)) {
             onLog("ERROR: NO RESTORE POINT FOUND.", LogType.ERROR)
             return
         }
 
         try {
             val runnerClass = try {
-                NetrunnerClass.valueOf(sharedPrefs.getString("runnerClass", "") ?: "CODE_SLASHER")
+                NetrunnerClass.valueOf(legacySaveStorage.getString("runnerClass", "") ?: "CODE_SLASHER")
             } catch (e: Exception) {
                 NetrunnerClass.CODE_SLASHER
             }
 
             val direction = try {
-                Direction.valueOf(sharedPrefs.getString("direction", "") ?: "EAST")
+                Direction.valueOf(legacySaveStorage.getString("direction", "") ?: "EAST")
             } catch (e: Exception) {
                 Direction.EAST
             }
 
             val currentZone = try {
-                Zone.valueOf(sharedPrefs.getString("currentZone", "") ?: "BUILDING")
+                Zone.valueOf(legacySaveStorage.getString("currentZone", "") ?: "BUILDING")
             } catch (e: Exception) {
                 Zone.BUILDING
             }
 
             val activeWeather = try {
-                CyberWeather.valueOf(sharedPrefs.getString("activeWeather", "") ?: "CLEAR")
+                CyberWeather.valueOf(legacySaveStorage.getString("activeWeather", "") ?: "CLEAR")
             } catch (e: Exception) {
                 CyberWeather.CLEAR
             }
 
-            val predictedWeatherStr = sharedPrefs.getString("predictedWeather", "") ?: ""
+            val predictedWeatherStr = legacySaveStorage.getString("predictedWeather", "") ?: ""
             val predictedWeather = if (predictedWeatherStr.isNotEmpty()) {
                 try {
                     CyberWeather.valueOf(predictedWeatherStr)
@@ -541,21 +537,21 @@ class PersistenceManager(
             } else null
 
             val gameState = try {
-                GameState.valueOf(sharedPrefs.getString("gameState", "") ?: "EXPLORATION")
+                GameState.valueOf(legacySaveStorage.getString("gameState", "") ?: "EXPLORATION")
             } catch (e: Exception) {
                 GameState.EXPLORATION
             }
 
-            val invStr = sharedPrefs.getString("inventory", "") ?: ""
+            val invStr = legacySaveStorage.getString("inventory", "") ?: ""
             val inventory = if (invStr.isEmpty()) emptyList() else invStr.split(",")
 
-            val cyberStr = sharedPrefs.getString("installedCyberware", "") ?: ""
+            val cyberStr = legacySaveStorage.getString("installedCyberware", "") ?: ""
             val installedCyberware = if (cyberStr.isEmpty()) emptyList() else cyberStr.split(",").map { getCyberwareById(it) }
 
-            val progStr = sharedPrefs.getString("installedPrograms", "") ?: ""
+            val progStr = legacySaveStorage.getString("installedPrograms", "") ?: ""
             val installedPrograms = if (progStr.isEmpty()) emptyList() else progStr.split(",").map { getProgramById(it) }
 
-            val implantsStr = sharedPrefs.getString("installedImplantsCsv", "") ?: ""
+            val implantsStr = legacySaveStorage.getString("installedImplantsCsv", "") ?: ""
             val installedImplantsMap = mutableMapOf<ImplantBodySlot, CyberwareImplant?>()
             if (implantsStr.isNotEmpty()) {
                 implantsStr.split(",").forEach { entry ->
@@ -572,10 +568,10 @@ class PersistenceManager(
                 }
             }
 
-            val storedImplantsStr = sharedPrefs.getString("storedImplantsCsv", "") ?: ""
+            val storedImplantsStr = legacySaveStorage.getString("storedImplantsCsv", "") ?: ""
             val storedImplantsList = if (storedImplantsStr.isEmpty()) emptyList() else storedImplantsStr.split(",").mapNotNull { CyberwareImplantRegistry.getImplantById(it) }
 
-            val logStr = sharedPrefs.getString("logFeed", "") ?: ""
+            val logStr = legacySaveStorage.getString("logFeed", "") ?: ""
             val logFeed = if (logStr.isEmpty()) emptyList() else logStr.split("$$").mapNotNull { line ->
                 val parts = line.split("||")
                 if (parts.size == 3) {
@@ -586,60 +582,60 @@ class PersistenceManager(
                 } else null
             }
 
-            val mazeStr = sharedPrefs.getString("maze", "") ?: ""
+            val mazeStr = legacySaveStorage.getString("maze", "") ?: ""
             val maze = deserializeMaze(mazeStr)
 
-            val originalMazeStr = sharedPrefs.getString("originalMaze", "") ?: ""
+            val originalMazeStr = legacySaveStorage.getString("originalMaze", "") ?: ""
             val originalMaze = if (originalMazeStr.isEmpty()) null else deserializeMaze(originalMazeStr)
 
-            val buildingFloorsStr = sharedPrefs.getString("buildingFloors", "") ?: ""
+            val buildingFloorsStr = legacySaveStorage.getString("buildingFloors", "") ?: ""
             val buildingFloors = deserializeFloors(buildingFloorsStr)
 
-            val buildingExploredStr = sharedPrefs.getString("buildingExplored", "") ?: ""
+            val buildingExploredStr = legacySaveStorage.getString("buildingExplored", "") ?: ""
             val buildingExplored = deserializeExploredMap(buildingExploredStr)
 
-            val collectorsLevelsStr = sharedPrefs.getString("collectorsLevels", "") ?: ""
+            val collectorsLevelsStr = legacySaveStorage.getString("collectorsLevels", "") ?: ""
             val collectorsLevels = deserializeFloors(collectorsLevelsStr)
 
-            val collectorsExploredStr = sharedPrefs.getString("collectorsExplored", "") ?: ""
+            val collectorsExploredStr = legacySaveStorage.getString("collectorsExplored", "") ?: ""
             val collectorsExplored = deserializeExploredMap(collectorsExploredStr)
 
-            val cityDistrictsStr = sharedPrefs.getString("cityDistricts", "") ?: ""
+            val cityDistrictsStr = legacySaveStorage.getString("cityDistricts", "") ?: ""
             val cityDistricts = deserializeFloors(cityDistrictsStr)
 
-            val cityExploredStr = sharedPrefs.getString("cityExplored", "") ?: ""
+            val cityExploredStr = legacySaveStorage.getString("cityExplored", "") ?: ""
             val cityExplored = deserializeExploredMap(cityExploredStr)
 
-            val exploredCellsStr = sharedPrefs.getString("exploredCells", "") ?: ""
+            val exploredCellsStr = legacySaveStorage.getString("exploredCells", "") ?: ""
             val exploredCells = deserializeExploredCells(exploredCellsStr)
 
             _uiState.update {
                 it.copy(
                     screen = ActiveScreen.EXPLORATION,
-                    runnerName = sharedPrefs.getString("runnerName", "") ?: "",
+                    runnerName = legacySaveStorage.getString("runnerName", "") ?: "",
                     runnerClass = runnerClass,
-                    maxIntegrity = sharedPrefs.getInt("maxIntegrity", 100),
-                    integrity = sharedPrefs.getInt("integrity", 100),
-                    playerMaxShield = sharedPrefs.getInt("playerMaxShield", 50),
-                    playerShield = sharedPrefs.getInt("playerShield", 10),
-                    maxRam = sharedPrefs.getInt("maxRam", 12),
-                    ram = sharedPrefs.getInt("ram", 12),
-                    ramRecoveryRate = sharedPrefs.getInt("ramRecoveryRate", 2),
-                    credits = sharedPrefs.getInt("credits", 100),
-                    damageBonus = sharedPrefs.getInt("damageBonus", 0),
-                    defenseBonus = sharedPrefs.getInt("defenseBonus", 0),
-                    characterLevel = sharedPrefs.getInt("characterLevel", 1),
-                    characterXp = sharedPrefs.getInt("characterXp", 0),
-                    xpToNextLevel = sharedPrefs.getInt("xpToNextLevel", 100),
-                    gridX = sharedPrefs.getInt("gridX", 1),
-                    gridY = sharedPrefs.getInt("gridY", 1),
+                    maxIntegrity = legacySaveStorage.getInt("maxIntegrity", 100),
+                    integrity = legacySaveStorage.getInt("integrity", 100),
+                    playerMaxShield = legacySaveStorage.getInt("playerMaxShield", 50),
+                    playerShield = legacySaveStorage.getInt("playerShield", 10),
+                    maxRam = legacySaveStorage.getInt("maxRam", 12),
+                    ram = legacySaveStorage.getInt("ram", 12),
+                    ramRecoveryRate = legacySaveStorage.getInt("ramRecoveryRate", 2),
+                    credits = legacySaveStorage.getInt("credits", 100),
+                    damageBonus = legacySaveStorage.getInt("damageBonus", 0),
+                    defenseBonus = legacySaveStorage.getInt("defenseBonus", 0),
+                    characterLevel = legacySaveStorage.getInt("characterLevel", 1),
+                    characterXp = legacySaveStorage.getInt("characterXp", 0),
+                    xpToNextLevel = legacySaveStorage.getInt("xpToNextLevel", 100),
+                    gridX = legacySaveStorage.getInt("gridX", 1),
+                    gridY = legacySaveStorage.getInt("gridY", 1),
                     direction = direction,
-                    level = sharedPrefs.getInt("level", 1),
+                    level = legacySaveStorage.getInt("level", 1),
                     currentZone = currentZone,
-                    buildingFloor = sharedPrefs.getInt("buildingFloor", 1),
-                    collectorsLevel = sharedPrefs.getInt("collectorsLevel", 1),
-                    cityDistrictIndex = sharedPrefs.getInt("cityDistrictIndex", 0),
-                    hasElevatorKeycard = sharedPrefs.getBoolean("hasElevatorKeycard", false),
+                    buildingFloor = legacySaveStorage.getInt("buildingFloor", 1),
+                    collectorsLevel = legacySaveStorage.getInt("collectorsLevel", 1),
+                    cityDistrictIndex = legacySaveStorage.getInt("cityDistrictIndex", 0),
+                    hasElevatorKeycard = legacySaveStorage.getBoolean("hasElevatorKeycard", false),
                     inventory = inventory,
                     installedCyberware = installedCyberware,
                     installedPrograms = installedPrograms,
@@ -647,18 +643,18 @@ class PersistenceManager(
                     storedImplants = storedImplantsList,
                     exploredCells = exploredCells,
                     activeWeather = activeWeather,
-                    weatherTurnsLeft = sharedPrefs.getInt("weatherTurnsLeft", 0),
-                    stepsSinceLastEvent = sharedPrefs.getInt("stepsSinceLastEvent", 0),
-                    nextEventSteps = sharedPrefs.getInt("nextEventSteps", 30),
+                    weatherTurnsLeft = legacySaveStorage.getInt("weatherTurnsLeft", 0),
+                    stepsSinceLastEvent = legacySaveStorage.getInt("stepsSinceLastEvent", 0),
+                    nextEventSteps = legacySaveStorage.getInt("nextEventSteps", 30),
                     predictedWeather = predictedWeather,
-                    nodesHackedCount = sharedPrefs.getInt("nodesHackedCount", 0),
-                    totalCreditsEarned = sharedPrefs.getInt("totalCreditsEarned", 100),
-                    skillPoints = sharedPrefs.getInt("skillPoints", 0),
-                    unlockedSkills = (sharedPrefs.getString("unlockedSkills", "") ?: "")
+                    nodesHackedCount = legacySaveStorage.getInt("nodesHackedCount", 0),
+                    totalCreditsEarned = legacySaveStorage.getInt("totalCreditsEarned", 100),
+                    skillPoints = legacySaveStorage.getInt("skillPoints", 0),
+                    unlockedSkills = (legacySaveStorage.getString("unlockedSkills", "") ?: "")
                         .split(",").filter { it.isNotBlank() }.toSet(),
-                    tutorialStep = sharedPrefs.getInt("tutorialStep", 0),
-                    tutorialActive = sharedPrefs.getBoolean("tutorialActive", false),
-                    tutorialSeen = sharedPrefs.getBoolean("tutorialSeen", false),
+                    tutorialStep = legacySaveStorage.getInt("tutorialStep", 0),
+                    tutorialActive = legacySaveStorage.getBoolean("tutorialActive", false),
+                    tutorialSeen = legacySaveStorage.getBoolean("tutorialSeen", false),
                     maze = maze,
                     originalMaze = originalMaze,
                     buildingFloors = buildingFloors,
