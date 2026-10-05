@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "Netcrawler"
 
 include(":app")
+include(":core:model")
