@@ -628,21 +628,12 @@ class ExplorationManager(
         val maze = state.maze
         if (maze.isEmpty()) return
 
-        var foundEnemy: Pair<Int, Int>? = null
-        val radius = 2
-        for (dy in -radius..radius) {
-            for (dx in -radius..radius) {
-                val nx = playerX + dx
-                val ny = playerY + dy
-                if (ny in maze.indices && nx in maze[0].indices) {
-                    if (maze[ny][nx] == CellType.VIRUS_NODE) {
-                        foundEnemy = Pair(nx, ny)
-                        break
-                    }
-                }
-            }
-            if (foundEnemy != null) break
-        }
+        val foundEnemy = ExplorationThreatScanRules.findFirstHostile(
+            maze = maze,
+            originX = playerX,
+            originY = playerY,
+            radius = 2
+        )
 
         if (foundEnemy != null) {
             onTriggerCombat(foundEnemy.first, foundEnemy.second)
