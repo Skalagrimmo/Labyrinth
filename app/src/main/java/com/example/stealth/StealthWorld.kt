@@ -3,7 +3,6 @@ package com.example.stealth
 import com.example.data.CellType
 import java.util.PriorityQueue
 import kotlin.math.abs
-import kotlin.math.atan2
 import kotlin.math.floor
 import kotlin.math.hypot
 
