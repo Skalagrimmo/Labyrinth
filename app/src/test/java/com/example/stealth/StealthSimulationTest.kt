@@ -178,6 +178,57 @@ class StealthSimulationTest {
         assertEquals(GridCell(5, 2), guard.position.cell())
     }
 
+
+    @Test
+    fun guardSearchesLastKnownNoisePositionThenReturnsToPatrol() {
+        val world = openWorld()
+        val guard = StealthGuard(
+            id = "guard-search",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = PI.toFloat(),
+            searchDurationSeconds = 1.0f
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+        val playerOnAnotherLayer = StealthPlayer(StealthPosition(6.5f, 4.5f, levelId = 1))
+        val noise = NoisePulse(StealthPosition(2.5f, 2.5f), radius = 2.5f)
+
+        simulation.update(0.1f, playerOnAnotherLayer, listOf(noise))
+        assertEquals(StealthGuardState.INVESTIGATING, guard.state)
+
+        repeat(40) { simulation.update(0.1f, playerOnAnotherLayer) }
+
+        assertEquals(StealthGuardState.PATROLLING, guard.state)
+        assertEquals(0f, guard.suspicion, 0.001f)
+        assertNull(guard.lastKnownPlayerPosition)
+    }
+
+    @Test
+    fun suspicionAccumulationIsTimeBasedAcrossTickRates() {
+        fun suspicionAfterOneSecond(stepSeconds: Float, count: Int): Float {
+            val world = openWorld()
+            val guard = StealthGuard(
+                id = "guard-rate",
+                position = StealthPosition(1.5f, 2.5f),
+                facingAngleRadians = 0f,
+                viewRange = 6f,
+                fieldOfViewRadians = PI.toFloat() / 2f,
+                detectionRatePerSecond = 60f,
+                patrolSpeed = 0f,
+                investigationSpeed = 0f,
+                chaseSpeed = 0f
+            )
+            val simulation = StealthSimulation(world, listOf(guard))
+            val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+            repeat(count) { simulation.update(stepSeconds, player) }
+            return guard.suspicion
+        }
+
+        val thirtyHz = suspicionAfterOneSecond(1f / 30f, 30)
+        val sixtyHz = suspicionAfterOneSecond(1f / 60f, 60)
+
+        assertEquals(thirtyHz, sixtyHz, 0.1f)
+    }
+
     @Test
     fun zeroOrNegativeDeltaDoesNotAdvanceSimulation() {
         val world = openWorld()
