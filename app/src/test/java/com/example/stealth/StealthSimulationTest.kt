@@ -25,7 +25,7 @@ class StealthSimulationTest {
         assertEquals(4, world.height)
         assertEquals(CellType.WALL, world.tileAt(4, 2))
         assertFalse(world.isWalkable(4, 2))
-        assertTrue(world.isWalkable(2, 4))
+        assertTrue(world.isWalkable(2, 3))
         assertFalse(world.isWalkable(-1, 0))
     }
 
@@ -154,6 +154,28 @@ class StealthSimulationTest {
 
         assertEquals(0f, guard.suspicion, 0.001f)
         assertEquals(StealthGuardState.PATROLLING, guard.state)
+    }
+
+    @Test
+    fun guardPatrolRouteNeverMovesThroughBlockedCells() {
+        val cells = Array(5) { Array(7) { CellType.PATH } }
+        cells[2][3] = CellType.WALL
+        val world = LabyrinthWorldAdapter(cells)
+        val guard = StealthGuard(
+            id = "guard-route",
+            position = StealthPosition(1.5f, 2.5f),
+            patrolRoute = listOf(GridCell(5, 2)),
+            patrolSpeed = 0.75f
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+        val playerOnAnotherLayer = StealthPlayer(StealthPosition(6.5f, 4.5f, levelId = 1))
+
+        repeat(100) {
+            simulation.update(0.1f, playerOnAnotherLayer)
+            assertTrue(world.isWalkable(guard.position.cell()))
+        }
+
+        assertEquals(GridCell(5, 2), guard.position.cell())
     }
 
     @Test
