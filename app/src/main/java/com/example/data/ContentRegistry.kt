@@ -6,7 +6,7 @@ package com.example.data
  * Given a mod document (see [ContentModParser] for the format), it converts the parsed
  * [ContentModParser.ModEntity] blocks into the concrete model types the game already uses:
  *
- *  - enemies  -> [GameEngine.EnemyArchetype]  (fed into [GameEngine.registerEnemyArchetypes])
+ *  - enemies  -> [EnemyArchetype]  (fed into [EnemyArchetypeRegistry.register])
  *  - items    -> [GameItem]                   (merged into [GameItemRegistry])
  *  - programs -> [Program]                    (available via [programs])
  *
@@ -57,11 +57,11 @@ object ContentRegistry {
     // of them so a mod never needs to redefine a base entry.
 
     private val parsedEntities: MutableList<ContentModParser.ModEntity> = mutableListOf()
-    private val enemyArchetypes = mutableListOf<GameEngine.EnemyArchetype>()
+    private val enemyArchetypes = mutableListOf<EnemyArchetype>()
     private val modItems = mutableListOf<GameItem>()
     private val modPrograms = mutableListOf<Program>()
 
-    fun enemySpecs(): List<GameEngine.EnemyArchetype> = enemyArchetypes.toList()
+    fun enemySpecs(): List<EnemyArchetype> = enemyArchetypes.toList()
     fun itemSpecs(): List<GameItem> = modItems.toList()
     fun programSpecs(): List<Program> = modPrograms.toList()
 
@@ -85,7 +85,7 @@ object ContentRegistry {
             loadedCount = converted
 
             // Merge into live registries.
-            GameEngine.registerEnemyArchetypes(enemyArchetypes)
+            EnemyArchetypeRegistry.register(enemyArchetypes)
             GameItemRegistry.registerModItems(modItems)
         }
     }
@@ -129,8 +129,8 @@ object ContentRegistry {
         )
     }
 
-    /** Converts a parsed enemy entity into a [GameEngine.EnemyArchetype]. */
-    private fun toArchetype(e: ContentModParser.ModEntity): GameEngine.EnemyArchetype? {
+    /** Converts a parsed enemy entity into a [EnemyArchetype]. */
+    private fun toArchetype(e: ContentModParser.ModEntity): EnemyArchetype? {
         val f = e.fields
         val id = idOf(e)
         val name = e.name.ifBlank { id }
@@ -145,7 +145,7 @@ object ContentRegistry {
             if (type != null) statusEffects.add(Pair(type, turns))
         }
 
-        return GameEngine.EnemyArchetype(
+        return EnemyArchetype(
             name = name,
             description = description,
             asciiArt = portrait,

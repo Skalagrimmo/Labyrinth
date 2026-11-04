@@ -13,6 +13,27 @@ import org.junit.Test
 class GameEngineTest {
 
     @Test
+    fun `generateMaze is reproducible for an explicit seed`() {
+        val first = GameEngine.generateMaze(width = 24, height = 24, layer = 4, seed = 424242L)
+        val second = GameEngine.generateMaze(width = 24, height = 24, layer = 4, seed = 424242L)
+
+        assertEquals(first.map { it.toList() }, second.map { it.toList() })
+    }
+
+    @Test
+    fun `generated maze preserves traversal invariants`() {
+        val maze = GameEngine.generateMaze(width = 24, height = 24, layer = 2, seed = 9001L)
+
+        assertEquals(CellType.SAFE_ZONE, maze[1][1])
+        assertTrue(maze.first().all { it == CellType.WALL })
+        assertTrue(maze.last().all { it == CellType.WALL })
+        assertTrue(maze.all { row -> row.first() == CellType.WALL && row.last() == CellType.WALL })
+
+        val portals = maze.sumOf { row -> row.count { it == CellType.ENCRYPTED_PORTAL } }
+        assertEquals(1, portals)
+    }
+
+    @Test
     fun `spawnEnemy produces a valid enemy at any layer`() {
         val enemy = GameEngine.spawnEnemy(layer = 3)
         assertTrue(enemy.name.isNotBlank())
@@ -46,5 +67,109 @@ class GameEngineTest {
             assertTrue(boss.damage > 0)
             assertTrue(boss.name.isNotBlank())
         }
+    }
+
+
+    @Test
+    fun `game engine maze facade preserves MazeGenerator output`() {
+        val direct = MazeGenerator.generate(width = 24, height = 24, layer = 3, seed = 8675309L)
+        val facade = GameEngine.generateMaze(width = 24, height = 24, layer = 3, seed = 8675309L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
+
+
+    @Test
+    fun `building floor facade preserves environment generator output`() {
+        val direct = EnvironmentGenerator.generateBuildingFloor(floor = 2, seed = 1200L)
+        val facade = GameEngine.generateBuildingFloor(floor = 2, seed = 1200L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
+
+    @Test
+    fun `collector tunnels facade preserves environment generator output`() {
+        val direct = EnvironmentGenerator.generateCollectorTunnels(level = 2, seed = 2200L)
+        val facade = GameEngine.generateCollectorTunnels(level = 2, seed = 2200L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
+
+    @Test
+    fun `city sector facade preserves environment generator output`() {
+        val direct = EnvironmentGenerator.generateCitySector(districtIndex = 3, seed = 3200L)
+        val facade = GameEngine.generateCitySector(districtIndex = 3, seed = 3200L)
+
+        assertEquals(direct.map { it.toList() }, facade.map { it.toList() })
+    }
+
+
+    @Test
+    fun `perspective facade preserves extracted renderer output`() {
+        val grid = Array(8) { Array(8) { CellType.PATH } }
+        grid[3][4] = CellType.DATA_STORE
+        grid[2][4] = CellType.WALL
+
+        val direct = AsciiPerspectiveRenderer.render(
+            grid = grid,
+            px = 4,
+            py = 4,
+            dir = Direction.NORTH,
+            activeWeather = CyberWeather.CLEAR
+        )
+        val facade = GameEngine.render3DPerspective(
+            grid = grid,
+            px = 4,
+            py = 4,
+            dir = Direction.NORTH,
+            activeWeather = CyberWeather.CLEAR
+        )
+
+        assertEquals(direct, facade)
+    }
+
+    @Test
+    fun `perspective renderer handles an empty grid`() {
+        val frame = AsciiPerspectiveRenderer.render(
+            grid = emptyArray(),
+            px = 0,
+            py = 0,
+            dir = Direction.NORTH
+        )
+
+        assertEquals("", frame)
+    }
+
+
+    @Test
+    fun `content facade preserves built in catalog`() {
+        assertEquals(GameContentCatalog.getStoreCyberware(), GameEngine.getStoreCyberware())
+        for (runnerClass in NetrunnerClass.entries) {
+            assertEquals(
+                GameContentCatalog.getStartingPrograms(runnerClass),
+                GameEngine.getStartingPrograms(runnerClass)
+            )
+        }
+    }
+
+    @Test
+    fun `hacking puzzle generation is reproducible with injected RNG`() {
+        val first = HackingPuzzleGenerator.generate(difficulty = 3, random = kotlin.random.Random(1337))
+        val second = HackingPuzzleGenerator.generate(difficulty = 3, random = kotlin.random.Random(1337))
+
+        assertEquals(first.grid.map { it.toList() }, second.grid.map { it.toList() })
+        assertEquals(first.targetSequence, second.targetSequence)
+        assertEquals(first.bufferLimit, second.bufferLimit)
+    }
+
+    @Test
+    fun `hacking puzzle keeps expected dimensions and buffer scaling`() {
+        val puzzle = HackingPuzzleGenerator.generate(difficulty = 4, random = kotlin.random.Random(7))
+
+        assertEquals(5, puzzle.grid.size)
+        assertTrue(puzzle.grid.all { it.size == 5 })
+        assertEquals(9, puzzle.bufferLimit)
+        assertTrue(puzzle.targetSequence.isNotEmpty())
+        assertTrue(puzzle.targetSequence.size <= 6)
     }
 }
