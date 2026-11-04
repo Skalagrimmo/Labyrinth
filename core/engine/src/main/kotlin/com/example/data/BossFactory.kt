@@ -1,5 +1,8 @@
 package com.example.data
 
+import com.example.core.model.BossType
+import com.example.core.model.Enemy
+
 /** Creates boss combat models without owning game-session state. */
 object BossFactory {
     fun create(bossType: BossType, level: Int, idTimeMillis: Long = System.currentTimeMillis()): Enemy =

@@ -1,5 +1,8 @@
 package com.example.data
 
+import com.example.core.model.ActiveStatusEffect
+import com.example.core.model.Enemy
+import com.example.core.model.StatusEffectType
 import kotlin.random.Random
 
 /**

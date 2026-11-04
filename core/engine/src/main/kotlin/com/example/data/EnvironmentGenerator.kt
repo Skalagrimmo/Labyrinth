@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.core.model.CellType
+
 /**
  * Specialized procedural environments used by the Labyrinth campaign.
  *
@@ -7,7 +9,7 @@ package com.example.data
  * separates generation from session/gameplay orchestration.
  */
 object EnvironmentGenerator {
-    private fun enrichMapWithSecretsAndBypasses(grid: Array<Array<com.example.data.CellType>>, random: kotlin.random.Random) {
+    private fun enrichMapWithSecretsAndBypasses(grid: Array<Array<CellType>>, random: kotlin.random.Random) {
         val height = grid.size
         val width = grid[0].size
 
@@ -15,13 +17,13 @@ object EnvironmentGenerator {
         val candidateWallSpots = mutableListOf<Pair<Int, Int>>()
         for (y in 2 until height - 2) {
             for (x in 2 until width - 2) {
-                if (grid[y][x] == com.example.data.CellType.WALL) {
+                if (grid[y][x] == CellType.WALL) {
                     val hasWalkableNeighbor = listOf(
                         grid[y - 1][x], grid[y + 1][x], grid[y][x - 1], grid[y][x + 1]
-                    ).any { it != com.example.data.CellType.WALL && it != com.example.data.CellType.SECRET_WALL }
+                    ).any { it != CellType.WALL && it != CellType.SECRET_WALL }
 
-                    val hasDeepWallSpace = grid[y - 1][x] == com.example.data.CellType.WALL || grid[y + 1][x] == com.example.data.CellType.WALL ||
-                            grid[y][x - 1] == com.example.data.CellType.WALL || grid[y][x + 1] == com.example.data.CellType.WALL
+                    val hasDeepWallSpace = grid[y - 1][x] == CellType.WALL || grid[y + 1][x] == CellType.WALL ||
+                            grid[y][x - 1] == CellType.WALL || grid[y][x + 1] == CellType.WALL
 
                     if (hasWalkableNeighbor && hasDeepWallSpace) {
                         candidateWallSpots.add(Pair(x, y))
@@ -34,7 +36,7 @@ object EnvironmentGenerator {
         val secretCount = minOf(8, candidateWallSpots.size / 4)
         for (i in 0 until secretCount) {
             val (swx, swy) = candidateWallSpots[i]
-            grid[swy][swx] = com.example.data.CellType.SECRET_WALL
+            grid[swy][swx] = CellType.SECRET_WALL
 
             // Carve small secret vault behind the secret wall
             for (dy in -1..1) {
@@ -42,8 +44,8 @@ object EnvironmentGenerator {
                     if (dx == 0 && dy == 0) continue
                     val nx = swx + dx
                     val ny = swy + dy
-                    if (nx in 1 until width - 1 && ny in 1 until height - 1 && grid[ny][nx] == com.example.data.CellType.WALL) {
-                        grid[ny][nx] = if (random.nextBoolean()) com.example.data.CellType.SCAN_CACHE else com.example.data.CellType.SECRET_CACHE
+                    if (nx in 1 until width - 1 && ny in 1 until height - 1 && grid[ny][nx] == CellType.WALL) {
+                        grid[ny][nx] = if (random.nextBoolean()) CellType.SCAN_CACHE else CellType.SECRET_CACHE
                     }
                 }
             }
@@ -53,7 +55,7 @@ object EnvironmentGenerator {
         val walkableCells = mutableListOf<Pair<Int, Int>>()
         for (y in 2 until height - 2) {
             for (x in 2 until width - 2) {
-                if (grid[y][x] == com.example.data.CellType.PATH) {
+                if (grid[y][x] == CellType.PATH) {
                     walkableCells.add(Pair(x, y))
                 }
             }
@@ -64,13 +66,13 @@ object EnvironmentGenerator {
             val gateCount = minOf(6, walkableCells.size / 15)
             for (g in 0 until gateCount) {
                 val (px, py) = walkableCells[g * 2]
-                grid[py][px] = com.example.data.CellType.HACKABLE_TERMINAL
+                grid[py][px] = CellType.HACKABLE_TERMINAL
 
                 for (dir in listOf(Pair(1, 0), Pair(-1, 0), Pair(0, 1), Pair(0, -1))) {
                     val gx = px + dir.first
                     val gy = py + dir.second
-                    if (gx in 1 until width - 1 && gy in 1 until height - 1 && grid[gy][gx] == com.example.data.CellType.PATH) {
-                        grid[gy][gx] = com.example.data.CellType.TERMINAL_DOOR
+                    if (gx in 1 until width - 1 && gy in 1 until height - 1 && grid[gy][gx] == CellType.PATH) {
+                        grid[gy][gx] = CellType.TERMINAL_DOOR
                         break
                     }
                 }
@@ -80,18 +82,18 @@ object EnvironmentGenerator {
         // 3. Add ALTERNATIVE_VENT sub-conduit bypass routes
         for (i in 0 until minOf(10, walkableCells.size / 15)) {
             val (vx, vy) = walkableCells[walkableCells.size - 1 - i]
-            grid[vy][vx] = com.example.data.CellType.ALTERNATIVE_VENT
+            grid[vy][vx] = CellType.ALTERNATIVE_VENT
         }
     }
 
     // Specialized procedural generator for corporate building floors
-    fun generateBuildingFloor(floor: Int, seed: Long = System.currentTimeMillis()): Array<Array<com.example.data.CellType>> {
+    fun generateBuildingFloor(floor: Int, seed: Long = System.currentTimeMillis()): Array<Array<CellType>> {
         val random = kotlin.random.Random(seed + floor * 100)
         val width = 64
         val height = 64
-        val grid = Array(height) { Array(width) { com.example.data.CellType.WALL } }
+        val grid = Array(height) { Array(width) { CellType.WALL } }
 
-        fun carveCell(x: Int, y: Int, type: com.example.data.CellType) {
+        fun carveCell(x: Int, y: Int, type: CellType) {
             if (x in 1 until width - 1 && y in 1 until height - 1) {
                 grid[y][x] = type
             }
@@ -102,11 +104,11 @@ object EnvironmentGenerator {
 
         // 1. Core Structure: Central staircase/elevator shaft connecting all floors.
         val lobbyCellType = when (floor) {
-            1 -> com.example.data.CellType.GRAND_HALL // Residential lobby
-            2 -> com.example.data.CellType.GRAND_HALL // Office lobby
-            3 -> com.example.data.CellType.DOME_CHAMBER // Technical hub
-            4 -> com.example.data.CellType.VENT_TUNNEL // Storage center
-            else -> com.example.data.CellType.GRAND_HALL
+            1 -> CellType.GRAND_HALL // Residential lobby
+            2 -> CellType.GRAND_HALL // Office lobby
+            3 -> CellType.DOME_CHAMBER // Technical hub
+            4 -> CellType.VENT_TUNNEL // Storage center
+            else -> CellType.GRAND_HALL
         }
 
         // Carve central core lobby (5x5 room)
@@ -117,19 +119,19 @@ object EnvironmentGenerator {
         }
 
         // Center is the Elevator column
-        grid[cy][cx] = com.example.data.CellType.ELEVATOR
+        grid[cy][cx] = CellType.ELEVATOR
 
         // Stairs Up / Portal to next Zone
         if (floor < 4) {
-            grid[cy][cx - 1] = com.example.data.CellType.STAIRS_UP
+            grid[cy][cx - 1] = CellType.STAIRS_UP
         } else {
             // Top floor (Floor 4) has exit portal connecting to the underground Collectors!
-            grid[cy][cx - 1] = com.example.data.CellType.ENCRYPTED_PORTAL
+            grid[cy][cx - 1] = CellType.ENCRYPTED_PORTAL
         }
 
         // Stairs Down
         if (floor > 1) {
-            grid[cy][cx + 1] = com.example.data.CellType.STAIRS_DOWN
+            grid[cy][cx + 1] = CellType.STAIRS_DOWN
         }
 
         // 2. Entrance: Always on the ground floor (Floor 1), leading to a lobby / hall.
@@ -137,17 +139,17 @@ object EnvironmentGenerator {
             // Spawn entrance at (1, 1) and carve safe lobby entrance
             for (y in 1..2) {
                 for (x in 1..2) {
-                    carveCell(x, y, com.example.data.CellType.PATH)
+                    carveCell(x, y, CellType.PATH)
                 }
             }
-            grid[1][1] = com.example.data.CellType.SAFE_ZONE
+            grid[1][1] = CellType.SAFE_ZONE
 
             // Connect entrance (1, 1) to central lobby core (cx, cy)
             for (y in 1..cy) {
-                carveCell(1, y, com.example.data.CellType.PATH)
+                carveCell(1, y, CellType.PATH)
             }
             for (x in 1..(cx - 2)) {
-                carveCell(x, cy, com.example.data.CellType.PATH)
+                carveCell(x, cy, CellType.PATH)
             }
         }
 
@@ -159,7 +161,7 @@ object EnvironmentGenerator {
             Pair(0, 1)   // Down (South)
         )
 
-        data class RoomSpec(val x: Int, val y: Int, val w: Int, val h: Int, val cellType: com.example.data.CellType)
+        data class RoomSpec(val x: Int, val y: Int, val w: Int, val h: Int, val cellType: CellType)
         val rooms = mutableListOf<RoomSpec>()
 
         for (dir in directions) {
@@ -179,7 +181,7 @@ object EnvironmentGenerator {
             for (i in 1..length) {
                 val tx = startX + dir.first * i
                 val ty = startY + dir.second * i
-                carveCell(tx, ty, com.example.data.CellType.PATH)
+                carveCell(tx, ty, CellType.PATH)
             }
 
             // End position of corridor
@@ -198,45 +200,45 @@ object EnvironmentGenerator {
                 for (i in 1..branchLen) {
                     bx = endX + perpDir.first * sideSign * i
                     by = endY + perpDir.second * sideSign * i
-                    carveCell(bx, by, com.example.data.CellType.PATH)
+                    carveCell(bx, by, CellType.PATH)
                 }
 
                 // Place more varied types of rooms at the end of each sub-corridor branch!
                 val roomCellType = when (floor) {
                     1 -> {
                         val choices = listOf(
-                            com.example.data.CellType.ELEVATED_BALCONY, // Private Deck Apt
-                            com.example.data.CellType.GRAND_HALL,        // Atrium
-                            com.example.data.CellType.VENT_TUNNEL        // Service room
+                            CellType.ELEVATED_BALCONY, // Private Deck Apt
+                            CellType.GRAND_HALL,        // Atrium
+                            CellType.VENT_TUNNEL        // Service room
                         )
                         choices[random.nextInt(choices.size)]
                     }
                     2 -> {
                         val choices = listOf(
-                            com.example.data.CellType.GRAND_HALL,        // Boardroom
-                            com.example.data.CellType.DOME_CHAMBER,      // Strategy Vault
-                            com.example.data.CellType.ELEVATED_BALCONY   // Sky Garden Breakroom
+                            CellType.GRAND_HALL,        // Boardroom
+                            CellType.DOME_CHAMBER,      // Strategy Vault
+                            CellType.ELEVATED_BALCONY   // Sky Garden Breakroom
                         )
                         choices[random.nextInt(choices.size)]
                     }
                     3 -> {
                         val choices = listOf(
-                            com.example.data.CellType.DOME_CHAMBER,      // Mainframe Center
-                            com.example.data.CellType.GRAVITY_SLOPE,     // Magnetic Cooler
-                            com.example.data.CellType.GRAND_HALL         // Tech Control Suite
+                            CellType.DOME_CHAMBER,      // Mainframe Center
+                            CellType.GRAVITY_SLOPE,     // Magnetic Cooler
+                            CellType.GRAND_HALL         // Tech Control Suite
                         )
                         choices[random.nextInt(choices.size)]
                     }
                     4 -> {
                         val choices = listOf(
-                            com.example.data.CellType.VENT_TUNNEL,       // High-density Storage
-                            com.example.data.CellType.ELEVATED_BALCONY,  // Cargo Platform
-                            com.example.data.CellType.GRAND_HALL,        // Distribution Hub
-                            com.example.data.CellType.DOME_CHAMBER       // Secure Archives
+                            CellType.VENT_TUNNEL,       // High-density Storage
+                            CellType.ELEVATED_BALCONY,  // Cargo Platform
+                            CellType.GRAND_HALL,        // Distribution Hub
+                            CellType.DOME_CHAMBER       // Secure Archives
                         )
                         choices[random.nextInt(choices.size)]
                     }
-                    else -> com.example.data.CellType.PATH
+                    else -> CellType.PATH
                 }
 
                 val rw = random.nextInt(3) + 3 // 3x3 to 5x5
@@ -263,11 +265,11 @@ object EnvironmentGenerator {
             // Each room has a random size (3x3 to 5x5) and type based on floor theme.
             val numRooms = random.nextInt(2) + 2 // 2 to 3 rooms
             val roomCellType = when (floor) {
-                1 -> com.example.data.CellType.ELEVATED_BALCONY // Residential: Apartments
-                2 -> com.example.data.CellType.GRAND_HALL // Office: Office rooms
-                3 -> com.example.data.CellType.DOME_CHAMBER // Technical: Servers
-                4 -> com.example.data.CellType.VENT_TUNNEL // Storage: Utility closets
-                else -> com.example.data.CellType.PATH
+                1 -> CellType.ELEVATED_BALCONY // Residential: Apartments
+                2 -> CellType.GRAND_HALL // Office: Office rooms
+                3 -> CellType.DOME_CHAMBER // Technical: Servers
+                4 -> CellType.VENT_TUNNEL // Storage: Utility closets
+                else -> CellType.PATH
             }
 
             for (rIndex in 0 until numRooms) {
@@ -318,7 +320,7 @@ object EnvironmentGenerator {
 
                 if (!intersectsCore) {
                     rooms.add(RoomSpec(adjustedX, adjustedY, rw, rh, roomCellType))
-                    carveCell(corridorX, corridorY, com.example.data.CellType.PATH)
+                    carveCell(corridorX, corridorY, CellType.PATH)
                 }
             }
         }
@@ -336,12 +338,12 @@ object EnvironmentGenerator {
         val walkable = mutableListOf<Pair<Int, Int>>()
         for (y in 1 until height - 1) {
             for (x in 1 until width - 1) {
-                if (grid[y][x] != com.example.data.CellType.WALL &&
-                    grid[y][x] != com.example.data.CellType.STAIRS_UP &&
-                    grid[y][x] != com.example.data.CellType.STAIRS_DOWN &&
-                    grid[y][x] != com.example.data.CellType.ELEVATOR &&
-                    grid[y][x] != com.example.data.CellType.ENCRYPTED_PORTAL &&
-                    grid[y][x] != com.example.data.CellType.SAFE_ZONE) {
+                if (grid[y][x] != CellType.WALL &&
+                    grid[y][x] != CellType.STAIRS_UP &&
+                    grid[y][x] != CellType.STAIRS_DOWN &&
+                    grid[y][x] != CellType.ELEVATOR &&
+                    grid[y][x] != CellType.ENCRYPTED_PORTAL &&
+                    grid[y][x] != CellType.SAFE_ZONE) {
                     walkable.add(Pair(x, y))
                 }
             }
@@ -351,7 +353,7 @@ object EnvironmentGenerator {
         // Keycard required for Elevator is hidden on Floor 2!
         if (floor == 2 && walkable.isNotEmpty()) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.SECRET_CACHE
+            grid[cell.second][cell.first] = CellType.SECRET_CACHE
         }
 
         val dsCount = when (floor) {
@@ -362,7 +364,7 @@ object EnvironmentGenerator {
         }
         for (i in 0 until minOf(dsCount, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.DATA_STORE
+            grid[cell.second][cell.first] = CellType.DATA_STORE
         }
 
         val vCount = when (floor) {
@@ -373,7 +375,7 @@ object EnvironmentGenerator {
         }
         for (i in 0 until minOf(vCount, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.VIRUS_NODE
+            grid[cell.second][cell.first] = CellType.VIRUS_NODE
         }
 
         val cCount = when (floor) {
@@ -384,7 +386,7 @@ object EnvironmentGenerator {
         }
         for (i in 0 until minOf(cCount, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.SECRET_CACHE
+            grid[cell.second][cell.first] = CellType.SECRET_CACHE
         }
 
         enrichMapWithSecretsAndBypasses(grid, random)
@@ -392,13 +394,13 @@ object EnvironmentGenerator {
     }
 
     // Specialized procedural generator for underground collector tunnels
-    fun generateCollectorTunnels(level: Int, seed: Long = System.currentTimeMillis()): Array<Array<com.example.data.CellType>> {
+    fun generateCollectorTunnels(level: Int, seed: Long = System.currentTimeMillis()): Array<Array<CellType>> {
         val random = kotlin.random.Random(seed + level * 50)
         val width = 64
         val height = 64
-        val grid = Array(height) { Array(width) { com.example.data.CellType.WALL } }
+        val grid = Array(height) { Array(width) { CellType.WALL } }
 
-        fun carve(x: Int, y: Int, type: com.example.data.CellType) {
+        fun carve(x: Int, y: Int, type: CellType) {
             if (x in 1 until width - 1 && y in 1 until height - 1) {
                 grid[y][x] = type
             }
@@ -411,7 +413,7 @@ object EnvironmentGenerator {
             activeNodes.add(Pair(cx, cy))
             
             for (steps in 0..80) {
-                carve(cx, cy, if (random.nextBoolean()) com.example.data.CellType.VENT_TUNNEL else com.example.data.CellType.GRAVITY_SLOPE)
+                carve(cx, cy, if (random.nextBoolean()) CellType.VENT_TUNNEL else CellType.GRAVITY_SLOPE)
                 val dir = random.nextInt(4)
                 cx += if (dir == 0) 1 else if (dir == 1) -1 else 0
                 cy += if (dir == 2) 1 else if (dir == 3) -1 else 0
@@ -422,10 +424,10 @@ object EnvironmentGenerator {
 
         for (y in 1..3) {
             for (x in 1..3) {
-                carve(x, y, com.example.data.CellType.PATH)
+                carve(x, y, CellType.PATH)
             }
         }
-        grid[1][1] = com.example.data.CellType.SAFE_ZONE
+        grid[1][1] = CellType.SAFE_ZONE
 
         for (i in 0 until activeNodes.size - 1) {
             val (x1, y1) = activeNodes[i]
@@ -433,25 +435,25 @@ object EnvironmentGenerator {
             var cx = x1
             var cy = y1
             while (cx != x2) {
-                carve(cx, cy, com.example.data.CellType.PATH)
+                carve(cx, cy, CellType.PATH)
                 cx += if (x2 > cx) 1 else -1
             }
             while (cy != y2) {
-                carve(cx, cy, com.example.data.CellType.PATH)
+                carve(cx, cy, CellType.PATH)
                 cy += if (y2 > cy) 1 else -1
             }
         }
 
         val exitCell = activeNodes.last()
-        grid[exitCell.second][exitCell.first] = if (level == 2) com.example.data.CellType.ENCRYPTED_PORTAL else com.example.data.CellType.STAIRS_UP
+        grid[exitCell.second][exitCell.first] = if (level == 2) CellType.ENCRYPTED_PORTAL else CellType.STAIRS_UP
 
         val walkable = mutableListOf<Pair<Int, Int>>()
         for (y in 1 until height - 1) {
             for (x in 1 until width - 1) {
-                if (grid[y][x] != com.example.data.CellType.WALL && 
-                    grid[y][x] != com.example.data.CellType.STAIRS_UP && 
-                    grid[y][x] != com.example.data.CellType.ENCRYPTED_PORTAL && 
-                    grid[y][x] != com.example.data.CellType.SAFE_ZONE) {
+                if (grid[y][x] != CellType.WALL && 
+                    grid[y][x] != CellType.STAIRS_UP && 
+                    grid[y][x] != CellType.ENCRYPTED_PORTAL && 
+                    grid[y][x] != CellType.SAFE_ZONE) {
                     walkable.add(Pair(x, y))
                 }
             }
@@ -460,15 +462,15 @@ object EnvironmentGenerator {
 
         for (i in 0 until minOf(3, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.DATA_STORE
+            grid[cell.second][cell.first] = CellType.DATA_STORE
         }
         for (i in 0 until minOf(5, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.VIRUS_NODE
+            grid[cell.second][cell.first] = CellType.VIRUS_NODE
         }
         for (i in 0 until minOf(2, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.SECRET_CACHE
+            grid[cell.second][cell.first] = CellType.SECRET_CACHE
         }
 
         enrichMapWithSecretsAndBypasses(grid, random)
@@ -476,13 +478,13 @@ object EnvironmentGenerator {
     }
 
     // Specialized procedural generator for dynamic open metropolitan Cyber-City sectors
-    fun generateCitySector(districtIndex: Int, seed: Long = System.currentTimeMillis()): Array<Array<com.example.data.CellType>> {
+    fun generateCitySector(districtIndex: Int, seed: Long = System.currentTimeMillis()): Array<Array<CellType>> {
         val random = kotlin.random.Random(seed + districtIndex * 70)
         val width = 64
         val height = 64
-        val grid = Array(height) { Array(width) { com.example.data.CellType.WALL } }
+        val grid = Array(height) { Array(width) { CellType.WALL } }
 
-        fun carve(x: Int, y: Int, type: com.example.data.CellType) {
+        fun carve(x: Int, y: Int, type: CellType) {
             if (x in 1 until width - 1 && y in 1 until height - 1) {
                 grid[y][x] = type
             }
@@ -492,20 +494,20 @@ object EnvironmentGenerator {
         for (y in 12..22) {
             for (x in 12..22) {
                 val isPillar = (x == 15 || x == 19) && (y == 15 || y == 19)
-                carve(x, y, if (isPillar) com.example.data.CellType.WALL else com.example.data.CellType.GRAND_HALL)
+                carve(x, y, if (isPillar) CellType.WALL else CellType.GRAND_HALL)
             }
         }
 
         // Broad outdoor avenues
         for (x in 2 until width - 2) {
-            carve(x, 17, com.example.data.CellType.PATH)
-            carve(x, 7, com.example.data.CellType.PATH)
-            carve(x, 27, com.example.data.CellType.PATH)
+            carve(x, 17, CellType.PATH)
+            carve(x, 7, CellType.PATH)
+            carve(x, 27, CellType.PATH)
         }
         for (y in 2 until height - 2) {
-            carve(17, y, com.example.data.CellType.PATH)
-            carve(7, y, com.example.data.CellType.PATH)
-            carve(27, y, com.example.data.CellType.PATH)
+            carve(17, y, CellType.PATH)
+            carve(7, y, CellType.PATH)
+            carve(27, y, CellType.PATH)
         }
 
         // High rise corporate districts
@@ -516,9 +518,9 @@ object EnvironmentGenerator {
                 for (y in by until by + 5) {
                     for (x in bx until bx + 5) {
                         if (x in 1 until width - 1 && y in 1 until height - 1) {
-                            if (shape == 0) carve(x, y, com.example.data.CellType.ELEVATED_BALCONY)
-                            else if (shape == 1) carve(x, y, com.example.data.CellType.DOME_CHAMBER)
-                            else carve(x, y, com.example.data.CellType.PATH)
+                            if (shape == 0) carve(x, y, CellType.ELEVATED_BALCONY)
+                            else if (shape == 1) carve(x, y, CellType.DOME_CHAMBER)
+                            else carve(x, y, CellType.PATH)
                         }
                     }
                 }
@@ -527,20 +529,20 @@ object EnvironmentGenerator {
 
         for (y in 1..3) {
             for (x in 1..3) {
-                carve(x, y, com.example.data.CellType.PATH)
+                carve(x, y, CellType.PATH)
             }
         }
-        grid[1][1] = com.example.data.CellType.SAFE_ZONE
+        grid[1][1] = CellType.SAFE_ZONE
 
         // Ultimate sector gate at the corner
-        grid[height - 3][width - 3] = com.example.data.CellType.ENCRYPTED_PORTAL
+        grid[height - 3][width - 3] = CellType.ENCRYPTED_PORTAL
 
         val walkable = mutableListOf<Pair<Int, Int>>()
         for (y in 1 until height - 1) {
             for (x in 1 until width - 1) {
-                if (grid[y][x] != com.example.data.CellType.WALL && 
-                    grid[y][x] != com.example.data.CellType.ENCRYPTED_PORTAL && 
-                    grid[y][x] != com.example.data.CellType.SAFE_ZONE) {
+                if (grid[y][x] != CellType.WALL && 
+                    grid[y][x] != CellType.ENCRYPTED_PORTAL && 
+                    grid[y][x] != CellType.SAFE_ZONE) {
                     walkable.add(Pair(x, y))
                 }
             }
@@ -549,15 +551,15 @@ object EnvironmentGenerator {
 
         for (i in 0 until minOf(5, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.DATA_STORE
+            grid[cell.second][cell.first] = CellType.DATA_STORE
         }
         for (i in 0 until minOf(7, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.VIRUS_NODE
+            grid[cell.second][cell.first] = CellType.VIRUS_NODE
         }
         for (i in 0 until minOf(4, walkable.size)) {
             val cell = walkable.removeAt(0)
-            grid[cell.second][cell.first] = com.example.data.CellType.SECRET_CACHE
+            grid[cell.second][cell.first] = CellType.SECRET_CACHE
         }
 
         enrichMapWithSecretsAndBypasses(grid, random)

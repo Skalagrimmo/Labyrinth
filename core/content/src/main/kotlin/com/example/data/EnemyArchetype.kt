@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.core.model.StatusEffectType
+
 /**
  * Data-only combat profile used by built-in content and Markdown mods.
  */

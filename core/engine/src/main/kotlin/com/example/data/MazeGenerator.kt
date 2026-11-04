@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.core.model.CellType
 import kotlin.math.abs
 import kotlin.random.Random
 
