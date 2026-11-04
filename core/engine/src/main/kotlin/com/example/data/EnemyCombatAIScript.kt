@@ -1,4 +1,6 @@
 package com.example.data
+import com.example.core.model.BossType
+import com.example.core.model.Enemy
 
 import kotlin.math.max
 import kotlin.math.min

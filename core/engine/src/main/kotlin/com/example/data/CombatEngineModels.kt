@@ -1,4 +1,5 @@
 package com.example.data
+import com.example.core.model.StatusEffectType
 
 /** Combat turn enum tracking active combat turn state. */
 enum class EngineCombatTurn {
