@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.core.model.BossType
 import kotlin.random.Random
 
 /**
@@ -15,6 +16,10 @@ enum class LootRarity(val label: String, val colorTag: String, val dropWeight: I
 
 /**
  * Result container for generated loot drops.
+ *
+ * Room-free by design: persisting the drop (e.g. as an InventoryItemEntity in
+ * the :app Room database) is the caller's concern, so :core:persistence keeps
+ * only the pure loot data.
  */
 data class LootDropResult(
     val itemName: String,
@@ -23,7 +28,6 @@ data class LootDropResult(
     val rarity: LootRarity,
     val totalCreditsEarned: Int,
     val xpEarned: Int,
-    val inventoryEntity: InventoryItemEntity,
     val logMessage: String
 )
 
@@ -78,17 +82,15 @@ object CombatLootDropSystem {
      * @param enemyName Name of the defeated enemy process
      * @param enemyLevel Current level/layer depth
      * @param baseBounty Standard credit reward for enemy
-     * @param saveSlotId Target save slot ID for Room database entity
      */
     fun generateLootDrop(
         enemyName: String,
         enemyLevel: Int = 1,
-        baseBounty: Int = 50,
-        saveSlotId: String = "current_save"
+        baseBounty: Int = 50
     ): LootDropResult {
         val totalWeight = LOOT_DATABASE.sumOf { it.rarity.dropWeight }
         var randomRoll = Random.nextInt(totalWeight)
-        
+
         var selectedItem = LOOT_DATABASE.first()
         for (item in LOOT_DATABASE) {
             if (randomRoll < item.rarity.dropWeight) {
@@ -101,15 +103,6 @@ object CombatLootDropSystem {
         val bonusCredits = (baseBounty * selectedItem.creditBonusMultiplier * (1f + enemyLevel * 0.15f)).toInt()
         val xpReward = 45 + (enemyLevel * 25) + Random.nextInt(5, 15)
 
-        val entity = InventoryItemEntity(
-            saveSlotId = saveSlotId,
-            itemName = selectedItem.name,
-            itemType = selectedItem.itemType,
-            quantity = 1,
-            description = selectedItem.description,
-            acquiredTimestamp = System.currentTimeMillis()
-        )
-
         val logMsg = "🎁 LOOT DROPPED from $enemyName: ${selectedItem.rarity.colorTag} ${selectedItem.name} (${selectedItem.description})"
 
         return LootDropResult(
@@ -119,7 +112,6 @@ object CombatLootDropSystem {
             rarity = selectedItem.rarity,
             totalCreditsEarned = bonusCredits,
             xpEarned = xpReward,
-            inventoryEntity = entity,
             logMessage = logMsg
         )
     }
@@ -130,19 +122,10 @@ object CombatLootDropSystem {
         BossType.BLACK_ICE_COLOSSUS to LootTableItem("ColossusBlade.exe", "PROGRAM", LootRarity.LEGENDARY, "Devastating 75 damage strike. Stuns target for 2 turns. Bonus: +40% damage when below 50% HP.", 5.0f)
     )
 
-    fun generateBossLootDrop(bossType: BossType, enemyLevel: Int, saveSlotId: String = "current_save"): LootDropResult {
+    fun generateBossLootDrop(bossType: BossType, enemyLevel: Int): LootDropResult {
         val item = BOSS_LOOT[bossType]!!
         val bonusCredits = (800 + (enemyLevel * 100)) * item.creditBonusMultiplier.toInt()
         val xpReward = 200 + (enemyLevel * 50) + Random.nextInt(20, 50)
-
-        val entity = InventoryItemEntity(
-            saveSlotId = saveSlotId,
-            itemName = item.name,
-            itemType = item.itemType,
-            quantity = 1,
-            description = item.description,
-            acquiredTimestamp = System.currentTimeMillis()
-        )
 
         val logMsg = "🎁 BOSS LOOT DROPPED: ${item.rarity.colorTag} ${item.name} — ${item.description}"
 
@@ -153,7 +136,6 @@ object CombatLootDropSystem {
             rarity = item.rarity,
             totalCreditsEarned = bonusCredits,
             xpEarned = xpReward,
-            inventoryEntity = entity,
             logMessage = logMsg
         )
     }

@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.core.model.CellType
+
 /**
  * Stable, Android-free codecs used by persistence.
  *

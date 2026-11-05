@@ -2,6 +2,10 @@ package com.example.data
 
 /**
  * Persistence-independent obstacle snapshot used by turn and movement logic.
+ *
+ * Lives in :core:persistence because it is part of the persistence boundary's
+ * domain vocabulary; the Room entity mapping (FloorObstacleEntity.toDomain)
+ * stays in :app next to the Room entities.
  */
 data class FloorObstacle(
     val id: Long = 0,
@@ -25,10 +29,4 @@ data class FloorObstacle(
     val rewardCredits: Int = 0,
     val rewardItem: String? = null,
     val createdTimestamp: Long = 0L
-)
-
-fun FloorObstacleEntity.toDomain(): FloorObstacle = FloorObstacle(
-    id, mapId, saveSlotId, levelNumber, floorIndex, gridX, gridY, obstacleType, name,
-    description, isPassable, isDestructible, isHacked, isDisarmed, durability,
-    maxDurability, hackDifficulty, interactionPrompt, rewardCredits, rewardItem, createdTimestamp
 )
