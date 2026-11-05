@@ -63,18 +63,27 @@ class CombatClockTest {
 
     @Test
     fun frozenClockDoesNotAdvanceAndUnfreezeKeepsPlayerPause() {
-        val frozen = CombatClock.freeze(freshState())
+        val paused = CombatClock.pause(freshState())
+        val frozen = CombatClock.freeze(paused)
         val (after, outcome) = CombatClock.tick(frozen, 1_000L)
         assertTrue(outcome is CombatClock.TickOutcome.None)
         assertTrue(after.isFrozen)
+        assertTrue(after.isPaused)
 
-        val pausedWhileFrozen = CombatClock.pause(after)
-        val unfrozen = CombatClock.unfreeze(pausedWhileFrozen)
-        assertTrue(unfrozen.isPaused)
+        val unfrozen = CombatClock.unfreeze(after)
         assertFalse(unfrozen.isFrozen)
+        assertTrue(unfrozen.isPaused)
 
         val resumed = CombatClock.resume(unfrozen)
         assertTrue(resumed.isRunning)
+    }
+
+    @Test
+    fun pauseWhileFrozenIsNoOp() {
+        val frozen = CombatClock.freeze(freshState())
+        val pausedWhileFrozen = CombatClock.pause(frozen)
+        assertTrue(pausedWhileFrozen.isFrozen)
+        assertFalse(pausedWhileFrozen.isPaused)
     }
 
     @Test
