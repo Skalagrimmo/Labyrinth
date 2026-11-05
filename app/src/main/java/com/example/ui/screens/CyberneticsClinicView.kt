@@ -141,7 +141,7 @@ fun CyberneticsClinicView(
                                 }
                                 if (implant.passiveAbility != null) {
                                     Text(
-                                        text = "  ⚡ ${implant.passiveAbility.title}",
+                                        text = "  ⚡ ${implant.passiveAbility!!.title}",
                                         color = CyberAmber,
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 7.sp
@@ -219,7 +219,7 @@ fun CyberneticsClinicView(
                                 )
                                 if (implant.passiveAbility != null) {
                                     Text(
-                                        text = "⚡ ${implant.passiveAbility.title}: ${implant.passiveAbility.description}",
+                                        text = "⚡ ${implant.passiveAbility!!.title}: ${implant.passiveAbility!!.description}",
                                         color = CyberAmber,
                                         fontFamily = FontFamily.Monospace,
                                         fontSize = 7.sp,
@@ -297,7 +297,7 @@ fun CyberneticsClinicView(
                             )
                             if (implant.passiveAbility != null) {
                                 Text(
-                                    text = "⚡ ${implant.passiveAbility.title}: ${implant.passiveAbility.description}",
+                                    text = "⚡ ${implant.passiveAbility!!.title}: ${implant.passiveAbility!!.description}",
                                     color = CyberAmber,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 7.sp,

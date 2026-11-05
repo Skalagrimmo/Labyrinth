@@ -1,4 +1,5 @@
 package com.example.data
+import com.example.core.model.StatusEffectType
 
 import kotlin.random.Random
 

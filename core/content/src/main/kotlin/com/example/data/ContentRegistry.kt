@@ -1,4 +1,6 @@
 package com.example.data
+import com.example.core.model.Program
+import com.example.core.model.StatusEffectType
 
 /**
  * ContentRegistry — the runtime conversion layer for markdown-defined mods.
@@ -11,8 +13,8 @@ package com.example.data
  *  - programs -> [Program]                    (available via [programs])
  *
  * The registry is a pure object (no Android dependencies) so it can be unit-tested and
- * reused anywhere. Loading from an actual Android asset is done via the
- * [ContentModLoader] helper.
+ * reused anywhere. Loading from an actual Android asset is done by the
+ * app-level ContentModLoader helper (Android module).
  *
  * Field reference (all keys case-insensitive):
  *
@@ -208,31 +210,5 @@ object ContentRegistry {
     private inline fun <reified T : Enum<T>> enumOf(raw: String?): T? {
         if (raw == null) return null
         return enumValues<T>().firstOrNull { it.name.equals(raw.trim(), ignoreCase = true) }
-    }
-}
-
-/**
- * Loads mod content from the Android `assets/` folder. Place `.md` files in
- * `app/src/main/assets/mods/` and call [loadFolderMods] once at startup.
- */
-object ContentModLoader {
-    /**
-     * Reads every `*.md` file under `assets/mods/` and registers its content.
-     * @return the names of successfully loaded mod files.
-     */
-    fun loadFolderMods(context: android.content.Context): List<String> {
-        val loaded = mutableListOf<String>()
-        try {
-            val fileNames = context.assets.list("mods") ?: emptyArray()
-            for (file in fileNames) {
-                if (!file.endsWith(".md")) continue
-                val text = context.assets.open("mods/$file").bufferedReader().use { it.readText() }
-                ContentRegistry.loadMod(text)
-                loaded.add(file)
-            }
-        } catch (_: Exception) {
-            // assets/mods/ absent or unreadable — no mods loaded. Safe to ignore.
-        }
-        return loaded
     }
 }

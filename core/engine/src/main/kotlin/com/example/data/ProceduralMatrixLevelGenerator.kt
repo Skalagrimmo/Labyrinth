@@ -1,4 +1,6 @@
 package com.example.data
+import com.example.core.model.CellType
+import com.example.core.model.Zone
 
 import kotlin.math.abs
 import kotlin.math.max

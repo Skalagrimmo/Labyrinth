@@ -1311,7 +1311,7 @@ fun CharacterCreationView(
                         if (implant.passiveAbility != null) {
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "вљЎ PASSIVE: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}",
+                                text = "вљЎ PASSIVE: ${implant.passiveAbility!!.title} - ${implant.passiveAbility!!.description}",
                                 color = CyberAmber,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 9.sp,
@@ -1683,7 +1683,7 @@ fun CyberneticsClinicView(
                         if (installed.passiveAbility != null) {
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "вљЎ PASSIVE: ${installed.passiveAbility.title} - ${installed.passiveAbility.description}",
+                                text = "вљЎ PASSIVE: ${installed.passiveAbility!!.title} - ${installed.passiveAbility!!.description}",
                                 color = CyberAmber,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 9.sp,
@@ -1754,7 +1754,7 @@ fun CyberneticsClinicView(
                         )
                         if (implant.passiveAbility != null) {
                             Text(
-                                text = "вљЎ ${implant.passiveAbility.title}",
+                                text = "вљЎ ${implant.passiveAbility!!.title}",
                                 color = CyberAmber,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 9.sp,

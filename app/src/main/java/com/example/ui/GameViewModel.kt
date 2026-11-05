@@ -435,7 +435,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val profileEntity = CharacterProfileEntity(profileId = "profile_${cleanName.lowercase().replace(" ", "_")}", runnerName = cleanName, runnerClass = selectedClass.name, level = 1, credits = baseCredits, totalCreditsEarned = baseCredits, maxIntegrity = initMaxHp, maxRam = initMaxRam, nodesHackedCount = 0)
         viewModelScope.launch { repository.saveProfile(profileEntity) }
         addLog("==========================================", LogType.SUCCESS); addLog("PROFILE SYNCHRONIZED: $cleanName [${selectedClass.title}]", LogType.SUCCESS); addLog("SPECIALIZATION: ${selectedClass.passiveDesc}", LogType.INFO); addLog("STARTER IMPLANT INJECTED: ${chosenImplant.name} [${chosenImplant.slot.displayName.uppercase()}]", LogType.SUCCESS)
-        if (chosenImplant.passiveAbility != null) addLog("  IMPLANT PASSIVE: ${chosenImplant.passiveAbility.title} - ${chosenImplant.passiveAbility.description}", LogType.INFO)
+        if (chosenImplant.passiveAbility != null) addLog("  IMPLANT PASSIVE: ${chosenImplant.passiveAbility!!.title} - ${chosenImplant.passiveAbility!!.description}", LogType.INFO)
         if (mutation != null) {
             addLog("MUTATION PROTOCOL INJECTED: ${mutation.icon} ${mutation.title}", LogType.SUCCESS)
             addLog("  EFFECT: ${mutation.effectSummary}", LogType.INFO)

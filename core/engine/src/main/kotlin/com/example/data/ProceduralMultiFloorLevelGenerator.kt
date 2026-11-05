@@ -1,4 +1,6 @@
 package com.example.data
+import com.example.core.model.CellType
+import com.example.core.model.Zone
 
 import java.util.ArrayDeque
 import kotlin.math.abs

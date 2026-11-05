@@ -1,4 +1,8 @@
 package com.example.data
+import com.example.core.model.Cyberware
+import com.example.core.model.NetrunnerClass
+import com.example.core.model.Program
+import com.example.core.model.StatusEffectType
 
 /**
  * Built-in gameplay content separated from the engine orchestration layer.

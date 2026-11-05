@@ -1,4 +1,7 @@
 package com.example.data
+import com.example.core.model.Cyberware
+import com.example.core.model.Program
+import com.example.core.model.StatusEffectType
 
 enum class InventoryCategory(val displayName: String, val icon: String) {
     CONSUMABLE("Consumable", "💊"),
