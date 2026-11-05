@@ -76,6 +76,7 @@ dependencies {
   implementation(project(":core:model"))
   implementation(project(":core:content"))
   implementation(project(":core:engine"))
+  implementation(project(":core:persistence"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
