@@ -353,7 +353,7 @@ private fun EquippedChassisTab(
 
                         if (installed.passiveAbility != null) {
                             Text(
-                                text = "⚡ ABILITY: ${installed.passiveAbility.title} - ${installed.passiveAbility.description}",
+                                text = "⚡ ABILITY: ${installed.passiveAbility!!.title} - ${installed.passiveAbility!!.description}",
                                 color = CyberAmber,
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 8.5.sp,
@@ -613,7 +613,7 @@ private fun StorageCoreTab(
 
                             if (implant.passiveAbility != null) {
                                 Text(
-                                    text = "⚡ PASSIVE: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}",
+                                    text = "⚡ PASSIVE: ${implant.passiveAbility!!.title} - ${implant.passiveAbility!!.description}",
                                     color = CyberAmber,
                                     fontFamily = FontFamily.Monospace,
                                     fontSize = 8.5.sp,

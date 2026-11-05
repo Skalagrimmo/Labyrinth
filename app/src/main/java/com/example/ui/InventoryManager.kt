@@ -123,12 +123,13 @@ class InventoryManager(
         }
 
         val gameItem = GameItemRegistry.getItemByName(actualItemName)
-        if (!gameItem.isEquippable || gameItem.equipmentSlot == null) {
+        val equipSlot = gameItem.equipmentSlot
+        if (!gameItem.isEquippable || equipSlot == null) {
             onLog("EQUIP FAILED: '$actualItemName' is not an equippable weapon or armor module.", LogType.ERROR)
             return false
         }
 
-        when (gameItem.equipmentSlot) {
+        when (equipSlot) {
             EquipmentSlot.WEAPON -> {
                 val oldWeapon = state.equippedWeaponItem
                 var dmgBonusAcc = state.damageBonus + gameItem.damageBonus
@@ -341,9 +342,9 @@ class InventoryManager(
 
         if (gameItem.statusEffectToApply != null) {
             if (gameItem.targetSelf) {
-                onApplyStatusEffectToPlayer?.invoke(gameItem.statusEffectToApply, gameItem.statusEffectTurns, actualItemName)
+                onApplyStatusEffectToPlayer?.invoke(gameItem.statusEffectToApply!!, gameItem.statusEffectTurns, actualItemName)
             } else {
-                onApplyStatusEffectToEnemy?.invoke(gameItem.statusEffectToApply, gameItem.statusEffectTurns, actualItemName)
+                onApplyStatusEffectToEnemy?.invoke(gameItem.statusEffectToApply!!, gameItem.statusEffectTurns, actualItemName)
             }
         }
 
@@ -471,7 +472,7 @@ class InventoryManager(
 
         onLog("${implant.icon} IMPLANT SURGERY SUCCESS: Installed ${implant.name} into [${implant.slot.displayName.uppercase()}].", LogType.SUCCESS)
         if (implant.passiveAbility != null) {
-            onLog("  └ PASSIVE ABILITY ACTIVATED: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}", LogType.INFO)
+            onLog("  └ PASSIVE ABILITY ACTIVATED: ${implant.passiveAbility!!.title} - ${implant.passiveAbility!!.description}", LogType.INFO)
         }
         soundManager.playCyberwareInstallSound()
         onSave()
@@ -567,7 +568,7 @@ class InventoryManager(
 
         onLog("🦾 EQUIPPED: Fitted ${implant.name} into [${implant.slot.displayName.uppercase()}].", LogType.SUCCESS)
         if (implant.passiveAbility != null) {
-            onLog("  └ PASSIVE ONLINE: ${implant.passiveAbility.title} - ${implant.passiveAbility.description}", LogType.INFO)
+            onLog("  └ PASSIVE ONLINE: ${implant.passiveAbility!!.title} - ${implant.passiveAbility!!.description}", LogType.INFO)
         }
         soundManager.playCyberwareInstallSound()
         onSave()
