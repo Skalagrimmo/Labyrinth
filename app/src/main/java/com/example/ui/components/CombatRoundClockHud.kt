@@ -32,8 +32,8 @@ import com.example.ui.theme.*
 /**
  * KOTOR-style real-time-with-pause combat HUD: a round clock with a pause
  * toggle (the breach-protocol minigame freezes it), a 4-slot action queue and
- * queue controls. Rendering is stateless; all pacing logic lives in
- * CombatClock / CombatClockController.
+ * queue controls. Rendering is stateless; all pacing logic lives in the
+ * shared core:engine CombatRoundClock, driven by CombatClockController.
  */
 @Composable
 fun CombatRoundClockHud(
