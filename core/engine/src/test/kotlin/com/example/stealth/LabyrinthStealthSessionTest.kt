@@ -122,6 +122,39 @@ class LabyrinthStealthSessionTest {
     }
 
     @Test
+    fun deescalateAfterCombatReturnsFrameWithDeescalatedGuards() {
+        val guard = StealthGuard(
+            id = "guard-deescalate",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 150f,
+            patrolSpeed = 0f,
+            investigationSpeed = 0f,
+            chaseSpeed = 0f
+        )
+        val session = LabyrinthStealthSession(openMaze(), listOf(guard))
+
+        var frame = session.snapshot()
+        repeat(6) {
+            frame = session.update(deltaTimeSeconds = 0.25f, gridX = 4, gridY = 2)
+        }
+        assertTrue(frame.playerDetected)
+
+        val afterCombat = session.deescalateAfterCombat()
+
+        assertFalse(afterCombat.playerDetected)
+        assertEquals(StealthGuardState.INVESTIGATING, afterCombat.guards.single().state)
+        assertTrue(
+            afterCombat.events.any {
+                it.type == StealthEventType.GUARD_STATE_CHANGED &&
+                    it.previousState == StealthGuardState.ALERTED
+            }
+        )
+    }
+
+    @Test
     fun directionMappingMatchesGridCoordinates() {
         assertEquals(0f, LabyrinthStealthSession.angleForDirection(Direction.EAST), 0.0001f)
         assertEquals(PI.toFloat() / 2f, LabyrinthStealthSession.angleForDirection(Direction.SOUTH), 0.0001f)

@@ -3,6 +3,7 @@ package com.example.data
 import com.example.core.model.CellType
 import com.example.stealth.LabyrinthStealthSession
 import com.example.stealth.StealthGuard
+import com.example.stealth.StealthGuardState
 import com.example.stealth.StealthPosition
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -153,11 +154,66 @@ class RealTimeGameSessionTest {
         assertFalse(still.combatEnded)
         assertTrue(still.combatEvents.isEmpty())
 
-        // Return to exploration: the lingering ALERTED guard does not retrigger combat.
+        // Return to exploration: the de-escalated guard keeps searching, but with the
+        // player out of sight it does not retrigger combat (fresh detection required).
         session.returnToExploration()
-        val explore = session.tick(250L, gridX = 5, gridY = 2, random = Random(6))
+        val explore = session.tick(250L, gridX = 0, gridY = 2, random = Random(6))
         assertEquals(GameSessionMode.EXPLORATION, session.mode)
         assertNotNull(explore.stealthFrame)
         assertFalse(explore.enteredCombat)
+    }
+
+    @Test
+    fun returnToExplorationKeepsGuardMemoryAndAllowsFreshDetection() {
+        val session = RealTimeGameSession(
+            stealthSession = LabyrinthStealthSession(openMaze(), listOf(stationaryGuard(1000f))),
+            combatStartState = {
+                CombatEngineState(
+                    enemyHealth = 1,
+                    enemyMaxHealth = 1,
+                    enemyShield = 0,
+                    enemyMaxShield = 0,
+                    playerRam = 12
+                )
+            }
+        )
+
+        val entry = session.tick(1000L, gridX = 5, gridY = 2, random = Random(7))
+        assertTrue(entry.enteredCombat)
+        session.resumeCombat()
+
+        var ended = false
+        var safety = 0
+        while (!ended && safety < 10) {
+            ended = session.tick(3000L, gridX = 5, gridY = 2, random = Random(7)).combatEnded
+            safety++
+        }
+        assertTrue(ended)
+        assertEquals(GameSessionMode.COMBAT_ENDED, session.mode)
+
+        // KOTOR post-combat policy: the guard de-escalates but keeps the last
+        // known player position instead of teleporting back to patrol.
+        val deescalation = session.returnToExploration()
+        assertNotNull(deescalation)
+        assertEquals(GameSessionMode.EXPLORATION, session.mode)
+        val guardSnapshot = deescalation!!.guards.single()
+        assertEquals(StealthGuardState.INVESTIGATING, guardSnapshot.state)
+        assertEquals(StealthPosition(5.5f, 2.5f), guardSnapshot.lastKnownPlayerPosition)
+
+        // The player slips behind the guard: exploration resumes without an
+        // instant retrigger from the lingering investigation.
+        val explore = session.tick(250L, gridX = 0, gridY = 2, random = Random(7))
+        assertEquals(GameSessionMode.EXPLORATION, explore.mode)
+        assertFalse(explore.enteredCombat)
+
+        // Standing back into plain sight raises a fresh alert and a new combat.
+        var retriggered = false
+        var ticks = 0
+        while (!retriggered && ticks < 10) {
+            retriggered = session.tick(1000L, gridX = 5, gridY = 2, random = Random(7)).enteredCombat
+            ticks++
+        }
+        assertTrue(retriggered)
+        assertEquals(GameSessionMode.COMBAT, session.mode)
     }
 }
