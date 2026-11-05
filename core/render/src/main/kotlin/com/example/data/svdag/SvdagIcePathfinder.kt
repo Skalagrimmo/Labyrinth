@@ -1,6 +1,6 @@
 package com.example.data.svdag
 
-import com.example.data.CellType
+import com.example.core.model.CellType
 import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.max

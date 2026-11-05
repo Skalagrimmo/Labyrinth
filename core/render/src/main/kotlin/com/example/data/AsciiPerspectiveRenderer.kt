@@ -1,5 +1,8 @@
 package com.example.data
 
+import com.example.core.model.CellType
+import com.example.core.model.CyberWeather
+import com.example.core.model.Direction
 import kotlin.math.abs
 
 /**
