@@ -79,6 +79,7 @@ import com.example.ui.theme.*
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.example.ui.GameUiState
 
 fun Modifier.repeatingClickable(
     enabled: Boolean = true,
@@ -724,7 +725,7 @@ fun TerminalScreen(
 // ==========================================
 @Composable
 fun TerminalHeader(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onLeaderboardClick: () -> Unit,
     onMenuClick: () -> Unit,
     onCyberwareClick: () -> Unit = {}
@@ -1544,7 +1545,7 @@ private fun AttributeAllocationRow(
 // ==========================================
 @Composable
 fun CyberneticsClinicView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel,
     onCloseClinic: () -> Unit
 ) {
@@ -1815,7 +1816,7 @@ fun StatusEffectBadge(effect: com.example.data.ActiveStatusEffect) {
 // ==========================================
 @Composable
 fun CombatView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onExecuteProgram: (Program) -> Unit,
     onFlee: () -> Unit,
     onAttack: () -> Unit = {},
@@ -2586,7 +2587,7 @@ fun CombatView(
 // ==========================================
 @Composable
 fun TerminalLogConsole(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onSendCommand: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2836,7 +2837,7 @@ fun TerminalLogConsole(
 }
 
 @Composable
-fun TelemetryDashboardView(uiState: GameViewModel.GameUiState) {
+fun TelemetryDashboardView(uiState: GameUiState) {
     val phaseTransition = rememberInfiniteTransition(label = "OscPhase")
     val phaseProgress by phaseTransition.animateFloat(
         initialValue = 0f,

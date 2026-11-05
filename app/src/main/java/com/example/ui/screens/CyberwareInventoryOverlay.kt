@@ -62,10 +62,11 @@ import com.example.data.ImplantBodySlot
 import com.example.data.ItemRarity
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 
 @Composable
 fun CyberwareInventoryOverlay(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -242,7 +243,7 @@ fun CyberwareInventoryOverlay(
 
 @Composable
 private fun EquippedChassisTab(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel
 ) {
     Column(
@@ -435,7 +436,7 @@ private fun EquippedChassisTab(
 
 @Composable
 private fun StorageCoreTab(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel
 ) {
     Column(
@@ -693,7 +694,7 @@ private fun StorageCoreTab(
 
 @Composable
 private fun StatMatrixTab(
-    uiState: GameViewModel.GameUiState
+    uiState: GameUiState
 ) {
     Column(
         modifier = Modifier

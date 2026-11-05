@@ -13,13 +13,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 
 // ==========================================
 // Sub-Composable: Game Over / Outcome Screen
 // ==========================================
 @Composable
 fun GameOverView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onRestart: () -> Unit
 ) {
     Column(

@@ -34,9 +34,10 @@ import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.components.CombatRoundClockHud
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 @Composable
 fun ExplorationView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel,
     onShopClick: () -> Unit,
     onSafeDisconnect: () -> Unit

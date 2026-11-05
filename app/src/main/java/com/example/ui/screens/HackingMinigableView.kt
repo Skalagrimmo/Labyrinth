@@ -22,10 +22,11 @@ import com.example.data.*
 import com.example.ui.GameViewModel
 import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 
 @Composable
 fun HackingMinigableView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onCellSelected: (Int, Int) -> Unit,
     onCancel: () -> Unit
 ) {
