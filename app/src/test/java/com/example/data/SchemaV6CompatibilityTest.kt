@@ -24,12 +24,11 @@ class SchemaV6CompatibilityTest {
         val moduleRelative = "schemas/com.example.data.GameDatabase/6.json"
         val repoRelative = "app/schemas/com.example.data.GameDatabase/6.json"
         var dir = File(System.getProperty("user.dir") ?: ".")
-        repeat(6) {
+        while (true) {
             File(dir, moduleRelative).takeIf { it.isFile }?.let { return it }
             File(dir, repoRelative).takeIf { it.isFile }?.let { return it }
-            dir = dir.parentFile ?: return
+            dir = dir.parentFile ?: error("Room schema export not found (expected $repoRelative)")
         }
-        error("Room schema export not found (expected $repoRelative)")
     }
 
     private fun entities(): List<JSONObject> {
