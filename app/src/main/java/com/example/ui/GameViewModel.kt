@@ -313,6 +313,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun triggerCombat(targetX: Int, targetY: Int): Unit {
+        // KOTOR-style world clock: starts with the combat, stops itself when over.
+        combatClockController.start()
         combatManager.triggerCombat(targetX, targetY)
     }
 

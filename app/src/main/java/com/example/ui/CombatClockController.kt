@@ -24,6 +24,10 @@ import kotlinx.coroutines.launch
  *
  * No changes to CombatManager: the controller only invokes the same public
  * combat actions the HUD buttons use, which are gated by isCombatInputEnabled.
+ *
+ * The ticker is NOT started on construction: GameViewModel starts it when a
+ * combat actually begins (triggerCombat) and it stops itself when the combat
+ * is over, so no coroutine spins during menus or UI tests.
  */
 class CombatClockController(
     private val scope: CoroutineScope,
@@ -36,10 +40,6 @@ class CombatClockController(
     private var windowArmed: Boolean = false
     private var lastPlayerActionsCount: Int = -1
     private var nextActionId: Long = 0L
-
-    init {
-        start()
-    }
 
     fun start() {
         if (tickerJob?.isActive == true) return
@@ -83,15 +83,14 @@ class CombatClockController(
 
     private fun tickOnce() {
         val state = _uiState.value
-        val inCombat = state.activeEnemy != null && state.gameState != GameState.EXPLORATION
+        val inCombat = state.activeEnemy != null &&
+            state.gameState != GameState.EXPLORATION &&
+            state.screen != ActiveScreen.GAME_OVER
         if (!inCombat) {
-            if (clock != CombatClockState() || armedPlayerTurnRound != -1) {
-                armedPlayerTurnRound = -1
-                windowArmed = false
-                lastPlayerActionsCount = -1
-                clock = CombatClockState()
-                publish()
-            }
+            // Combat concluded (victory, flee or defeat): stop the world
+            // clock entirely instead of spinning while the player reads the
+            // aftermath. The next combat re-starts it via start().
+            stop()
             return
         }
 
