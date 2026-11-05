@@ -1,0 +1,16 @@
+package com.example.ui
+
+enum class ActiveScreen {
+    START_MENU,
+    CHARACTER_CREATION,
+    EXPLORATION,
+    COMBAT,
+    HACKING_MINIGAME,
+    UPGRADE_STORE,
+    LEADERBOARD,
+    SETTINGS,
+    GAME_OVER,
+    CYBERWARE_CLINIC,
+    SVDAG_WORLD_BUILDER,
+    DATA_FRAGMENTS_VAULT
+}
