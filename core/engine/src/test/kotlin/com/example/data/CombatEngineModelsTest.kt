@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.core.model.StatusEffectType
 import kotlin.random.Random
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
