@@ -183,6 +183,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val tutorialActive: Boolean = false,
         val tutorialSeen: Boolean = false,
         val selectedMutationTitle: String = "",
+        val combatClockMillisLeft: Long = 3000L,
+        val combatClockRoundMillis: Long = 3000L,
+        val combatClockPaused: Boolean = false,
+        val combatClockFrozen: Boolean = false,
+        val combatActionQueue: List<String> = emptyList(),
         val environmentalEventsEncountered: Int = 0
     )
 
@@ -213,6 +218,18 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         onHandleGameOver = ::handleGameOver,
         onStartHackingPuzzle = ::startHackingPuzzle,
         onAddExperience = ::addExperience
+    )
+
+    private val combatClockController = CombatClockController(
+        scope = viewModelScope,
+        _uiState = _uiState,
+        onAutoAction = { type ->
+            when (type) {
+                QueuedCombatActionType.STRIKE -> combatManager.combatAttack()
+                QueuedCombatActionType.DEFEND -> combatManager.combatDefend()
+                QueuedCombatActionType.SCAN -> combatManager.combatScan()
+            }
+        }
     )
 
     private val inventoryManager = InventoryManager(
@@ -296,6 +313,8 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun triggerCombat(targetX: Int, targetY: Int): Unit {
+        // KOTOR-style world clock: starts with the combat, stops itself when over.
+        combatClockController.start()
         combatManager.triggerCombat(targetX, targetY)
     }
 
@@ -536,6 +555,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun enterSvdagWorldInspector() = explorationManager.enterSvdagWorldInspector()
     fun exitSvdagWorldInspector() = explorationManager.exitSvdagWorldInspector()
     fun setUseFpeInFppView(enabled: Boolean) = explorationManager.setUseFpeInFppView(enabled)
+
+    fun toggleCombatPause() = combatClockController.togglePause()
+    fun queueCombatAction(type: QueuedCombatActionType) = combatClockController.enqueueAction(type)
+    fun clearCombatActionQueue() = combatClockController.clearQueue()
 
     fun combatAttack() = combatManager.combatAttack()
     fun combatDefend() = combatManager.combatDefend()

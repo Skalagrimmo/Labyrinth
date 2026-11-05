@@ -31,6 +31,7 @@ import com.example.ui.GameViewModel
 import com.example.ui.components.VisualTurnIndicator
 import com.example.ui.components.CombatHackingMinigameView
 import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
+import com.example.ui.components.CombatRoundClockHud
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.theme.*
 @Composable
@@ -254,6 +255,21 @@ fun ExplorationView(
                                     max = enemy?.maxIntegrity ?: 1,
                                     color = CyberPink,
                                     modifier = Modifier.padding(vertical = 2.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(2.dp))
+
+                                CombatRoundClockHud(
+                                    millisLeft = uiState.combatClockMillisLeft,
+                                    roundMillis = uiState.combatClockRoundMillis,
+                                    isPaused = uiState.combatClockPaused,
+                                    isFrozen = uiState.combatClockFrozen,
+                                    queue = uiState.combatActionQueue,
+                                    queueCapacity = 4,
+                                    isInputEnabled = uiState.isCombatInputEnabled,
+                                    onTogglePause = { viewModel.toggleCombatPause() },
+                                    onQueue = { viewModel.queueCombatAction(it) },
+                                    onClearQueue = { viewModel.clearCombatActionQueue() }
                                 )
 
                                 Spacer(modifier = Modifier.height(2.dp))
