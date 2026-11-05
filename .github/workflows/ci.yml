@@ -26,7 +26,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest :core:engine:test
+        run: |
+          ./gradlew testDebugUnitTest :core:engine:test --continue 2>&1 | tee gradle-test.log || true
+          # Surface Kotlin compiler errors as annotations
+          grep -E '^e: ' gradle-test.log | head -25 | sed 's/^/::error title=KotlinCompile::/' || true
+          # Surface failed tests as annotations
+          grep -E 'FAILED$' gradle-test.log | grep -v 'Task' | head -25 | sed 's/^/::error title=TestFailure::/' || true
+          if grep -q 'BUILD FAILED' gradle-test.log; then exit 1; fi
 
       - name: Run lint
         run: ./gradlew lintDebug
