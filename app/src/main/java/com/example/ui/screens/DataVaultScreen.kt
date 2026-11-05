@@ -30,12 +30,13 @@ import androidx.compose.ui.unit.sp
 import com.example.data.CosmeticTheme
 import com.example.data.PerformanceBuff
 import com.example.data.TerminalPromptStyle
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DataVaultScreen(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onUnlockTheme: (String) -> Unit,
     onEquipTheme: (String) -> Unit,
     onUnlockPrompt: (String) -> Unit,
@@ -257,7 +258,7 @@ fun DataVaultScreen(
 
 @Composable
 private fun CosmeticThemesList(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     primaryColor: Color,
     onUnlockTheme: (String) -> Unit,
     onEquipTheme: (String) -> Unit
@@ -383,7 +384,7 @@ private fun CosmeticThemesList(
 
 @Composable
 private fun TerminalPromptsList(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     primaryColor: Color,
     onUnlockPrompt: (String) -> Unit,
     onEquipPrompt: (String) -> Unit
@@ -505,7 +506,7 @@ private fun TerminalPromptsList(
 
 @Composable
 private fun PerformanceBuffsList(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     primaryColor: Color,
     onUnlockBuff: (String) -> Unit,
     onToggleBuff: (String) -> Unit

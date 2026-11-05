@@ -73,6 +73,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.*
 import com.example.ui.ActiveScreen
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 import com.example.ui.TutorialOverlay
 import com.example.ui.theme.*
@@ -724,7 +725,7 @@ fun TerminalScreen(
 // ==========================================
 @Composable
 fun TerminalHeader(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onLeaderboardClick: () -> Unit,
     onMenuClick: () -> Unit,
     onCyberwareClick: () -> Unit = {}
@@ -1544,7 +1545,7 @@ private fun AttributeAllocationRow(
 // ==========================================
 @Composable
 fun CyberneticsClinicView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel,
     onCloseClinic: () -> Unit
 ) {
@@ -1815,7 +1816,7 @@ fun StatusEffectBadge(effect: com.example.data.ActiveStatusEffect) {
 // ==========================================
 @Composable
 fun CombatView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onExecuteProgram: (Program) -> Unit,
     onFlee: () -> Unit,
     onAttack: () -> Unit = {},
@@ -2586,7 +2587,7 @@ fun CombatView(
 // ==========================================
 @Composable
 fun TerminalLogConsole(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onSendCommand: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2836,7 +2837,7 @@ fun TerminalLogConsole(
 }
 
 @Composable
-fun TelemetryDashboardView(uiState: GameViewModel.GameUiState) {
+fun TelemetryDashboardView(uiState: GameUiState) {
     val phaseTransition = rememberInfiniteTransition(label = "OscPhase")
     val phaseProgress by phaseTransition.animateFloat(
         initialValue = 0f,

@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.unit.*
 import com.example.data.*
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
 
@@ -19,7 +20,7 @@ import com.example.ui.theme.*
 // ==========================================
 @Composable
 fun UpgradeStoreView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onBuyCyberware: (Cyberware) -> Unit,
     onBuyConsumable: (String, Int) -> Unit,
     onExit: () -> Unit

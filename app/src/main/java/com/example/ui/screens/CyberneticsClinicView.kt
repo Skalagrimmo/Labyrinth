@@ -15,12 +15,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.*
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
 
 @Composable
 fun CyberneticsClinicView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel,
     modifier: Modifier = Modifier
 ) {

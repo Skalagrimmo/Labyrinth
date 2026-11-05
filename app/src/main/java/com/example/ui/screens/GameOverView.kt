@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.*
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.*
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
 
@@ -19,7 +20,7 @@ import com.example.ui.theme.*
 // ==========================================
 @Composable
 fun GameOverView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onRestart: () -> Unit
 ) {
     Column(

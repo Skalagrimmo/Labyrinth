@@ -73,7 +73,7 @@ private val tutorialSteps = listOf(
 
 @Composable
 fun TutorialOverlay(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onNext: () -> Unit,
     onSkip: () -> Unit,
     onDismiss: () -> Unit

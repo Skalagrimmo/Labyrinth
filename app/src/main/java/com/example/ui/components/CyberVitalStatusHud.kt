@@ -92,6 +92,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.GameState
 import com.example.data.LogMessage
 import com.example.data.LogType
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 import com.example.ui.theme.CyberAmber
 import com.example.ui.theme.CyberBorder
@@ -113,7 +114,7 @@ import kotlin.math.sin
  */
 @Composable
 fun CyberVitalStatusHud(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -451,7 +452,7 @@ fun SignalIntegrityWidget(
  */
 @Composable
 fun TimeToBreachWidget(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     modifier: Modifier = Modifier
 ) {
     // Determine context breach state:
@@ -605,7 +606,7 @@ fun TimeToBreachWidget(
  */
 @Composable
 fun AnimatedCyberHudConsole(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onSendCommand: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {

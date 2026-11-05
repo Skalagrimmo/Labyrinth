@@ -27,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.data.*
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 import com.example.ui.components.VisualTurnIndicator
 import com.example.ui.components.CombatHackingMinigameView
@@ -36,7 +37,7 @@ import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.theme.*
 @Composable
 fun ExplorationView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel,
     onShopClick: () -> Unit,
     onSafeDisconnect: () -> Unit

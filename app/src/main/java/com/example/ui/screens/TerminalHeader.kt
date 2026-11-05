@@ -16,12 +16,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.*
+import com.example.ui.GameUiState
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
 
 @Composable
 fun TerminalHeader(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onMenuClick: () -> Unit,
     onLeaderboardClick: () -> Unit,
     onCyberwareClick: () -> Unit,

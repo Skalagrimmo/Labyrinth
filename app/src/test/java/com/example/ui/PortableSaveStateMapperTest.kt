@@ -8,7 +8,7 @@ import org.junit.Test
 class PortableSaveStateMapperTest {
     @Test
     fun `state mapper preserves portable exploration state`() {
-        val state = GameViewModel.GameUiState(
+        val state = GameUiState(
             runnerName = "Mapper", runnerClass = NetrunnerClass.TECHIE,
             level = 4, integrity = 77, credits = 345, gridX = 2, gridY = 3,
             direction = Direction.NORTH, currentZone = Zone.CITY,
@@ -22,7 +22,7 @@ class PortableSaveStateMapperTest {
 
         val payload = PortableSaveStateMapper.toPayload(state)
         val restored = PortableSaveStateMapper.restore(
-            current = GameViewModel.GameUiState(),
+            current = GameUiState(),
             payload = payload,
             programLookup = { id -> Program(id, id, "restored", ramCost = 1) },
             implantLookup = { null }
@@ -49,7 +49,7 @@ class PortableSaveStateMapperTest {
             activeWeather = "RAIN", gameStateName = "BROKEN", mazeData = "SAFE_ZONE"
         )
         val restored = PortableSaveStateMapper.restore(
-            current = GameViewModel.GameUiState(),
+            current = GameUiState(),
             payload = payload,
             programLookup = { error("unused") },
             implantLookup = { null }
@@ -65,7 +65,7 @@ class PortableSaveStateMapperTest {
     @Test(expected = IllegalArgumentException::class)
     fun `restore rejects empty maze like legacy importer`() {
         PortableSaveStateMapper.restore(
-            current = GameViewModel.GameUiState(),
+            current = GameUiState(),
             payload = PortableSavePayload(mazeData = ""),
             programLookup = { error("unused") },
             implantLookup = { null }

@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
  */
 class CombatClockController(
     private val scope: CoroutineScope,
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val onAutoAction: (QueuedCombatActionType) -> Unit
 ) {
     private var clock: CombatRoundClock.ClockState<QueuedCombatAction> = CombatRoundClock.start()

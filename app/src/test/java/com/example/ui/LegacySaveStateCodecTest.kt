@@ -22,7 +22,7 @@ class LegacySaveStateCodecTest {
             programLookup = { id -> Program(id, id, "restored", ramCost = 1) },
             cyberwareLookup = { id -> Cyberware(id, id, "restored", cost = 0) }
         )
-        val state = GameViewModel.GameUiState(
+        val state = GameUiState(
             runnerName = "Legacy Runner",
             runnerClass = NetrunnerClass.TECHIE,
             maxIntegrity = 120,
@@ -78,7 +78,7 @@ class LegacySaveStateCodecTest {
         )
 
         codec.save(state)
-        val restored = codec.load(GameViewModel.GameUiState())!!
+        val restored = codec.load(GameUiState())!!
 
         assertTrue(storage.getBoolean("has_saved_game"))
         assertEquals(state.runnerName, restored.runnerName)

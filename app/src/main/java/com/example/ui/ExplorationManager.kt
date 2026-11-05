@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.random.Random
 
 class ExplorationManager(
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val soundManager: CyberSoundEffectsManager,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
@@ -655,7 +655,7 @@ class ExplorationManager(
         playerX: Int,
         playerY: Int,
         maze: Array<Array<CellType>>,
-        state: GameViewModel.GameUiState
+        state: GameUiState
     ) {
         val currentFloorKey = when (state.currentZone) {
             Zone.BUILDING -> "BUILDING_${state.buildingFloor}"
@@ -1586,7 +1586,7 @@ class ExplorationManager(
     // Terminal Command Interpreter (Exploration & SVDAG)
     // ----------------------------------------------------
 
-    fun runTerminalCommand(parts: List<String>, state: GameViewModel.GameUiState): Boolean {
+    fun runTerminalCommand(parts: List<String>, state: GameUiState): Boolean {
         val cmd = parts[0].lowercase()
         return when (cmd) {
             "w", "n", "north", "up", "forward", "move" -> {
