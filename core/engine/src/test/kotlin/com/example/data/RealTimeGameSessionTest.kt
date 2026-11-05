@@ -67,7 +67,7 @@ class RealTimeGameSessionTest {
         assertTrue(result.enteredCombat)
         assertEquals(GameSessionMode.COMBAT, session.mode)
         assertNotNull(result.detection)
-        assertEquals(CombatRoundScheduler.ClockMode.PAUSED, session.combat?.clockMode)
+        assertEquals(CombatRoundClock.ClockMode.PAUSED, session.combat?.clockMode)
     }
 
     @Test

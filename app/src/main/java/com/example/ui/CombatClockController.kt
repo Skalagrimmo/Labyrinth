@@ -1,5 +1,6 @@
 package com.example.ui
 
+import com.example.data.CombatRoundClock
 import com.example.data.GameState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -12,18 +13,20 @@ import kotlinx.coroutines.launch
 /**
  * Real-time-with-pause combat clock controller for the existing combat flow.
  *
- * Observes the UI state and advances a KOTOR-style round clock during the
- * player's decision windows:
+ * The KOTOR pacing semantics live exactly once, in the shared core:engine
+ * CombatRoundClock (the same pacing core CombatRoundScheduler uses):
  *  - each player turn gets a fresh 3s round window;
  *  - when it elapses, the head of the queued actions auto-executes; an empty
- *    queue falls back to the idle default Strike (CombatRoundScheduler rule);
+ *    queue falls back to the idle default Strike (KOTOR rule);
  *  - combat enters PAUSED (KOTOR convention) so the player can assess first;
  *  - the breach-protocol hacking minigame FREEZES the clock;
  *  - any player action consumes the current window; the next round re-arms it,
  *    so an auto-fire can never race a manual action.
  *
- * No changes to CombatManager: the controller only invokes the same public
- * combat actions the HUD buttons use, which are gated by isCombatInputEnabled.
+ * This controller keeps only the legacy-flow wiring: it observes the UI state,
+ * maps the shared clock onto GameUiState fields and invokes the same public
+ * combat actions the HUD buttons use, which are gated by
+ * isCombatInputEnabled. No changes to CombatManager.
  *
  * The ticker is NOT started on construction: GameViewModel starts it when a
  * combat actually begins (triggerCombat) and it stops itself when the combat
@@ -34,7 +37,7 @@ class CombatClockController(
     private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
     private val onAutoAction: (QueuedCombatActionType) -> Unit
 ) {
-    private var clock: CombatClockState = CombatClockState()
+    private var clock: CombatRoundClock.ClockState<QueuedCombatAction> = CombatRoundClock.start()
     private var tickerJob: Job? = null
     private var armedPlayerTurnRound: Int = -1
     private var windowArmed: Boolean = false
@@ -57,12 +60,12 @@ class CombatClockController(
         armedPlayerTurnRound = -1
         windowArmed = false
         lastPlayerActionsCount = -1
-        clock = CombatClockState()
+        clock = CombatRoundClock.start()
         publish()
     }
 
     fun togglePause() {
-        clock = if (clock.isPaused) CombatClock.resume(clock) else CombatClock.pause(clock)
+        clock = if (clock.playerPaused) CombatRoundClock.resume(clock) else CombatRoundClock.pause(clock)
         publish()
     }
 
@@ -72,12 +75,15 @@ class CombatClockController(
             QueuedCombatActionType.DEFEND -> "FORTIFY"
             QueuedCombatActionType.SCAN -> "SCAN"
         }
-        clock = CombatClock.enqueue(clock, type, id = nextActionId++, label = label)
+        clock = CombatRoundClock.enqueue(
+            clock,
+            QueuedCombatAction(id = nextActionId++, type = type, label = label)
+        )
         publish()
     }
 
     fun clearQueue() {
-        clock = CombatClock.clearQueue(clock)
+        clock = CombatRoundClock.clearQueue(clock)
         publish()
     }
 
@@ -95,8 +101,8 @@ class CombatClockController(
         }
 
         val frozenByHack = state.activeCombatHack != null
-        if (frozenByHack != clock.isFrozen) {
-            clock = if (frozenByHack) CombatClock.freeze(clock) else CombatClock.unfreeze(clock)
+        if (frozenByHack != clock.frozen) {
+            clock = if (frozenByHack) CombatRoundClock.freeze(clock) else CombatRoundClock.unfreeze(clock)
         }
 
         val playerWindow = state.gameState == GameState.PLAYER_TURN &&
@@ -108,25 +114,31 @@ class CombatClockController(
             // consumes the current window; the next round re-arms it.
             if (state.totalPlayerActionsCount != lastPlayerActionsCount) {
                 lastPlayerActionsCount = state.totalPlayerActionsCount
-                clock = CombatClock.resetRound(clock)
+                clock = CombatRoundClock.resetWindow(clock)
                 windowArmed = false
             }
             if (state.combatRound != armedPlayerTurnRound) {
                 val isNewCombat = armedPlayerTurnRound == -1
                 armedPlayerTurnRound = state.combatRound
-                clock = CombatClock.resetRound(clock)
+                clock = CombatRoundClock.resetWindow(clock)
                 windowArmed = true
                 if (isNewCombat) {
                     // KOTOR convention: combat enters paused for assessment.
-                    clock = CombatClock.pause(clock)
+                    clock = CombatRoundClock.pause(clock)
                 }
             }
             if (windowArmed) {
-                val (next, outcome) = CombatClock.tick(clock, TICK_MILLIS)
-                clock = next
-                if (outcome is CombatClock.TickOutcome.RoundElapsed) {
-                    windowArmed = false
-                    onAutoAction(outcome.action)
+                when (val paced = CombatRoundClock.tick(clock, TICK_MILLIS)) {
+                    is CombatRoundClock.TickResult.Running -> clock = paced.state
+                    is CombatRoundClock.TickResult.RoundElapsed -> {
+                        clock = paced.state
+                        val head = paced.consumed
+                        if (head != null) {
+                            clock = CombatRoundClock.consumeHead(clock)
+                        }
+                        windowArmed = false
+                        onAutoAction(head?.type ?: QueuedCombatActionType.STRIKE)
+                    }
                 }
             }
         }
@@ -138,8 +150,8 @@ class CombatClockController(
             s.copy(
                 combatClockMillisLeft = clock.millisLeft,
                 combatClockRoundMillis = clock.roundMillis,
-                combatClockPaused = clock.isPaused,
-                combatClockFrozen = clock.isFrozen,
+                combatClockPaused = clock.playerPaused,
+                combatClockFrozen = clock.frozen,
                 combatActionQueue = clock.queue.map { it.label }
             )
         }
