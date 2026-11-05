@@ -2314,7 +2314,8 @@ fun CombatView(
                         }
                     }
                     else -> {
-                        uiState.activeCombatHack?.let { activeHack ->
+                        val activeHack = uiState.activeCombatHack
+                        if (activeHack != null) {
                             CombatHackingMinigameView(
                                 hackState = activeHack,
                                 onSelectSymbol = onSelectSymbol,
