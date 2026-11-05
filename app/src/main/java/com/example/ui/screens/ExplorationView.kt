@@ -304,9 +304,9 @@ fun ExplorationView(
                                 )
 
                                  // Active Hacking Pattern Minigame vs Standard Combat Actions
-                                 if (uiState.activeCombatHack != null) {
+                                 uiState.activeCombatHack?.let { activeHack ->
                                      CombatHackingMinigameView(
-                                         hackState = uiState.activeCombatHack,
+                                         hackState = activeHack,
                                          onSelectSymbol = { viewModel.selectCombatHackSymbol(it) },
                                          onClearBuffer = { viewModel.clearCombatHackBuffer() },
                                          onAbort = { viewModel.abortCombatHack() },

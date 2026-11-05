@@ -26,9 +26,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.*
 import com.example.data.svdag.*
-import com.example.ui.GameViewModel
 import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 
 private data class CyberParticle(
     var xRatio: Float,
@@ -189,7 +189,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.draw3DVoxelWallSegm
 
 @Composable
 fun FirstPersonPerspectiveCanvas(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     modifier: Modifier = Modifier,
     isCombat: Boolean = false,
     onInteract: () -> Unit = {}
