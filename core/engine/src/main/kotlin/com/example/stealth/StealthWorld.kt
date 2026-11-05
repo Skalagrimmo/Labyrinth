@@ -1,6 +1,6 @@
 package com.example.stealth
 
-import com.example.data.CellType
+import com.example.core.model.CellType
 import java.util.PriorityQueue
 import kotlin.math.abs
 import kotlin.math.floor

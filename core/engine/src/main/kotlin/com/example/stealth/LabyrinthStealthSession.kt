@@ -1,7 +1,7 @@
 package com.example.stealth
 
-import com.example.data.CellType
-import com.example.data.Direction
+import com.example.core.model.CellType
+import com.example.core.model.Direction
 import kotlin.math.PI
 
 /**

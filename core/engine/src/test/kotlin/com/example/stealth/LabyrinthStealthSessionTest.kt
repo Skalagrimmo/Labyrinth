@@ -1,7 +1,7 @@
 package com.example.stealth
 
-import com.example.data.CellType
-import com.example.data.Direction
+import com.example.core.model.CellType
+import com.example.core.model.Direction
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
