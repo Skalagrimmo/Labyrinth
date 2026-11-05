@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 
 class CosmeticVaultManager(
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val soundManager: CyberSoundEffectsManager,
     private val onLog: (String, LogType) -> Unit
 ) {
@@ -176,7 +176,7 @@ class CosmeticVaultManager(
         }
     }
 
-    fun runTerminalCommand(parts: List<String>, state: GameViewModel.GameUiState): Boolean {
+    fun runTerminalCommand(parts: List<String>, state: GameUiState): Boolean {
         if (parts.isEmpty()) return false
         val cmd = parts[0].lowercase()
         if (cmd !in listOf("vault", "fragments", "frags", "datavault")) return false

@@ -7,7 +7,7 @@ import com.example.data.*
  * Lookup functions are injected so persistence stays compatible with built-in and mod content.
  */
 object PortableSaveStateMapper {
-    fun toPayload(state: GameViewModel.GameUiState): PortableSavePayload =
+    fun toPayload(state: GameUiState): PortableSavePayload =
         PortableSavePayload(
             runnerName = state.runnerName, runnerClass = state.runnerClass.name, level = state.level,
             integrity = state.integrity, maxIntegrity = state.maxIntegrity, playerShield = state.playerShield,
@@ -37,11 +37,11 @@ object PortableSaveStateMapper {
         )
 
     fun restore(
-        current: GameViewModel.GameUiState,
+        current: GameUiState,
         payload: PortableSavePayload,
         programLookup: (String) -> Program,
         implantLookup: (String) -> CyberwareImplant?
-    ): GameViewModel.GameUiState {
+    ): GameUiState {
         val maze = SaveDataCodec.deserializeMaze(payload.mazeData)
         require(maze.isNotEmpty()) { "Invalid maze data" }
 

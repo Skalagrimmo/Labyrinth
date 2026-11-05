@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class CombatManager(
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val soundManager: CyberSoundEffectsManager,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
@@ -679,7 +679,7 @@ class CombatManager(
         return record
     }
 
-    fun runTerminalCommand(parts: List<String>, state: GameViewModel.GameUiState): Boolean {
+    fun runTerminalCommand(parts: List<String>, state: GameUiState): Boolean {
         val cmd = parts[0].lowercase()
         if (state.activeCombatHack != null) {
             when (cmd) {

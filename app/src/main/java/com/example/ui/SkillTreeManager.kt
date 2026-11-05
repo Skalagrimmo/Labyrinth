@@ -21,11 +21,11 @@ import kotlinx.coroutines.flow.update
  *   - `skill reset`               — clear all learned skills (stats remain applied)
  */
 class SkillTreeManager(
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val onLog: (String, LogType) -> Unit
 ) {
 
-    fun runTerminalCommand(parts: List<String>, state: GameViewModel.GameUiState): Boolean {
+    fun runTerminalCommand(parts: List<String>, state: GameUiState): Boolean {
         if (parts.isEmpty()) return false
         when (parts[0].lowercase()) {
             "skilltree", "skills" -> { listSkillTree(state); return true }
@@ -34,7 +34,7 @@ class SkillTreeManager(
         return false
     }
 
-    private fun handleSkillCommand(parts: List<String>, state: GameViewModel.GameUiState) {
+    private fun handleSkillCommand(parts: List<String>, state: GameUiState) {
         when (parts.getOrNull(1)?.lowercase()) {
             "learn", "buy", "unlock" -> {
                 val branch = parts.getOrNull(2)?.let { SkillBranch.from(it) }
@@ -54,7 +54,7 @@ class SkillTreeManager(
         }
     }
 
-    private fun listSkillTree(state: GameViewModel.GameUiState) {
+    private fun listSkillTree(state: GameUiState) {
         onLog("═══ SKILL TREE // ${state.skillPoints} PTS UNALLOCATED ═══", LogType.SUCCESS)
         for (node in SkillTree.allNodes) {
             val owned = node.id in state.unlockedSkills
@@ -67,7 +67,7 @@ class SkillTreeManager(
         }
     }
 
-    private fun learnNode(state: GameViewModel.GameUiState, branch: SkillBranch, nodeIndex1Based: Int) {
+    private fun learnNode(state: GameUiState, branch: SkillBranch, nodeIndex1Based: Int) {
         val nodes = SkillTree.nodesFor(branch)
         val node = nodes.getOrNull(nodeIndex1Based - 1)
         if (node == null) {
