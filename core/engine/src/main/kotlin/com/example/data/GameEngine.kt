@@ -1,5 +1,11 @@
 package com.example.data
 
+import com.example.core.model.BossType
+import com.example.core.model.CellType
+import com.example.core.model.Cyberware
+import com.example.core.model.Enemy
+import com.example.core.model.NetrunnerClass
+import com.example.core.model.Program
 import kotlin.random.Random
 
 object GameEngine {
@@ -32,22 +38,6 @@ object GameEngine {
         seed: Long = System.currentTimeMillis()
     ): Array<Array<CellType>> =
         EnvironmentGenerator.generateCitySector(districtIndex = districtIndex, seed = seed)
-
-    // Canvas-style 3D ASCII Perspective Wireframe Drawer
-    fun render3DPerspective(
-        grid: Array<Array<CellType>>,
-        px: Int,
-        py: Int,
-        dir: Direction,
-        activeWeather: CyberWeather = CyberWeather.CLEAR
-    ): String =
-        AsciiPerspectiveRenderer.render(
-            grid = grid,
-            px = px,
-            py = py,
-            dir = dir,
-            activeWeather = activeWeather
-        )
 
     fun getStoreCyberware(): List<Cyberware> = GameContentCatalog.getStoreCyberware()
 
