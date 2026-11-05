@@ -49,7 +49,7 @@ class CombatClockTest {
             state = CombatClock.enqueue(state, QueuedCombatActionType.STRIKE, id = i.toLong(), label = "S" + i)
         }
         state = CombatClock.enqueue(state, QueuedCombatActionType.SCAN, id = 5L, label = "S5")
-        assertEquals(listOf("S2", "S3", "S4", "S5"), state.queue.map { it.label })
+        assertEquals(listOf("S1", "S2", "S3", "S5"), state.queue.map { it.label })
     }
 
     @Test

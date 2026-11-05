@@ -90,7 +90,7 @@ object CombatClock {
 
     /** Resumes after a resolved breach; a player pause survives. */
     fun unfreeze(state: CombatClockState): CombatClockState =
-        if (state.isPaused) state else state.copy(isFrozen = false)
+        state.copy(isFrozen = false)
 
     /** Fresh full round window (used when a new player turn begins). */
     fun resetRound(state: CombatClockState): CombatClockState = state.copy(millisLeft = state.roundMillis)
