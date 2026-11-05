@@ -131,13 +131,24 @@ class RealTimeGameSession(
         return unchangedResult()
     }
 
-    /** Returns to exploration after a concluded encounter. */
-    fun returnToExploration() {
+    /**
+     * Returns to exploration after a concluded encounter. KOTOR-style
+     * post-combat policy: ALERTED guards de-escalate to INVESTIGATING/
+     * SEARCHING while keeping the player's last known position, so the world
+     * resumes hot, but a new combat still requires a fresh PLAYER_DETECTED
+     * event rather than a lingering guard state.
+     *
+     * Returns the stealth frame produced by the de-escalation (guard state
+     * changes for the HUD/renderer), or null when no combat had concluded.
+     */
+    fun returnToExploration(): StealthSessionFrame? {
         if (mode == GameSessionMode.COMBAT_ENDED) {
             mode = GameSessionMode.EXPLORATION
             combat = null
             combatEventCursor = 0
+            return stealthSession.deescalateAfterCombat()
         }
+        return null
     }
 
     /** Queues a combat action while combat is active (works while paused). */

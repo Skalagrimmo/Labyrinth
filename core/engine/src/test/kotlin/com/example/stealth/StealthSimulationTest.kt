@@ -203,6 +203,55 @@ class StealthSimulationTest {
     }
 
     @Test
+    fun deescalateAfterCombatKeepsAlertedGuardSearchingWithMemory() {
+        val world = openWorld()
+        val guard = StealthGuard(
+            id = "guard-post-combat",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 200f,
+            investigationSpeed = 1.25f,
+            searchDurationSeconds = 1f
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+        val player = StealthPlayer(StealthPosition(3.5f, 2.5f))
+
+        var safety = 0
+        while (guard.state != StealthGuardState.ALERTED && safety < 40) {
+            simulation.update(0.25f, player)
+            safety++
+        }
+        assertEquals(StealthGuardState.ALERTED, guard.state)
+        val remembered = guard.lastKnownPlayerPosition
+        assertNotNull(remembered)
+
+        val playerGone = StealthPlayer(StealthPosition(6.5f, 4.5f, levelId = 1))
+        val events = simulation.deescalateAfterCombat()
+
+        assertEquals(StealthGuardState.INVESTIGATING, guard.state)
+        assertEquals(remembered, guard.investigationTarget)
+        assertTrue(
+            events.any {
+                it.type == StealthEventType.GUARD_STATE_CHANGED &&
+                    it.currentState == StealthGuardState.INVESTIGATING
+            }
+        )
+        assertFalse(events.any { it.type == StealthEventType.PLAYER_DETECTED })
+
+        // The guard walks the remembered spot, sweeps it, then returns to patrol
+        // and forgets the player.
+        var sweeps = 0
+        while (guard.state != StealthGuardState.PATROLLING && sweeps < 200) {
+            simulation.update(0.1f, playerGone)
+            sweeps++
+        }
+        assertEquals(StealthGuardState.PATROLLING, guard.state)
+        assertNull(guard.lastKnownPlayerPosition)
+    }
+
+    @Test
     fun suspicionAccumulationIsTimeBasedAcrossTickRates() {
         fun suspicionAfterOneSecond(stepSeconds: Float, count: Int): Float {
             val world = openWorld()

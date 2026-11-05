@@ -93,6 +93,17 @@ class LabyrinthStealthSession(
         simulation.invalidatePaths()
     }
 
+    /**
+     * Post-combat policy entry point: ALERTED guards de-escalate to
+     * INVESTIGATING/SEARCHING while keeping the player's last known
+     * position. Returns the frame with the emitted guard state changes so
+     * the HUD/renderer can surface the de-escalation.
+     */
+    fun deescalateAfterCombat(): StealthSessionFrame {
+        val events = simulation.deescalateAfterCombat()
+        return snapshot(events)
+    }
+
     fun snapshot(events: List<StealthEvent> = emptyList()): StealthSessionFrame =
         StealthSessionFrame(
             playerPosition = currentPlayerPosition,

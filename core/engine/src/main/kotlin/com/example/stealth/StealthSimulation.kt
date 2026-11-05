@@ -187,6 +187,32 @@ class StealthSimulation(
         guards.forEach { it.clearPath() }
     }
 
+    /**
+     * Post-combat de-escalation (KOTOR-style memory policy).
+     *
+     * Called when a concluded combat returns the world to exploration: ALERTED
+     * guards drop out of the alert chase but keep the player's last known
+     * position and walk to it (INVESTIGATING), sweep the area (SEARCHING),
+     * and only then return to their patrol. Guards in other states and
+     * DISABLED guards are untouched.
+     *
+     * Returns the emitted GUARD_STATE_CHANGED events.
+     */
+    fun deescalateAfterCombat(): List<StealthEvent> {
+        val events = mutableListOf<StealthEvent>()
+        for (guard in guards) {
+            if (guard.state != StealthGuardState.ALERTED) continue
+            val target = guard.lastKnownPlayerPosition
+            if (target != null) {
+                guard.investigationTarget = target
+                changeState(guard, StealthGuardState.INVESTIGATING, events)
+            } else {
+                beginSearch(guard, events)
+            }
+        }
+        return events
+    }
+
     private fun canSee(guard: StealthGuard, player: StealthPlayer): Boolean {
         if (player.isInvisible || player.position.levelId != world.levelId) return false
 
