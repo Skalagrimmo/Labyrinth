@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.core.model.CellType
+
 data class ExplorationScanResult(
     val scannedCells: Set<Pair<Int, Int>>,
     val foundEnemies: Set<Pair<Int, Int>>,

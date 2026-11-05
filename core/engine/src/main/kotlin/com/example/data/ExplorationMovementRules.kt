@@ -1,5 +1,7 @@
 package com.example.data
 
+import com.example.core.model.CyberWeather
+import com.example.core.model.Direction
 import kotlin.random.Random
 
 data class ExplorationMoveResult(
