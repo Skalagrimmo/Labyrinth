@@ -7,6 +7,7 @@ import com.example.data.GameSessionMode
 import com.example.data.GameState
 import com.example.data.RealTimeGameSession
 import com.example.stealth.LabyrinthStealthSession
+import com.example.stealth.NoisePulse
 import com.example.stealth.StealthEventType
 import com.example.stealth.StealthGuard
 import com.example.stealth.StealthPosition
@@ -63,6 +64,9 @@ class StealthSessionController(
     private var tickerJob: Job? = null
     private var combatSeen: Boolean = false
 
+    /** One-shot noise stimuli queued from player input; consumed by the next world tick. */
+    private val pendingNoise = ArrayDeque<NoisePulse>()
+
     fun start() {
         if (tickerJob?.isActive == true) return
         tickerJob = scope.launch {
@@ -83,6 +87,7 @@ class StealthSessionController(
 
     internal fun tickOnce() {
         val state = _uiState.value
+        val noisePulses = drainNoise()
         when (state.screen) {
             ActiveScreen.START_MENU,
             ActiveScreen.CHARACTER_CREATION,
@@ -119,7 +124,10 @@ class StealthSessionController(
         val result = currentSession.tick(
             deltaMillis = TICK_MILLIS,
             gridX = state.gridX,
-            gridY = state.gridY
+            gridY = state.gridY,
+            isSneaking = state.isSneaking,
+            isInCover = isInCover(state),
+            noisePulses = noisePulses
         )
         if (result.enteredCombat) {
             combatSeen = true
@@ -134,6 +142,48 @@ class StealthSessionController(
                 )
             }
         }
+    }
+
+    /** Footstep stimulus from movement input: fully suppressed while sneaking. */
+    fun emitFootstep() {
+        if (_uiState.value.isSneaking) return
+        emitNoise(radiusCells = FOOTSTEP_RADIUS_CELLS, intensity = FOOTSTEP_INTENSITY)
+    }
+
+    /**
+     * Emits a one-shot noise stimulus (radar pings, interactions). Reaches every
+     * guard within radiusCells on the current level at the next world tick.
+     */
+    fun emitNoise(radiusCells: Float, intensity: Float) {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) return
+        pendingNoise.addLast(
+            NoisePulse(
+                position = StealthPosition(state.gridX + 0.5f, state.gridY + 0.5f, state.level),
+                radius = radiusCells,
+                intensity = intensity
+            )
+        )
+        while (pendingNoise.size > MAX_PENDING_NOISE) pendingNoise.removeFirst()
+    }
+
+    /**
+     * Cover rule for the Labyrinth grid: standing on a hardened/hidden cell
+     * (stealth cache, crypt-cache, service vents) dampens ICE perception.
+     * Deterministic from the maze alone, so seed determinism is preserved.
+     */
+    private fun isInCover(state: GameUiState): Boolean {
+        val maze = state.maze
+        val y = state.gridY
+        val x = state.gridX
+        if (y !in maze.indices || x !in maze[y].indices) return false
+        return maze[y][x] in COVER_CELL_TYPES
+    }
+
+    private fun drainNoise(): List<NoisePulse> {
+        val pulses = pendingNoise.toList()
+        pendingNoise.clear()
+        return pulses
     }
 
     /**
@@ -217,5 +267,14 @@ class StealthSessionController(
 
     companion object {
         const val TICK_MILLIS: Long = 100L
+        const val FOOTSTEP_RADIUS_CELLS: Float = 2.5f
+        const val FOOTSTEP_INTENSITY: Float = 0.35f
+        private const val MAX_PENDING_NOISE: Int = 16
+        private val COVER_CELL_TYPES: Set<CellType> = setOf(
+            CellType.SCAN_CACHE,
+            CellType.SECRET_CACHE,
+            CellType.VENT_TUNNEL,
+            CellType.ALTERNATIVE_VENT
+        )
     }
 }

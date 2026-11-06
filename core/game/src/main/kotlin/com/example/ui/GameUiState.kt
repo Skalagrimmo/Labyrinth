@@ -163,4 +163,5 @@ import com.example.data.TurnPhase
         val combatClockFrozen: Boolean = false,
         val combatActionQueue: List<String> = emptyList(),
         val environmentalEventsEncountered: Int = 0
+        val isSneaking: Boolean = false
     )

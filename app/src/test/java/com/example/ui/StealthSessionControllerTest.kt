@@ -3,6 +3,7 @@ package com.example.ui
 import com.example.core.model.CellType
 import com.example.core.model.LogType
 import com.example.data.GameSessionMode
+import com.example.stealth.StealthGuardState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -38,17 +39,22 @@ class StealthSessionControllerTest {
         return grid
     }
 
-    private fun newController(px: Int): Pair<StealthSessionController, MutableStateFlow<GameUiState>> {
+    private fun newController(
+        px: Int,
+        sneaking: Boolean = false,
+        mazeGrid: Array<Array<CellType>>? = null
+    ): Pair<StealthSessionController, MutableStateFlow<GameUiState>> {
         logs.clear()
         detections.clear()
         val flow = MutableStateFlow(
             GameUiState(
                 screen = ActiveScreen.EXPLORATION,
-                maze = maze(),
+                maze = mazeGrid ?: maze(),
                 gridX = px,
                 gridY = 1,
                 level = 1,
-                levelSeed = 0L
+                levelSeed = 0L,
+                isSneaking = sneaking
             )
         )
         val controller = StealthSessionController(
@@ -106,5 +112,69 @@ class StealthSessionControllerTest {
         controller.tickOnce()
         assertEquals(GameSessionMode.EXPLORATION, controller.peekSession()?.mode)
         assertTrue(logs.any { it.first.contains("DE-ESCALATION") })
+    }
+
+    @Test
+    fun sneakingDampensVisualDetection() {
+        val plainTicks = ticksUntilDetection(sneaking = false, mazeGrid = null)
+        val sneakedTicks = ticksUntilDetection(sneaking = true, mazeGrid = null)
+        assertTrue("plain detection expected, got " + plainTicks, plainTicks in 1..119)
+        assertTrue("sneaked detection expected, got " + sneakedTicks, sneakedTicks in 1..119)
+        assertTrue(
+            "sneaking must slow detection: sneaked=" + sneakedTicks + " plain=" + plainTicks,
+            sneakedTicks > plainTicks + 10
+        )
+    }
+
+    @Test
+    fun footstepNoiseAttractsGuardsOnlyWhenNotSneaking() {
+        // Quiet footsteps (radius 2.5 cells) cannot reach the guard four cells away.
+        val (controller, _) = newController(px = 1)
+        controller.emitFootstep()
+        repeat(3) { controller.tickOnce() }
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+
+        // A loud ping reaches the guard: it starts investigating the noise.
+        controller.emitNoise(radiusCells = 5f, intensity = 1f)
+        controller.tickOnce()
+        assertEquals(
+            StealthGuardState.INVESTIGATING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+
+        // While sneaking, footsteps are fully suppressed even at close range.
+        val (sneaky, _) = newController(px = 3, sneaking = true)
+        sneaky.emitFootstep()
+        repeat(3) { sneaky.tickOnce() }
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            sneaky.peekStealthSession()!!.snapshot().guards.first().state
+        )
+    }
+
+    @Test
+    fun coverCellsDampenVisualDetection() {
+        val plainTicks = ticksUntilDetection(sneaking = false, mazeGrid = null)
+        val coverGrid = maze().also { it[1][7] = CellType.SCAN_CACHE }
+        val coverTicks = ticksUntilDetection(sneaking = false, mazeGrid = coverGrid)
+        assertTrue("plain detection expected, got " + plainTicks, plainTicks in 1..119)
+        assertTrue("cover detection expected, got " + coverTicks, coverTicks in 1..119)
+        assertTrue(
+            "cover must slow detection: cover=" + coverTicks + " plain=" + plainTicks,
+            coverTicks > plainTicks + 10
+        )
+    }
+
+    private fun ticksUntilDetection(sneaking: Boolean, mazeGrid: Array<Array<CellType>>?): Int {
+        val (controller, _) = newController(px = 7, sneaking = sneaking, mazeGrid = mazeGrid)
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 120) {
+            controller.tickOnce()
+            ticks++
+        }
+        return if (detections.isEmpty()) -1 else ticks
     }
 }
