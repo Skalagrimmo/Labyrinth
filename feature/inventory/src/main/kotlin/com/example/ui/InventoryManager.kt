@@ -1,6 +1,7 @@
 package com.example.ui
 
 import com.example.audio.GameAudioPlayer
+import com.example.core.model.*
 import com.example.data.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,7 +12,7 @@ import kotlinx.coroutines.launch
 class InventoryManager(
     private val _uiState: MutableStateFlow<GameUiState>,
     private val soundManager: GameAudioPlayer,
-    private val repository: GameRepository,
+    private val inventoryRecorder: InventoryItemRecorder,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
     private val onAddExperience: (Int) -> Unit,
@@ -75,14 +76,13 @@ class InventoryManager(
         onLog("${itemData.icon} ACQUIRED [${itemData.rarity.displayName.uppercase()}]: $itemName x$quantity (${itemData.category.displayName}) - ${itemData.description}", LogType.SUCCESS)
 
         scope.launch(Dispatchers.IO) {
-            val entity = InventoryItemEntity(
+            inventoryRecorder.recordInventoryItem(
                 saveSlotId = "current_save",
                 itemName = itemName,
                 itemType = itemData.category.name,
                 quantity = quantity,
                 description = itemData.description
             )
-            repository.insertInventoryItem(entity)
         }
 
         onSave()

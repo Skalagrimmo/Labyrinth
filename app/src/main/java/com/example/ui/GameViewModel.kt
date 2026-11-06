@@ -94,7 +94,17 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     private val inventoryManager = InventoryManager(
         _uiState = _uiState,
         soundManager = gameAudio,
-        repository = repository,
+        inventoryRecorder = InventoryItemRecorder { saveSlotId, itemName, itemType, quantity, description ->
+            repository.insertInventoryItem(
+                InventoryItemEntity(
+                    saveSlotId = saveSlotId,
+                    itemName = itemName,
+                    itemType = itemType,
+                    quantity = quantity,
+                    description = description
+                )
+            )
+        },
         scope = viewModelScope,
         onLog = ::addLog,
         onAddExperience = ::addExperience,
