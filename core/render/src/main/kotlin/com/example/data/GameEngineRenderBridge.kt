@@ -1,5 +1,9 @@
 package com.example.data
 
+import com.example.core.model.CellType
+import com.example.core.model.CyberWeather
+import com.example.core.model.Direction
+
 /**
  * Render bridge in :core:render (package com.example.data preserved for app call sites):
  * which depends on :core:engine — the engine facade must not depend back on it.
