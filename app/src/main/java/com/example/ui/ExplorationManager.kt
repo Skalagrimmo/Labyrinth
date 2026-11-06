@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.audio.CyberSoundEffectsManager
+import com.example.audio.GameAudioPlayer
 import com.example.data.*
 import com.example.data.svdag.SvdagIcePathfinder
 import com.example.data.svdag.SvdagScannerService
@@ -20,7 +20,7 @@ import kotlin.random.Random
 
 class ExplorationManager(
     private val _uiState: MutableStateFlow<GameUiState>,
-    private val soundManager: CyberSoundEffectsManager,
+    private val soundManager: GameAudioPlayer,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
     private val onTriggerCombat: (Int, Int) -> Unit,

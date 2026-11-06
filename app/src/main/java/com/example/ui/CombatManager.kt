@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.audio.CyberSoundEffectsManager
+import com.example.audio.GameAudioPlayer
 import com.example.data.*
 import com.example.data.EnemyCombatAIScript
 import com.example.data.svdag.IceAlertLevel
@@ -18,7 +18,7 @@ import kotlin.random.Random
 
 class CombatManager(
     private val _uiState: MutableStateFlow<GameUiState>,
-    private val soundManager: CyberSoundEffectsManager,
+    private val soundManager: GameAudioPlayer,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
     private val onSave: () -> Unit,
