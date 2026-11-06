@@ -7,6 +7,7 @@ dependencies {
   implementation(project(":core:content"))
   implementation(project(":core:engine"))
   implementation(project(":core:render"))
+  implementation(libs.kotlinx.coroutines.core)
   testImplementation(libs.junit)
 }
 
