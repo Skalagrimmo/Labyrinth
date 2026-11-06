@@ -9,6 +9,9 @@ jobs:
   build:
     name: Build, lint & test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,17 +29,41 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test
+        run: |
+          set -o pipefail
+          ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test --continue 2>&1 | tee gradle-test.log || true
 
       - name: Run lint
-        run: ./gradlew lintDebug
+        run: ./gradlew lintDebug --continue 2>&1 | tee gradle-lint.log || true
 
       - name: Assemble debug APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --continue 2>&1 | tee gradle-assemble.log || true
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
+      - name: Post failure diagnostics
+        if: always()
+        uses: actions/github-script@v7
         with:
-          name: netcrawler-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          script: |
+            const fs = require('fs');
+            const lines = [];
+            for (const f of ['gradle-test.log', 'gradle-lint.log', 'gradle-assemble.log']) {
+              if (!fs.existsSync(f)) continue;
+              const text = fs.readFileSync(f, 'utf8');
+              const interesting = text.split('\n').filter(l => l.startsWith('e: ') || l.includes('FAILED') || l.includes('What went wrong') || l.includes('> Task') && l.includes('FAILED'));
+              for (const l of interesting.slice(0, 120)) lines.push('[' + f + '] ' + l);
+            }
+            if (lines.length === 0) lines.push('No interesting lines found');
+            const body = '## CI Diagnostics\n```\n' + lines.join('\n') + '\n```';
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
+
+      - name: Fail if errors found
+        run: |
+          if grep -qE '^e: |FAILED|What went wrong' gradle-test.log gradle-lint.log gradle-assemble.log 2>/dev/null; then
+            echo 'Gradle errors detected'
+            exit 1
+          fi
