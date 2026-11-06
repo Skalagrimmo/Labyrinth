@@ -124,15 +124,45 @@ class CyberSoundEffectsManager private constructor(context: Context) {
                 val bufferChunkSize = 512
                 val buffer = ShortArray(bufferChunkSize)
 
-                var phaseBass = 0.0
-                var phaseLead = 0.0
-                var stepIndex = 0
-                var sampleCounter = 0
+                // --- Musical data: MIDI -> Hz lookup and 4-bar minor progressions ---
+                val midiHz = DoubleArray(128) { 440.0 * Math.pow(2.0, (it - 69) / 12.0) }
+                val explorationProgression = arrayOf(
+                    intArrayOf(57, 60, 64),  // Am
+                    intArrayOf(53, 57, 60),  // F
+                    intArrayOf(48, 52, 55),  // C
+                    intArrayOf(55, 59, 62)   // G
+                )
+                val combatProgression = arrayOf(
+                    intArrayOf(52, 55, 59),  // Em
+                    intArrayOf(48, 52, 55),  // C
+                    intArrayOf(55, 59, 62),  // G
+                    intArrayOf(50, 54, 57)   // D
+                )
+                val hackingProgression = arrayOf(
+                    intArrayOf(48, 51, 55, 58),  // Cm7
+                    intArrayOf(56, 60, 63),      // Ab
+                    intArrayOf(58, 62, 65),      // Bb
+                    intArrayOf(48, 51, 55, 58)   // Cm7
+                )
+                // Driving 16th-note semitone offsets from the bar root (synthwave bass)
+                val combatBassPattern = intArrayOf(0, 0, 12, 0, 0, 12, 0, 7, 0, 0, 12, 0, 0, 12, 7, 12)
 
-                // Notes for synth tracks (Frequencies in Hz)
-                val explorationBassSequence = doubleArrayOf(55.0, 55.0, 65.41, 58.27, 55.0, 55.0, 73.42, 65.41) // A1, C2, A#1, D2
-                val combatBassSequence = doubleArrayOf(65.41, 65.41, 77.78, 87.31, 98.00, 87.31, 77.78, 65.41) // C2, D#2, F2, G2
-                val hackingArpSequence = doubleArrayOf(261.63, 311.13, 392.00, 523.25, 622.25, 783.99, 523.25, 392.00) // C4, D#4, G4, C5, D#5, G5
+                // --- Synth voices & tempo-synced feedback echo ---
+                val bassVoice = SynthVoice(sampleRate)
+                val subVoice = SynthVoice(sampleRate)
+                val arpVoice = SynthVoice(sampleRate)
+                val leadVoice = SynthVoice(sampleRate)
+                val kickVoice = SynthVoice(sampleRate)
+                val snareVoice = SynthVoice(sampleRate)
+                val hatVoice = SynthVoice(sampleRate)
+                val padVoices = Array(4) { SynthVoice(sampleRate) }
+                var echoDelaySamples = 1024
+                var echoBuf = DoubleArray(echoDelaySamples)
+                var echoPos = 0
+
+                var stepIndex = 0
+                var barIndex = 0
+                var sampleCounter = 0
 
                 while (isActive) {
                     if (isMuted || isBgmMuted || currentMusicMode == MusicMode.OFF || bgmVolume <= 0.01f) {
@@ -144,52 +174,120 @@ class CyberSoundEffectsManager private constructor(context: Context) {
                     }
 
                     val bpm = currentMusicMode.bpm
-                    val samplesPerStep = (sampleRate * 60) / (bpm * 4)
+                    val samplesPerStep = (sampleRate * 60.0) / (bpm * 4).coerceAtLeast(1)
+                    val barDurSec = samplesPerStep * 16.0 / sampleRate
+                    val echoTarget = (samplesPerStep * 3).toInt().coerceAtLeast(256)
+                    if (echoDelaySamples != echoTarget) {
+                        echoDelaySamples = echoTarget
+                        echoBuf = DoubleArray(echoDelaySamples)
+                        echoPos = 0
+                    }
 
                     for (i in 0 until bufferChunkSize) {
                         sampleCounter++
                         if (sampleCounter >= samplesPerStep) {
                             sampleCounter = 0
-                            stepIndex = (stepIndex + 1) % 8
+                            stepIndex = (stepIndex + 1) % 16
+                            if (stepIndex == 0) barIndex = (barIndex + 1) % 4
+
+                            when (currentMusicMode) {
+                                MusicMode.EXPLORATION -> {
+                                    val chord = explorationProgression[barIndex]
+                                    if (stepIndex == 0) {
+                                        // Dark sub bass drone on the chord root
+                                        bassVoice.trigger(midiHz[chord[0] - 24], amplitude = 0.34, decayTauSec = barDurSec * 0.95, waveType = SynthVoice.WAVE_SAW, attackSec = 0.06, detune = 0.002)
+                                        // Slow analog pad on the chord tones
+                                        padVoices.forEachIndexed { p, v ->
+                                            v.trigger(midiHz[chord[p % chord.size]], amplitude = 0.10, decayTauSec = barDurSec, waveType = SynthVoice.WAVE_SAW, attackSec = 0.7, detune = 0.004)
+                                        }
+                                    }
+                                    if (stepIndex == 8) {
+                                        // Re-trigger the bass on the fifth for harmonic movement
+                                        bassVoice.trigger(midiHz[chord[2] - 24], amplitude = 0.22, decayTauSec = barDurSec * 0.45, waveType = SynthVoice.WAVE_SAW, attackSec = 0.05, detune = 0.002)
+                                    }
+                                    // Sparse minor pluck arpeggio on offbeats
+                                    if (stepIndex == 2 || stepIndex == 5 || stepIndex == 9 || stepIndex == 12) {
+                                        val tone = when (stepIndex) { 2 -> 0; 5 -> 1; 9 -> 2; else -> 1 }
+                                        arpVoice.trigger(midiHz[chord[tone] + 12], amplitude = 0.14, decayTauSec = 0.45, waveType = SynthVoice.WAVE_SINE)
+                                    }
+                                    // Soft industrial tick
+                                    if (stepIndex == 4 || stepIndex == 12) {
+                                        hatVoice.trigger(1000.0, amplitude = 0.05, decayTauSec = 0.025, waveType = SynthVoice.WAVE_NOISE)
+                                    }
+                                    // Data-blip accent mid-bar on alternating bars
+                                    if (stepIndex == 7 && barIndex % 2 == 1) {
+                                        leadVoice.trigger(midiHz[chord[1] + 24], amplitude = 0.06, decayTauSec = 0.3, waveType = SynthVoice.WAVE_SINE)
+                                    }
+                                }
+                                MusicMode.COMBAT -> {
+                                    val chord = combatProgression[barIndex]
+                                    val rootMidi = chord[0] - 12
+                                    // Drums
+                                    if (stepIndex % 4 == 0) {
+                                        kickVoice.trigger(130.0, amplitude = 0.5, decayTauSec = 0.09, waveType = SynthVoice.WAVE_SINE, glideToFreqHz = 45.0)
+                                    }
+                                    if (stepIndex == 4 || stepIndex == 12) {
+                                        snareVoice.trigger(200.0, amplitude = 0.2, decayTauSec = 0.05, waveType = SynthVoice.WAVE_NOISE)
+                                    }
+                                    if (stepIndex % 2 == 1) {
+                                        hatVoice.trigger(6000.0, amplitude = if (stepIndex % 4 == 1) 0.09 else 0.05, decayTauSec = if (stepIndex == 15) 0.09 else 0.02, waveType = SynthVoice.WAVE_NOISE)
+                                    }
+                                    // Driving synthwave bass line (16th notes)
+                                    bassVoice.trigger(midiHz[rootMidi + combatBassPattern[stepIndex]], amplitude = 0.28, decayTauSec = 0.11, waveType = SynthVoice.WAVE_SAW, detune = 0.004)
+                                    // Chord stabs on the downbeats
+                                    if (stepIndex == 0 || stepIndex == 8) {
+                                        padVoices.forEachIndexed { p, v ->
+                                            v.trigger(midiHz[chord[p % chord.size]], amplitude = 0.085, decayTauSec = 0.2, waveType = SynthVoice.WAVE_SAW, attackSec = 0.01, detune = 0.006)
+                                        }
+                                    }
+                                    // Overclocked lead arpeggio, breathing between bars
+                                    if (barIndex % 2 == 0 || stepIndex < 8) {
+                                        val leadTone = when (stepIndex % 4) { 0 -> 0; 1 -> 1; 2 -> 2; else -> 1 }
+                                        leadVoice.trigger(midiHz[chord[leadTone] + 24], amplitude = 0.11, decayTauSec = 0.14, waveType = SynthVoice.WAVE_SAW, detune = 0.007)
+                                    }
+                                }
+                                MusicMode.HACKING -> {
+                                    val chord = hackingProgression[barIndex]
+                                    if (stepIndex == 0) {
+                                        // Sustained sub pulse under the data stream
+                                        subVoice.trigger(midiHz[chord[0] - 24], amplitude = 0.24, decayTauSec = barDurSec, waveType = SynthVoice.WAVE_SINE, attackSec = 0.15)
+                                        padVoices.forEachIndexed { p, v ->
+                                            v.trigger(midiHz[chord[p % chord.size]], amplitude = 0.055, decayTauSec = barDurSec * 0.9, waveType = SynthVoice.WAVE_SAW, attackSec = 0.4, detune = 0.003)
+                                        }
+                                    }
+                                    if (stepIndex % 8 == 0) {
+                                        kickVoice.trigger(110.0, amplitude = 0.28, decayTauSec = 0.07, waveType = SynthVoice.WAVE_SINE, glideToFreqHz = 42.0)
+                                    }
+                                    if (stepIndex == 4 || stepIndex == 12) {
+                                        hatVoice.trigger(8000.0, amplitude = 0.05, decayTauSec = 0.02, waveType = SynthVoice.WAVE_NOISE)
+                                    }
+                                    // Matrix arpeggio: chord tones across two octaves, ping-ponged
+                                    val t = (if (stepIndex < 8) stepIndex else (14 - stepIndex)).coerceAtLeast(0)
+                                    val baseTone = chord[t % chord.size]
+                                    arpVoice.trigger(midiHz[baseTone + if (t >= chord.size) 12 else 0], amplitude = 0.12, decayTauSec = 0.13, waveType = SynthVoice.WAVE_SINE)
+                                }
+                                MusicMode.OFF -> { /* handled by the silent-buffer branch */ }
+                            }
                         }
 
-                        val mode = currentMusicMode
-                        val volumeMultiplier = bgmVolume * 0.25f
+                        // Render voices + tempo-synced feedback echo on the arpeggio
+                        val arp = arpVoice.process()
+                        val echoOut = echoBuf[echoPos]
+                        echoBuf[echoPos] = arp * 0.5 + echoOut * 0.42
+                        echoPos = (echoPos + 1) % echoDelaySamples
 
-                        val bassFreq = when (mode) {
-                            MusicMode.EXPLORATION -> explorationBassSequence[stepIndex]
-                            MusicMode.COMBAT -> combatBassSequence[stepIndex]
-                            MusicMode.HACKING -> explorationBassSequence[stepIndex % 4]
-                            MusicMode.OFF -> 0.0
-                        }
+                        val mixed = bassVoice.process() +
+                            subVoice.process() +
+                            arp +
+                            leadVoice.process() +
+                            kickVoice.process() +
+                            snareVoice.process() +
+                            hatVoice.process() +
+                            padVoices.sumOf { it.process() } +
+                            echoOut * 0.55
 
-                        val leadFreq = when (mode) {
-                            MusicMode.EXPLORATION -> if (stepIndex % 2 == 0) 110.0 else 0.0
-                            MusicMode.COMBAT -> combatBassSequence[(stepIndex + 2) % 8] * 2.0
-                            MusicMode.HACKING -> hackingArpSequence[stepIndex]
-                            MusicMode.OFF -> 0.0
-                        }
-
-                        phaseBass += 2.0 * PI * bassFreq / sampleRate
-                        if (phaseBass > 2.0 * PI) phaseBass -= 2.0 * PI
-
-                        phaseLead += 2.0 * PI * leadFreq / sampleRate
-                        if (phaseLead > 2.0 * PI) phaseLead -= 2.0 * PI
-
-                        // Sawtooth wave for deep bass synth
-                        val sawBass = (phaseBass / PI) - 1.0
-
-                        // Sine wave for lead synth
-                        val sineLead = sin(leadFreq)
-
-                        // Industrial rhythm noise burst on step beats
-                        val isBeat = (sampleCounter < (sampleRate * 0.02) && (stepIndex % 2 == 0))
-                        val noise = if (isBeat && mode == MusicMode.COMBAT) (Random.nextDouble() * 2.0 - 1.0) * 0.4 else 0.0
-
-                        // Mix synthesis signal
-                        val mixedSample = (sawBass * 0.5 + sineLead * 0.3 + noise) * volumeMultiplier
-                        val pcmValue = (mixedSample.coerceIn(-1.0, 1.0) * 32767).toInt().toShort()
-                        buffer[i] = pcmValue
+                        val master = mixed * (bgmVolume * 0.35f)
+                        buffer[i] = (master.coerceIn(-1.0, 1.0) * 32767).toInt().toShort()
                     }
 
                     audioTrack?.write(buffer, 0, bufferChunkSize)
@@ -197,6 +295,87 @@ class CyberSoundEffectsManager private constructor(context: Context) {
             } catch (e: Exception) {
                 Log.e("CyberSoundEffects", "Error in BGM synth engine: ${e.message}")
             }
+        }
+    }
+
+    /**
+     * Lightweight mono synth voice used by the BGM step sequencer:
+     * selectable waveform, optional detuned second oscillator,
+     * attack/decay exponential envelope and pitch glide.
+     */
+    private class SynthVoice(private val sampleRate: Int) {
+
+        companion object {
+            const val WAVE_SINE = 0
+            const val WAVE_SAW = 1
+            const val WAVE_SQUARE = 2
+            const val WAVE_NOISE = 3
+        }
+
+        private var phase = 0.0
+        private var detunedPhase = 0.0
+        private var phaseInc = 0.0
+        private var detunedPhaseInc = 0.0
+        private var glidePerSample = 1.0
+        private var env = 0.0
+        private var amp = 0.0
+        private var decayPerSample = 0.0
+        private var attackPerSample = 0.0
+        private var inAttack = false
+        private var wave = WAVE_SINE
+
+        fun trigger(
+            freqHz: Double,
+            amplitude: Double,
+            decayTauSec: Double,
+            waveType: Int = WAVE_SINE,
+            attackSec: Double = 0.0,
+            detune: Double = 0.0,
+            glideToFreqHz: Double? = null
+        ) {
+            phaseInc = 2.0 * PI * freqHz / sampleRate
+            detunedPhaseInc = if (detune != 0.0) 2.0 * PI * freqHz * (1.0 + detune) / sampleRate else 0.0
+            glidePerSample = glideToFreqHz?.let { Math.pow(it / freqHz, 1.0 / (0.09 * sampleRate)) } ?: 1.0
+            amp = amplitude
+            decayPerSample = Math.exp(-1.0 / (decayTauSec.coerceAtLeast(0.01) * sampleRate))
+            wave = waveType
+            if (attackSec > 0.0) {
+                env = 0.0
+                attackPerSample = 1.0 / (attackSec * sampleRate)
+                inAttack = true
+            } else {
+                env = 1.0
+                inAttack = false
+            }
+        }
+
+        fun process(): Double {
+            if (env <= 0.0002) return 0.0
+            phaseInc *= glidePerSample
+            phase += phaseInc
+            if (phase >= 2.0 * PI) phase -= 2.0 * PI
+            var sample = when (wave) {
+                WAVE_SINE -> sin(phase)
+                WAVE_SAW -> phase / PI - 1.0
+                WAVE_SQUARE -> if (phase < PI) 0.55 else -0.55
+                else -> Random.nextDouble() * 2.0 - 1.0
+            }
+            if (detunedPhaseInc > 0.0) {
+                detunedPhase += detunedPhaseInc
+                if (detunedPhase >= 2.0 * PI) detunedPhase -= 2.0 * PI
+                sample += (detunedPhase / PI - 1.0) * 0.5
+            }
+            if (inAttack) {
+                env += attackPerSample
+                if (env >= 1.0) {
+                    env = 1.0
+                    inAttack = false
+                }
+            } else {
+                env *= decayPerSample
+                if (env <= 0.0002) return 0.0
+            }
+            return sample * amp * env
         }
     }
 
@@ -432,9 +611,9 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      */
     fun playPlasmaSlashSound() {
         scope.launch {
-            playTone(600.0, 40)
-            delay(45)
-            playTone(300.0, 60)
+            playFrequencySweep(startFreqHz = 750.0, endFreqHz = 260.0, durationMs = 110, volume = 0.4f)
+            delay(40)
+            playTone(300.0, 60, 0.25f)
         }
     }
 
@@ -443,9 +622,11 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      */
     fun playShieldAbsorbSound() {
         scope.launch {
-            playTone(200.0, 70)
+            playTone(140.0, 70)
+            playTone(210.0, 70, 0.2f) // Low fifth body
             delay(60)
-            playTone(900.0, 80)
+            playTone(880.0, 80)
+            playTone(1320.0, 80, 0.22f) // Absorb chime fifth
         }
     }
 
@@ -455,8 +636,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
     fun playLootCollectionSound() {
         scope.launch {
             playTone(700.0, 70)
+            playTone(1050.0, 70, 0.18f) // Added fifth: richer pickup chime
             delay(80)
             playTone(1400.0, 110)
+            playTone(2100.0, 110, 0.2f) // Added fifth
         }
     }
 
@@ -477,9 +660,12 @@ class CyberSoundEffectsManager private constructor(context: Context) {
             playTone(1318.51, 110, 0.5f) // E6
             delay(80)
 
-            // Stage 2: Sub-bass resonance chime indicating access barrier override
+            // Stage 2: Sub-bass resonance + A major chime indicating access barrier override
             playTone(220.0, 180, 0.4f)
-            playTone(1760.0, 220, 0.45f) // High A6 harmonic shimmer
+            playTone(277.18, 180, 0.3f)   // C#5 major third
+            playTone(329.63, 180, 0.3f)   // E5 fifth
+            playTone(1760.0, 220, 0.45f)  // High A6 harmonic shimmer
+            playTone(2637.0, 220, 0.25f)  // E7 shimmer octave
         }
     }
 
@@ -528,8 +714,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
     fun playNodeBreachSound() {
         scope.launch {
             playTone(500.0, 60)
+            playTone(750.0, 60, 0.2f) // Added fifth: power chord bite
             delay(60)
             playTone(1000.0, 90)
+            playTone(1500.0, 90, 0.22f) // Added fifth shimmer
         }
     }
 
@@ -538,9 +726,10 @@ class CyberSoundEffectsManager private constructor(context: Context) {
      */
     fun playCyberwareInstallSound() {
         scope.launch {
-            playTone(400.0, 60)
-            delay(70)
+            playFrequencySweep(startFreqHz = 300.0, endFreqHz = 900.0, durationMs = 90, volume = 0.3f)
+            delay(80)
             playTone(1200.0, 120)
+            playTone(1800.0, 120, 0.2f) // Harmonic sixth shimmer
         }
     }
 
