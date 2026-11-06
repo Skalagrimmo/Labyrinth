@@ -3,6 +3,11 @@ package com.example.data
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.example.core.model.NetrunnerClass
+import com.example.core.model.Direction
+import com.example.core.model.CellType
+import com.example.core.model.CyberWeather
+import com.example.core.model.BossType
 
 /**
  * Host-JVM tests for GameEngine's content-generation functions.

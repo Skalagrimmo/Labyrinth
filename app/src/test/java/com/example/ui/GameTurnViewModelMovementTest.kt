@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.data.CellType
+import com.example.core.model.CellType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
