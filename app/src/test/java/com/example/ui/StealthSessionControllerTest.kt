@@ -42,7 +42,8 @@ class StealthSessionControllerTest {
     private fun newController(
         px: Int,
         sneaking: Boolean = false,
-        mazeGrid: Array<Array<CellType>>? = null
+        mazeGrid: Array<Array<CellType>>? = null,
+        levelSeed: Long = 0L
     ): Pair<StealthSessionController, MutableStateFlow<GameUiState>> {
         logs.clear()
         detections.clear()
@@ -53,7 +54,7 @@ class StealthSessionControllerTest {
                 gridX = px,
                 gridY = 1,
                 level = 1,
-                levelSeed = 0L,
+                levelSeed = levelSeed,
                 isSneaking = sneaking
             )
         )
@@ -68,8 +69,10 @@ class StealthSessionControllerTest {
 
     @Test
     fun seedsGuardFromVirusNodeAndStaysCalmBehindIt() {
-        // Player west of the guard (x=1); facing derived from levelSeed=0 -> EAST.
-        // The player is outside the vision cone: no detection over a long window.
+        // Player west of the guard (x=1); facing derived from levelSeed=0 ->
+        // NORTH (Direction.values() order: NORTH, EAST, SOUTH, WEST). The
+        // stationary guard slowly rotates its cone (~2 degrees per tick),
+        // so the runner west of the node stays unseen for this short window.
         val (controller, _) = newController(px = 1)
         repeat(40) { controller.tickOnce() }
         assertTrue(detections.isEmpty())
@@ -82,8 +85,9 @@ class StealthSessionControllerTest {
 
     @Test
     fun routesDetectionIntoLegacyCombatFlowAtNodeCell() {
-        // Player east of the guard, inside the vision cone and line of sight:
-        // suspicion (60/s, distance-scaled) crosses 100 within ~2.5s of ticks.
+        // Player east of the guard. With levelSeed=0 the node spawns facing
+        // NORTH and slowly rotates its cone toward the runner: distance-scaled
+        // suspicion crosses 100 well within the 60-tick window.
         val (controller, _) = newController(px = 7)
         var ticks = 0
         while (detections.isEmpty() && ticks < 60) {
@@ -227,6 +231,50 @@ class StealthSessionControllerTest {
             controller.peekStealthSession()!!.snapshot().guards.first().state
         )
         assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun hudSuspicionTracksTheMostSuspiciousGuard() {
+        // levelSeed=1 turns the node guard to face EAST, dead ahead of the
+        // runner at x=7: suspicion climbs past the investigation threshold
+        // within six ticks, and the HUD must mirror the guard exactly.
+        val (controller, flow) = newController(px = 7, levelSeed = 1L)
+        repeat(6) { controller.tickOnce() }
+        assertEquals(
+            controller.peekStealthSession()!!.snapshot().guards.first().suspicion,
+            flow.value.iceSuspicion,
+            0.0001f
+        )
+        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
+        assertTrue(flow.value.iceSuspicion > 0f)
+
+        // The runner slips back west, far outside the sight range of the
+        // spent investigation: the sweep times out and the HUD goes dormant.
+        flow.value = flow.value.copy(gridX = 1)
+        repeat(120) { controller.tickOnce() }
+        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceGuardState)
+    }
+
+    @Test
+    fun hudStaysPassiveWhileTheRunnerIsHidden() {
+        // Outside the vision cone the world tick publishes a dormant HUD:
+        // zero suspicion, PATROLLING state, tick after tick.
+        val (controller, flow) = newController(px = 1)
+        repeat(40) { controller.tickOnce() }
+        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceGuardState)
+    }
+
+    @Test
+    fun hudReflectsDecoyInvestigation() {
+        // A chaff detonation raises the published suspicion to the noise
+        // floor (40 x intensity) and flips the HUD state to INVESTIGATING.
+        val (controller, flow) = newController(px = 3, sneaking = true)
+        controller.emitNoiseAt(cellX = 7, cellY = 1, radiusCells = 6f, intensity = 1f)
+        controller.tickOnce()
+        assertEquals(40f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
     }
 
     private fun ticksUntilDetection(sneaking: Boolean, mazeGrid: Array<Array<CellType>>?): Int {
