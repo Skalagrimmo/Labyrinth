@@ -8,7 +8,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
-import org.junit.Assert.fail
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -43,7 +42,8 @@ class StealthSessionControllerTest {
     private fun newController(
         px: Int,
         sneaking: Boolean = false,
-        mazeGrid: Array<Array<CellType>>? = null
+        mazeGrid: Array<Array<CellType>>? = null,
+        levelSeed: Long = 0L
     ): Pair<StealthSessionController, MutableStateFlow<GameUiState>> {
         logs.clear()
         detections.clear()
@@ -54,7 +54,7 @@ class StealthSessionControllerTest {
                 gridX = px,
                 gridY = 1,
                 level = 1,
-                levelSeed = 0L,
+                levelSeed = levelSeed,
                 isSneaking = sneaking
             )
         )
@@ -69,8 +69,10 @@ class StealthSessionControllerTest {
 
     @Test
     fun seedsGuardFromVirusNodeAndStaysCalmBehindIt() {
-        // Player west of the guard (x=1); facing derived from levelSeed=0 -> EAST.
-        // The player is outside the vision cone: no detection over a long window.
+        // Player west of the guard (x=1); facing derived from levelSeed=0 ->
+        // NORTH (Direction.values() order: NORTH, EAST, SOUTH, WEST). The
+        // stationary guard slowly rotates its cone (~2 degrees per tick),
+        // so the runner west of the node stays unseen for this short window.
         val (controller, _) = newController(px = 1)
         repeat(40) { controller.tickOnce() }
         assertTrue(detections.isEmpty())
@@ -83,8 +85,9 @@ class StealthSessionControllerTest {
 
     @Test
     fun routesDetectionIntoLegacyCombatFlowAtNodeCell() {
-        // Player east of the guard, inside the vision cone and line of sight:
-        // suspicion (60/s, distance-scaled) crosses 100 within ~2.5s of ticks.
+        // Player east of the guard. With levelSeed=0 the node spawns facing
+        // NORTH and slowly rotates its cone toward the runner: distance-scaled
+        // suspicion crosses 100 well within the 60-tick window.
         val (controller, _) = newController(px = 7)
         var ticks = 0
         while (detections.isEmpty() && ticks < 60) {
@@ -232,22 +235,25 @@ class StealthSessionControllerTest {
 
     @Test
     fun hudSuspicionTracksTheMostSuspiciousGuard() {
-        // TEMPORARY DIAGNOSTIC: dump the per-tick guard/HUD trajectory so the
-        // CI failure detail shows the real suspicion curve (revert this).
-        val (controller, flow) = newController(px = 7)
-        val trace = StringBuilder()
-        repeat(12) { i ->
-            controller.tickOnce()
-            val g = controller.peekStealthSession()!!.snapshot().guards.first()
-            trace.append("tick=").append(i + 1)
-                .append(" pos=").append(g.position.x).append(',').append(g.position.y)
-                .append(" facing=").append(g.facingAngleRadians)
-                .append(" susp=").append(g.suspicion)
-                .append(" st=").append(g.state)
-                .append(" pub=").append(flow.value.iceSuspicion).append('/').append(flow.value.iceGuardState)
-                .append('\n')
-        }
-        fail(trace.toString())
+        // levelSeed=1 turns the node guard to face EAST, dead ahead of the
+        // runner at x=7: suspicion climbs past the investigation threshold
+        // within six ticks, and the HUD must mirror the guard exactly.
+        val (controller, flow) = newController(px = 7, levelSeed = 1L)
+        repeat(6) { controller.tickOnce() }
+        assertEquals(
+            controller.peekStealthSession()!!.snapshot().guards.first().suspicion,
+            flow.value.iceSuspicion,
+            0.0001f
+        )
+        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
+        assertTrue(flow.value.iceSuspicion > 0f)
+
+        // The runner slips back west, far outside the sight range of the
+        // spent investigation: the sweep times out and the HUD goes dormant.
+        flow.value = flow.value.copy(gridX = 1)
+        repeat(120) { controller.tickOnce() }
+        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceGuardState)
     }
 
     @Test
