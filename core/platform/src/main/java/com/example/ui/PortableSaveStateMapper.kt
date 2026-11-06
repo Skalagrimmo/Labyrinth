@@ -1,5 +1,6 @@
 package com.example.ui
 
+import com.example.core.model.*
 import com.example.data.*
 
 /**
