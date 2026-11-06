@@ -91,6 +91,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     )
 
+    private val stealthSessionController = StealthSessionController(
+        scope = viewModelScope,
+        _uiState = _uiState,
+        onLog = ::addLog,
+        onGuardDetection = { x, y -> triggerCombat(x, y) }
+    )
+
     private val inventoryManager = InventoryManager(
         _uiState = _uiState,
         soundManager = gameAudio,
@@ -269,7 +276,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun exitHackingMinigame() { _uiState.update { it.copy(screen = ActiveScreen.EXPLORATION, activePuzzle = null) }; updatePerspective(); addLog("BREACH PROTOCOL DISCONNECTED.", LogType.ALERT) }
 
     fun saveGame() = persistenceManager.saveGame()
-    fun loadGame() = persistenceManager.loadGame()
+    fun loadGame() = persistenceManager.loadGame().also { stealthSessionController.start() }
     fun hasSavedGame() = persistenceManager.hasSavedGame()
 
     fun createCharacter(name: String, selectedClass: NetrunnerClass, startingImplant: CyberwareImplant? = null, allocatedHpPoints: Int = 0, allocatedRamPoints: Int = 0, allocatedReflexPoints: Int = 0, allocatedArmorPoints: Int = 0, allocatedFundPoints: Int = 0, starterKit: String = "STANDARD", mutation: DigitalMutation? = null) {
@@ -311,6 +318,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
         addLog("INITIALIZING CYBER-SECTOR GRID...", LogType.ALERT)
         explorationManager.loadOrCreateLevel(Zone.BUILDING, 1, 1, 1)
+        stealthSessionController.start()
     }
 
     fun runTerminalCommand(commandText: String) {
@@ -407,7 +415,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun triggerMapScan() = explorationManager.triggerMapScan()
     fun processWeatherOnStep() = explorationManager.processWeatherOnStep()
     fun interact() = explorationManager.interact()
-    fun loadOrCreateLevel(targetZone: Zone, targetFloorOrLevel: Int, targetX: Int? = null, targetY: Int? = null, isAscending: Boolean = true, byElevator: Boolean = false) = explorationManager.loadOrCreateLevel(targetZone, targetFloorOrLevel, targetX, targetY, isAscending, byElevator)
+    fun loadOrCreateLevel(targetZone: Zone, targetFloorOrLevel: Int, targetX: Int? = null, targetY: Int? = null, isAscending: Boolean = true, byElevator: Boolean = false) = explorationManager.loadOrCreateLevel(targetZone, targetFloorOrLevel, targetX, targetY, isAscending, byElevator).also { stealthSessionController.start() }
     fun ascendStairs() = explorationManager.ascendStairs()
     fun descendStairs() = explorationManager.descendStairs()
     fun interactWithElevator() = explorationManager.interactWithElevator()
@@ -539,9 +547,9 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     }
     fun disconnectRunSuccessfully() = persistenceManager.disconnectRunSuccessfully()
     fun restartGame() = persistenceManager.restartGame()
-    fun startNewRun() = persistenceManager.startNewRun()
+    fun startNewRun() = persistenceManager.startNewRun().also { stealthSessionController.start() }
     fun returnToStartMenu() = persistenceManager.returnToStartMenu()
-    fun resumeGame() = persistenceManager.resumeGame()
+    fun resumeGame() = persistenceManager.resumeGame().also { stealthSessionController.start() }
 
     fun exportSave() = persistenceManager.exportSave()
     fun importSave(encoded: String) = persistenceManager.importSave(encoded)
