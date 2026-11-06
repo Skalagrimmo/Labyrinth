@@ -59,7 +59,7 @@ class StealthSessionControllerTest {
             )
         )
         val controller = StealthSessionController(
-            scope = CoroutineScope(Dispatchers.Unconfined),
+            ticker = WorldClockTicker(CoroutineScope(Dispatchers.Unconfined)),
             _uiState = flow,
             onLog = { message, type -> logs.add(message to type) },
             onGuardDetection = { x, y -> detections.add(x to y) }

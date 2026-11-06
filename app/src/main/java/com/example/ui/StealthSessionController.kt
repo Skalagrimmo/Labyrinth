@@ -13,13 +13,8 @@ import com.example.stealth.StealthGuard
 import com.example.stealth.StealthGuardState
 import com.example.stealth.StealthPosition
 import com.example.stealth.StealthSessionFrame
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
 /**
  * Real-time stealth world clock for the exploration phase - first slice of the
@@ -28,7 +23,9 @@ import kotlinx.coroutines.launch
  *
  * The pacing and perception semantics live exactly once, in :core:engine
  * (LabyrinthStealthSession + RealTimeGameSession). This class is only the
- * app wiring, mirroring CombatClockController:
+ * app wiring, riding the shared WorldClockTicker together with
+ * CombatClockController (d6 slice 5: one world-clock loop for both RTwP
+ * consumers):
  *  - every VIRUS_NODE cell of the current maze becomes a stationary guard
  *    (facing derived deterministically from levelSeed, so the same seed always
  *    produces the same sight lines);
@@ -47,14 +44,14 @@ import kotlinx.coroutines.launch
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
- * The ticker is NOT started on construction (same rule as
+ * The shared world loop is NOT started on construction (same rule as
  * CombatClockController): GameViewModel starts it when a run actually begins
  * (createCharacter / loadOrCreateLevel / loadGame / resumeGame / startNewRun)
- * and it stops itself on menu/character-creation/game-over screens, so no
- * coroutine spins during menus or UI tests.
+ * and this consumer stops it on menu/character-creation/game-over screens, so
+ * no coroutine spins during menus or UI tests.
  */
 class StealthSessionController(
-    private val scope: CoroutineScope,
+    private val ticker: WorldClockTicker,
     private val _uiState: MutableStateFlow<GameUiState>,
     private val onLog: (String, LogType) -> Unit,
     private val onGuardDetection: (enemyX: Int, enemyY: Int) -> Unit
@@ -66,25 +63,26 @@ class StealthSessionController(
     private var guardSignature: String = ""
     private var lastMaze: Array<Array<CellType>>? = null
     private var lastLevelId: Int = -1
-    private var tickerJob: Job? = null
     private var combatSeen: Boolean = false
 
     /** One-shot noise stimuli queued from player input; consumed by the next world tick. */
     private val pendingNoise = ArrayDeque<NoisePulse>()
 
-    fun start() {
-        if (tickerJob?.isActive == true) return
-        tickerJob = scope.launch {
-            while (isActive) {
-                delay(TICK_MILLIS)
-                tickOnce()
-            }
-        }
+    init {
+        // Shared world-clock consumer (d6 slice 5): no private coroutine
+        // loop - the GameViewModel-owned WorldClockTicker dispatches every
+        // world tick to this consumer.
+        ticker.subscribe(this::tickOnce)
     }
 
+    /** Starts the shared world-clock loop (idempotent). */
+    fun start() {
+        ticker.start()
+    }
+
+    /** Stops the shared world-clock loop: menus freeze the whole world. */
     fun stop() {
-        tickerJob?.cancel()
-        tickerJob = null
+        ticker.stop()
     }
 
     internal fun peekSession(): RealTimeGameSession? = session
@@ -127,7 +125,7 @@ class StealthSessionController(
         if (currentSession.mode != GameSessionMode.EXPLORATION) return
 
         val result = currentSession.tick(
-            deltaMillis = TICK_MILLIS,
+            deltaMillis = WorldClockTicker.TICK_MILLIS,
             gridX = state.gridX,
             gridY = state.gridY,
             isSneaking = state.isSneaking,
@@ -342,7 +340,6 @@ class StealthSessionController(
     }
 
     companion object {
-        const val TICK_MILLIS: Long = 100L
         const val FOOTSTEP_RADIUS_CELLS: Float = 2.5f
         const val FOOTSTEP_INTENSITY: Float = 0.35f
         const val BUMP_RADIUS_CELLS: Float = 1.5f

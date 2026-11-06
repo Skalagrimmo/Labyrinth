@@ -96,7 +96,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     )
 
     private val stealthSessionController = StealthSessionController(
-        scope = viewModelScope,
+        ticker = worldClockTicker,
         _uiState = _uiState,
         onLog = ::addLog,
         onGuardDetection = { x, y -> triggerCombat(x, y) }
