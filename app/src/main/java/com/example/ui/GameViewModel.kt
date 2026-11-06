@@ -340,6 +340,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("COMBAT: 'attack', 'defend', 'flee', 'scan'", LogType.INFO)
                 addLog("INVENTORY: 'inventory', 'use <item>', 'equip <item>', 'unequip <slot>'", LogType.INFO)
                 addLog("SYSTEM: 'status', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
+                addLog("STEALTH: 'sneak' (toggle silent movement protocol)", LogType.INFO)
                 addLog("SKILLS: 'skilltree', 'skill learn <HACKING|COMBAT|ENGINEERING> <#>', 'skill points'", LogType.INFO)
                 addLog("TUTORIAL: 'tutorial next', 'tutorial skip'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>'", LogType.INFO)
@@ -396,6 +397,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "import" -> { importFromClipboard() }
             "seed" -> { addLog("LEVEL SEED: ${state.levelSeed}", LogType.INFO); addLog("Share this seed with friends to play the same dungeon!", LogType.INFO) }
             "menu" -> persistenceManager.returnToStartMenu()
+            "sneak", "stealth", "crouch" -> toggleSneakMode()
             "clear" -> { _uiState.update { it.copy(logFeed = emptyList()) }; addLog("Log console cleared.", LogType.INFO) }
             "tutorial", "helpme", "assist" -> {
                 when (parts.getOrNull(1)?.lowercase()) {
@@ -408,13 +410,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun moveForward() = explorationManager.moveForward()
-    fun moveBackward() = explorationManager.moveBackward()
+    fun moveForward() { explorationManager.moveForward(); stealthSessionController.emitFootstep() }
+    fun moveBackward() { explorationManager.moveBackward(); stealthSessionController.emitFootstep() }
     fun turnLeft() = explorationManager.turnLeft()
     fun turnRight() = explorationManager.turnRight()
-    fun triggerMapScan() = explorationManager.triggerMapScan()
+    fun triggerMapScan() { explorationManager.triggerMapScan(); stealthSessionController.emitNoise(radiusCells = 4.5f, intensity = 0.9f) }
     fun processWeatherOnStep() = explorationManager.processWeatherOnStep()
-    fun interact() = explorationManager.interact()
+    fun interact() { explorationManager.interact(); stealthSessionController.emitNoise(radiusCells = 3f, intensity = 0.5f) }
     fun loadOrCreateLevel(targetZone: Zone, targetFloorOrLevel: Int, targetX: Int? = null, targetY: Int? = null, isAscending: Boolean = true, byElevator: Boolean = false) = explorationManager.loadOrCreateLevel(targetZone, targetFloorOrLevel, targetX, targetY, isAscending, byElevator).also { stealthSessionController.start() }
     fun ascendStairs() = explorationManager.ascendStairs()
     fun descendStairs() = explorationManager.descendStairs()
@@ -450,6 +452,16 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
     fun applyStatusEffectToPlayer(type: StatusEffectType, turns: Int, magnitude: Int = 0, source: String = "") = combatManager.applyStatusEffectToPlayer(type, turns, magnitude, source)
     fun applyStatusEffectToEnemy(type: StatusEffectType, turns: Int, magnitude: Int = 0, source: String = "") = combatManager.applyStatusEffectToEnemy(type, turns, magnitude, source)
     fun setCombatStyle(style: String) { _uiState.update { it.copy(selectedCombatStyle = "Strike") }; addLog("COMBAT STANCE: Single unified Strike stance active.", LogType.INFO) }
+
+    fun toggleSneakMode() {
+        val engaged = !_uiState.value.isSneaking
+        _uiState.update { it.copy(isSneaking = engaged) }
+        if (engaged) {
+            addLog("STEALTH PROTOCOL ENGAGED: movement silenced, ICE optical profile dampened.", LogType.SUCCESS)
+        } else {
+            addLog("STEALTH PROTOCOL DISENGAGED: standard movement profile restored.", LogType.INFO)
+        }
+    }
 
     fun getStructuredInventorySlots() = inventoryManager.getStructuredInventorySlots()
     fun addItemToInventory(itemName: String, quantity: Int = 1) = inventoryManager.addItemToInventory(itemName, quantity)
