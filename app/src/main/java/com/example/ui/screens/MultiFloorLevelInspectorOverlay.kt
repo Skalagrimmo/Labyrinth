@@ -64,7 +64,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.CellType
+import com.example.core.model.CellType
 import com.example.data.GridFloor
 import com.example.data.MultiFloorGridLevel
 import com.example.data.MultiFloorNodePosition

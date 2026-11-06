@@ -7,6 +7,15 @@ import org.junit.Test
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.junit.runner.RunWith
+import com.example.core.model.NetrunnerClass
+import com.example.core.model.Cyberware
+import com.example.core.model.Program
+import com.example.core.model.Direction
+import com.example.core.model.CellType
+import com.example.core.model.Zone
+import com.example.core.model.CyberWeather
+import com.example.core.model.LogMessage
+import com.example.core.model.LogType
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])

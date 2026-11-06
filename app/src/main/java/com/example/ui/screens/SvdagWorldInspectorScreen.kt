@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.svdag.*
 import com.example.ui.theme.*
 import java.util.Locale
+import com.example.core.model.Zone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

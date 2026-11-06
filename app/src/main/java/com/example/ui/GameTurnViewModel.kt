@@ -2,10 +2,10 @@ package com.example.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.data.CellType
+import com.example.core.model.CellType
 import com.example.data.CombatActionType
 import com.example.data.CombatWinner
-import com.example.data.Direction
+import com.example.core.model.Direction
 import com.example.data.FloorMapDao
 import com.example.data.FloorObstacleDao
 import com.example.data.toDomain
@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import com.example.core.model.Enemy
 
 /**
  * GameTurnViewModel:

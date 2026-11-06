@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.dp
 import com.example.data.*
 import com.example.ui.GameViewModel
 import com.example.ui.GameUiState
+import com.example.core.model.Direction
+import com.example.core.model.CellType
 
 @Composable
 fun RenderMiniMap(uiState: GameUiState) {

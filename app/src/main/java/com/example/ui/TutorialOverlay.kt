@@ -29,6 +29,7 @@ import com.example.ui.theme.CyberCyan
 import com.example.ui.theme.CyberGreen
 import com.example.ui.theme.CyberMutedText
 import com.example.ui.theme.CyberPurple
+import com.example.core.model.Cyberware
 
 /**
  * TutorialOverlay — a lightweight, non-blocking guided hint (plan item 2.1).

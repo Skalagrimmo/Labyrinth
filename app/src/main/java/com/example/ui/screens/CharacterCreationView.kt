@@ -18,6 +18,8 @@ import com.example.ui.GameViewModel
 import com.example.ui.theme.*
 import com.example.gl.CyberCharacterGLView
 import com.example.gl.CharacterVariant
+import com.example.core.model.NetrunnerClass
+import com.example.core.model.DigitalMutation
 
 @Composable
 fun CharacterCreationView(

@@ -36,6 +36,9 @@ import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.theme.*
 import com.example.ui.GameUiState
 import com.example.stealth.StealthGuardState
+import com.example.core.model.CellType
+import com.example.core.model.CyberWeather
+import com.example.core.model.Enemy
 @Composable
 fun ExplorationView(
     uiState: GameUiState,
@@ -791,7 +794,7 @@ fun ExplorationView(
                                 fontSize = 9.sp
                             )
                         }
-                        if (uiState.activeWeather != com.example.data.CyberWeather.CLEAR) {
+                        if (uiState.activeWeather != com.example.core.model.CyberWeather.CLEAR) {
                             Text(
                                 text = "CYCLES REMAINING: ${uiState.weatherTurnsLeft}",
                                 color = weatherColor.copy(alpha = 0.8f),
@@ -806,11 +809,11 @@ fun ExplorationView(
                         } else null
 
                         currentCell?.let { cell ->
-                            if (cell == com.example.data.CellType.ELEVATED_BALCONY ||
-                                cell == com.example.data.CellType.GRAVITY_SLOPE ||
-                                cell == com.example.data.CellType.ELEVATOR ||
-                                cell == com.example.data.CellType.STAIRS_UP ||
-                                cell == com.example.data.CellType.STAIRS_DOWN) {
+                            if (cell == com.example.core.model.CellType.ELEVATED_BALCONY ||
+                                cell == com.example.core.model.CellType.GRAVITY_SLOPE ||
+                                cell == com.example.core.model.CellType.ELEVATOR ||
+                                cell == com.example.core.model.CellType.STAIRS_UP ||
+                                cell == com.example.core.model.CellType.STAIRS_DOWN) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "VERTICAL STRUCTURE CELL:",
@@ -820,11 +823,11 @@ fun ExplorationView(
                                     fontWeight = FontWeight.Bold
                                 )
                                 val (cellText, cellColor) = when (cell) {
-                                    com.example.data.CellType.ELEVATED_BALCONY -> "BALCONY VANTAGE (+25% ATK)" to Color(0xFF10B981)
-                                    com.example.data.CellType.GRAVITY_SLOPE -> "GRAVITY SLOPE (30% EVADE)" to Color(0xFFEAB308)
-                                    com.example.data.CellType.ELEVATOR -> "EXPRESS ELEVATOR ACCESS" to Color(0xFF00E5FF)
-                                    com.example.data.CellType.STAIRS_UP -> "STAIRWELL: ASCENT LINK" to Color(0xFF8B5CF6)
-                                    com.example.data.CellType.STAIRS_DOWN -> "STAIRWELL: DESCENT LINK" to Color(0xFF3B82F6)
+                                    com.example.core.model.CellType.ELEVATED_BALCONY -> "BALCONY VANTAGE (+25% ATK)" to Color(0xFF10B981)
+                                    com.example.core.model.CellType.GRAVITY_SLOPE -> "GRAVITY SLOPE (30% EVADE)" to Color(0xFFEAB308)
+                                    com.example.core.model.CellType.ELEVATOR -> "EXPRESS ELEVATOR ACCESS" to Color(0xFF00E5FF)
+                                    com.example.core.model.CellType.STAIRS_UP -> "STAIRWELL: ASCENT LINK" to Color(0xFF8B5CF6)
+                                    com.example.core.model.CellType.STAIRS_DOWN -> "STAIRWELL: DESCENT LINK" to Color(0xFF3B82F6)
                                     else -> "" to Color.Gray
                                 }
                                 Row(

@@ -90,8 +90,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.GameState
-import com.example.data.LogMessage
-import com.example.data.LogType
+import com.example.core.model.LogMessage
+import com.example.core.model.LogType
 import com.example.ui.GameViewModel
 import com.example.ui.theme.CyberAmber
 import com.example.ui.theme.CyberBorder
@@ -105,6 +105,9 @@ import com.example.ui.theme.CyberPink
 import kotlin.math.PI
 import kotlin.math.sin
 import com.example.ui.GameUiState
+import com.example.core.model.Zone
+import com.example.core.model.CyberWeather
+import com.example.core.model.Enemy
 
 /**
  * Cyber Vital Status HUD bar providing animated real-time metrics for:
@@ -316,18 +319,18 @@ fun CyberHealthWidget(
  */
 @Composable
 fun SignalIntegrityWidget(
-    activeWeather: com.example.data.CyberWeather,
-    currentZone: com.example.data.Zone,
+    activeWeather: com.example.core.model.CyberWeather,
+    currentZone: com.example.core.model.Zone,
     gameState: GameState,
     modifier: Modifier = Modifier
 ) {
     // Base signal stability based on zone & weather
     val targetStability = when {
         gameState != GameState.EXPLORATION -> 72f
-        activeWeather == com.example.data.CyberWeather.DATA_STORM -> 45f
-        activeWeather == com.example.data.CyberWeather.COLD_SPOT -> 55f
-        activeWeather == com.example.data.CyberWeather.FRAGMENTATION -> 65f
-        activeWeather == com.example.data.CyberWeather.HOT_NODE -> 80f
+        activeWeather == com.example.core.model.CyberWeather.DATA_STORM -> 45f
+        activeWeather == com.example.core.model.CyberWeather.COLD_SPOT -> 55f
+        activeWeather == com.example.core.model.CyberWeather.FRAGMENTATION -> 65f
+        activeWeather == com.example.core.model.CyberWeather.HOT_NODE -> 80f
         else -> 98.5f
     }
 
