@@ -63,12 +63,6 @@ googleServices {
   missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN
 }
 
-// Export Room schema JSON to app/schemas so migrations can be authored and
-// tested with MigrationTestHelper (IMPROVEMENT_PLAN item 1.3).
-ksp {
-  arg("room.schemaLocation", "$projectDir/schemas")
-}
-
 
 // Some unused dependencies are commented out below instead of being removed.
 // This makes it easy to add them back in the future if needed.
@@ -80,6 +74,7 @@ dependencies {
   implementation(project(":core:render"))
   implementation(project(":core:game"))
   implementation(project(":core:audio"))
+  implementation(project(":core:platform"))
   implementation(project(":feature:skilltree"))
   implementation(project(":feature:combat"))
   implementation(project(":feature:exploration"))
@@ -118,5 +113,4 @@ dependencies {
   androidTestImplementation(libs.androidx.runner)
   debugImplementation(libs.androidx.compose.ui.test.manifest)
   debugImplementation(libs.androidx.compose.ui.tooling)
-  "ksp"(libs.androidx.room.compiler)
 }

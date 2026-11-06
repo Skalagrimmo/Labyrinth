@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.core.model.CellType
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
