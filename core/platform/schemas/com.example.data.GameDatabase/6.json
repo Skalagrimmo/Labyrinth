@@ -1,0 +1,1555 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 6,
+    "identityHash": "bd09bc95302b5ab159a9df39bfdb2bcf",
+    "entities": [
+      {
+        "tableName": "run_records",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `runnerName` TEXT NOT NULL, `runnerClass` TEXT NOT NULL, `levelReached` INTEGER NOT NULL, `nodesHacked` INTEGER NOT NULL, `creditsEarned` INTEGER NOT NULL, `timestamp` INTEGER NOT NULL, `outcome` TEXT NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runnerName",
+            "columnName": "runnerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runnerClass",
+            "columnName": "runnerClass",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelReached",
+            "columnName": "levelReached",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nodesHacked",
+            "columnName": "nodesHacked",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditsEarned",
+            "columnName": "creditsEarned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timestamp",
+            "columnName": "timestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outcome",
+            "columnName": "outcome",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "character_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profileId` TEXT NOT NULL, `runnerName` TEXT NOT NULL, `runnerClass` TEXT NOT NULL, `level` INTEGER NOT NULL, `credits` INTEGER NOT NULL, `totalCreditsEarned` INTEGER NOT NULL, `maxIntegrity` INTEGER NOT NULL, `maxRam` INTEGER NOT NULL, `nodesHackedCount` INTEGER NOT NULL, `createdTimestamp` INTEGER NOT NULL, PRIMARY KEY(`profileId`))",
+        "fields": [
+          {
+            "fieldPath": "profileId",
+            "columnName": "profileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runnerName",
+            "columnName": "runnerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runnerClass",
+            "columnName": "runnerClass",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "level",
+            "columnName": "level",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "credits",
+            "columnName": "credits",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalCreditsEarned",
+            "columnName": "totalCreditsEarned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxIntegrity",
+            "columnName": "maxIntegrity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxRam",
+            "columnName": "maxRam",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nodesHackedCount",
+            "columnName": "nodesHackedCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdTimestamp",
+            "columnName": "createdTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profileId"
+          ]
+        }
+      },
+      {
+        "tableName": "game_save_progress",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`saveSlotId` TEXT NOT NULL, `runnerName` TEXT NOT NULL, `runnerClass` TEXT NOT NULL, `level` INTEGER NOT NULL, `integrity` INTEGER NOT NULL, `maxIntegrity` INTEGER NOT NULL, `playerShield` INTEGER NOT NULL, `playerMaxShield` INTEGER NOT NULL, `ram` INTEGER NOT NULL, `maxRam` INTEGER NOT NULL, `ramRecoveryRate` INTEGER NOT NULL, `credits` INTEGER NOT NULL, `damageBonus` INTEGER NOT NULL, `defenseBonus` INTEGER NOT NULL, `characterLevel` INTEGER NOT NULL, `characterXp` INTEGER NOT NULL, `xpToNextLevel` INTEGER NOT NULL, `gridX` INTEGER NOT NULL, `gridY` INTEGER NOT NULL, `direction` TEXT NOT NULL, `currentZone` TEXT NOT NULL, `buildingFloor` INTEGER NOT NULL, `collectorsLevel` INTEGER NOT NULL, `cityDistrictIndex` INTEGER NOT NULL, `hasElevatorKeycard` INTEGER NOT NULL, `activeWeather` TEXT NOT NULL, `weatherTurnsLeft` INTEGER NOT NULL, `stepsSinceLastEvent` INTEGER NOT NULL, `nextEventSteps` INTEGER NOT NULL, `predictedWeather` TEXT NOT NULL, `nodesHackedCount` INTEGER NOT NULL, `totalCreditsEarned` INTEGER NOT NULL, `inventoryCsv` TEXT NOT NULL, `installedCyberwareCsv` TEXT NOT NULL, `installedProgramsCsv` TEXT NOT NULL, `installedImplantsCsv` TEXT NOT NULL, `exploredCellsCsv` TEXT NOT NULL, `mazeData` TEXT NOT NULL, `originalMazeData` TEXT NOT NULL, `buildingFloorsData` TEXT NOT NULL, `buildingExploredData` TEXT NOT NULL, `collectorsLevelsData` TEXT NOT NULL, `collectorsExploredData` TEXT NOT NULL, `cityDistrictsData` TEXT NOT NULL, `cityExploredData` TEXT NOT NULL, `gameStateName` TEXT NOT NULL, `logFeedSerialized` TEXT NOT NULL, `lastSavedTimestamp` INTEGER NOT NULL, PRIMARY KEY(`saveSlotId`))",
+        "fields": [
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runnerName",
+            "columnName": "runnerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runnerClass",
+            "columnName": "runnerClass",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "level",
+            "columnName": "level",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "integrity",
+            "columnName": "integrity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxIntegrity",
+            "columnName": "maxIntegrity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playerShield",
+            "columnName": "playerShield",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playerMaxShield",
+            "columnName": "playerMaxShield",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ram",
+            "columnName": "ram",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxRam",
+            "columnName": "maxRam",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ramRecoveryRate",
+            "columnName": "ramRecoveryRate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "credits",
+            "columnName": "credits",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "damageBonus",
+            "columnName": "damageBonus",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defenseBonus",
+            "columnName": "defenseBonus",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "characterLevel",
+            "columnName": "characterLevel",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "characterXp",
+            "columnName": "characterXp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xpToNextLevel",
+            "columnName": "xpToNextLevel",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridX",
+            "columnName": "gridX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridY",
+            "columnName": "gridY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "direction",
+            "columnName": "direction",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentZone",
+            "columnName": "currentZone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingFloor",
+            "columnName": "buildingFloor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectorsLevel",
+            "columnName": "collectorsLevel",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cityDistrictIndex",
+            "columnName": "cityDistrictIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hasElevatorKeycard",
+            "columnName": "hasElevatorKeycard",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "activeWeather",
+            "columnName": "activeWeather",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "weatherTurnsLeft",
+            "columnName": "weatherTurnsLeft",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepsSinceLastEvent",
+            "columnName": "stepsSinceLastEvent",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nextEventSteps",
+            "columnName": "nextEventSteps",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "predictedWeather",
+            "columnName": "predictedWeather",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nodesHackedCount",
+            "columnName": "nodesHackedCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalCreditsEarned",
+            "columnName": "totalCreditsEarned",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "inventoryCsv",
+            "columnName": "inventoryCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "installedCyberwareCsv",
+            "columnName": "installedCyberwareCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "installedProgramsCsv",
+            "columnName": "installedProgramsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "installedImplantsCsv",
+            "columnName": "installedImplantsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exploredCellsCsv",
+            "columnName": "exploredCellsCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mazeData",
+            "columnName": "mazeData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "originalMazeData",
+            "columnName": "originalMazeData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingFloorsData",
+            "columnName": "buildingFloorsData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "buildingExploredData",
+            "columnName": "buildingExploredData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectorsLevelsData",
+            "columnName": "collectorsLevelsData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "collectorsExploredData",
+            "columnName": "collectorsExploredData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cityDistrictsData",
+            "columnName": "cityDistrictsData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cityExploredData",
+            "columnName": "cityExploredData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gameStateName",
+            "columnName": "gameStateName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "logFeedSerialized",
+            "columnName": "logFeedSerialized",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSavedTimestamp",
+            "columnName": "lastSavedTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "saveSlotId"
+          ]
+        }
+      },
+      {
+        "tableName": "inventory_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `saveSlotId` TEXT NOT NULL, `itemName` TEXT NOT NULL, `itemType` TEXT NOT NULL, `quantity` INTEGER NOT NULL, `description` TEXT NOT NULL, `acquiredTimestamp` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemName",
+            "columnName": "itemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemType",
+            "columnName": "itemType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quantity",
+            "columnName": "quantity",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acquiredTimestamp",
+            "columnName": "acquiredTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "floor_maps",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`mapId` TEXT NOT NULL, `saveSlotId` TEXT NOT NULL, `levelNumber` INTEGER NOT NULL, `floorIndex` INTEGER NOT NULL, `floorName` TEXT NOT NULL, `sectorName` TEXT NOT NULL, `districtTheme` TEXT NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `spawnFloor` INTEGER NOT NULL, `spawnX` INTEGER NOT NULL, `spawnY` INTEGER NOT NULL, `exitFloor` INTEGER NOT NULL, `exitX` INTEGER NOT NULL, `exitY` INTEGER NOT NULL, `playerX` INTEGER NOT NULL, `playerY` INTEGER NOT NULL, `playerFloor` INTEGER NOT NULL, `playerDirection` TEXT NOT NULL, `gridData` TEXT NOT NULL, `exploredData` TEXT NOT NULL, `securityLevel` INTEGER NOT NULL, `isCleared` INTEGER NOT NULL, `isFullyExplored` INTEGER NOT NULL, `totalWalkableTiles` INTEGER NOT NULL, `exploredTilesCount` INTEGER NOT NULL, `totalObstacles` INTEGER NOT NULL, `clearedObstacles` INTEGER NOT NULL, `createdTimestamp` INTEGER NOT NULL, `lastUpdatedTimestamp` INTEGER NOT NULL, PRIMARY KEY(`mapId`))",
+        "fields": [
+          {
+            "fieldPath": "mapId",
+            "columnName": "mapId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelNumber",
+            "columnName": "levelNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorIndex",
+            "columnName": "floorIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorName",
+            "columnName": "floorName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sectorName",
+            "columnName": "sectorName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "districtTheme",
+            "columnName": "districtTheme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spawnFloor",
+            "columnName": "spawnFloor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spawnX",
+            "columnName": "spawnX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spawnY",
+            "columnName": "spawnY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitFloor",
+            "columnName": "exitFloor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitX",
+            "columnName": "exitX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitY",
+            "columnName": "exitY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playerX",
+            "columnName": "playerX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playerY",
+            "columnName": "playerY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playerFloor",
+            "columnName": "playerFloor",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "playerDirection",
+            "columnName": "playerDirection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridData",
+            "columnName": "gridData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exploredData",
+            "columnName": "exploredData",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "securityLevel",
+            "columnName": "securityLevel",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isCleared",
+            "columnName": "isCleared",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isFullyExplored",
+            "columnName": "isFullyExplored",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalWalkableTiles",
+            "columnName": "totalWalkableTiles",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exploredTilesCount",
+            "columnName": "exploredTilesCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalObstacles",
+            "columnName": "totalObstacles",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "clearedObstacles",
+            "columnName": "clearedObstacles",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdTimestamp",
+            "columnName": "createdTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdatedTimestamp",
+            "columnName": "lastUpdatedTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "mapId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_floor_maps_saveSlotId_levelNumber_floorIndex",
+            "unique": true,
+            "columnNames": [
+              "saveSlotId",
+              "levelNumber",
+              "floorIndex"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_floor_maps_saveSlotId_levelNumber_floorIndex` ON `${TABLE_NAME}` (`saveSlotId`, `levelNumber`, `floorIndex`)"
+          },
+          {
+            "name": "index_floor_maps_saveSlotId_levelNumber",
+            "unique": false,
+            "columnNames": [
+              "saveSlotId",
+              "levelNumber"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_floor_maps_saveSlotId_levelNumber` ON `${TABLE_NAME}` (`saveSlotId`, `levelNumber`)"
+          }
+        ]
+      },
+      {
+        "tableName": "floor_obstacles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `mapId` TEXT NOT NULL, `saveSlotId` TEXT NOT NULL, `levelNumber` INTEGER NOT NULL, `floorIndex` INTEGER NOT NULL, `gridX` INTEGER NOT NULL, `gridY` INTEGER NOT NULL, `obstacleType` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `isPassable` INTEGER NOT NULL, `isDestructible` INTEGER NOT NULL, `isHacked` INTEGER NOT NULL, `isDisarmed` INTEGER NOT NULL, `durability` INTEGER NOT NULL, `maxDurability` INTEGER NOT NULL, `hackDifficulty` INTEGER NOT NULL, `interactionPrompt` TEXT NOT NULL, `rewardCredits` INTEGER NOT NULL, `rewardItem` TEXT, `createdTimestamp` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mapId",
+            "columnName": "mapId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelNumber",
+            "columnName": "levelNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorIndex",
+            "columnName": "floorIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridX",
+            "columnName": "gridX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridY",
+            "columnName": "gridY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "obstacleType",
+            "columnName": "obstacleType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPassable",
+            "columnName": "isPassable",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDestructible",
+            "columnName": "isDestructible",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isHacked",
+            "columnName": "isHacked",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDisarmed",
+            "columnName": "isDisarmed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durability",
+            "columnName": "durability",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxDurability",
+            "columnName": "maxDurability",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hackDifficulty",
+            "columnName": "hackDifficulty",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "interactionPrompt",
+            "columnName": "interactionPrompt",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rewardCredits",
+            "columnName": "rewardCredits",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rewardItem",
+            "columnName": "rewardItem",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdTimestamp",
+            "columnName": "createdTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_floor_obstacles_mapId_gridX_gridY",
+            "unique": false,
+            "columnNames": [
+              "mapId",
+              "gridX",
+              "gridY"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_floor_obstacles_mapId_gridX_gridY` ON `${TABLE_NAME}` (`mapId`, `gridX`, `gridY`)"
+          },
+          {
+            "name": "index_floor_obstacles_saveSlotId_levelNumber_floorIndex",
+            "unique": false,
+            "columnNames": [
+              "saveSlotId",
+              "levelNumber",
+              "floorIndex"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_floor_obstacles_saveSlotId_levelNumber_floorIndex` ON `${TABLE_NAME}` (`saveSlotId`, `levelNumber`, `floorIndex`)"
+          }
+        ]
+      },
+      {
+        "tableName": "player_map_positions",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`saveSlotId` TEXT NOT NULL, `levelNumber` INTEGER NOT NULL, `floorIndex` INTEGER NOT NULL, `gridX` INTEGER NOT NULL, `gridY` INTEGER NOT NULL, `facingDirection` TEXT NOT NULL, `currentZone` TEXT NOT NULL, `stepsTaken` INTEGER NOT NULL, `totalFloorsExplored` INTEGER NOT NULL, `totalObstaclesBypassed` INTEGER NOT NULL, `exploredTilesHistoryCsv` TEXT NOT NULL, `lastMovedTimestamp` INTEGER NOT NULL, PRIMARY KEY(`saveSlotId`))",
+        "fields": [
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelNumber",
+            "columnName": "levelNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorIndex",
+            "columnName": "floorIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridX",
+            "columnName": "gridX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridY",
+            "columnName": "gridY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "facingDirection",
+            "columnName": "facingDirection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentZone",
+            "columnName": "currentZone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepsTaken",
+            "columnName": "stepsTaken",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalFloorsExplored",
+            "columnName": "totalFloorsExplored",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalObstaclesBypassed",
+            "columnName": "totalObstaclesBypassed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exploredTilesHistoryCsv",
+            "columnName": "exploredTilesHistoryCsv",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastMovedTimestamp",
+            "columnName": "lastMovedTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "saveSlotId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_player_map_positions_saveSlotId",
+            "unique": false,
+            "columnNames": [
+              "saveSlotId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_player_map_positions_saveSlotId` ON `${TABLE_NAME}` (`saveSlotId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "grid_map_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`mapId` TEXT NOT NULL, `saveSlotId` TEXT NOT NULL, `levelNumber` INTEGER NOT NULL, `floorIndex` INTEGER NOT NULL, `gridWidth` INTEGER NOT NULL, `gridHeight` INTEGER NOT NULL, `minBoundX` INTEGER NOT NULL, `minBoundY` INTEGER NOT NULL, `maxBoundX` INTEGER NOT NULL, `maxBoundY` INTEGER NOT NULL, `defaultTileType` TEXT NOT NULL, `theme` TEXT NOT NULL, `spawnX` INTEGER NOT NULL, `spawnY` INTEGER NOT NULL, `exitX` INTEGER NOT NULL, `exitY` INTEGER NOT NULL, `totalTiles` INTEGER NOT NULL, `walkableTilesCount` INTEGER NOT NULL, `serializedGridTiles` TEXT NOT NULL, `serializedExploredMask` TEXT NOT NULL, `createdTimestamp` INTEGER NOT NULL, `updatedTimestamp` INTEGER NOT NULL, PRIMARY KEY(`mapId`))",
+        "fields": [
+          {
+            "fieldPath": "mapId",
+            "columnName": "mapId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelNumber",
+            "columnName": "levelNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorIndex",
+            "columnName": "floorIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridWidth",
+            "columnName": "gridWidth",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridHeight",
+            "columnName": "gridHeight",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minBoundX",
+            "columnName": "minBoundX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minBoundY",
+            "columnName": "minBoundY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxBoundX",
+            "columnName": "maxBoundX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxBoundY",
+            "columnName": "maxBoundY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultTileType",
+            "columnName": "defaultTileType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "theme",
+            "columnName": "theme",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spawnX",
+            "columnName": "spawnX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "spawnY",
+            "columnName": "spawnY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitX",
+            "columnName": "exitX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "exitY",
+            "columnName": "exitY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalTiles",
+            "columnName": "totalTiles",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "walkableTilesCount",
+            "columnName": "walkableTilesCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serializedGridTiles",
+            "columnName": "serializedGridTiles",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "serializedExploredMask",
+            "columnName": "serializedExploredMask",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdTimestamp",
+            "columnName": "createdTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedTimestamp",
+            "columnName": "updatedTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "mapId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_grid_map_state_saveSlotId_levelNumber_floorIndex",
+            "unique": true,
+            "columnNames": [
+              "saveSlotId",
+              "levelNumber",
+              "floorIndex"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_grid_map_state_saveSlotId_levelNumber_floorIndex` ON `${TABLE_NAME}` (`saveSlotId`, `levelNumber`, `floorIndex`)"
+          }
+        ]
+      },
+      {
+        "tableName": "grid_entity_coordinates",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`entityId` TEXT NOT NULL, `mapId` TEXT NOT NULL, `saveSlotId` TEXT NOT NULL, `levelNumber` INTEGER NOT NULL, `floorIndex` INTEGER NOT NULL, `entityName` TEXT NOT NULL, `entityCategory` TEXT NOT NULL, `coordinateX` INTEGER NOT NULL, `coordinateY` INTEGER NOT NULL, `facingDirection` TEXT NOT NULL, `isPassable` INTEGER NOT NULL, `isVisibleToPlayer` INTEGER NOT NULL, `isAliveOrActive` INTEGER NOT NULL, `health` INTEGER NOT NULL, `maxHealth` INTEGER NOT NULL, `speed` INTEGER NOT NULL, `visionRadius` INTEGER NOT NULL, `alertLevel` TEXT NOT NULL, `metadataPayload` TEXT NOT NULL, `lastMovedTimestamp` INTEGER NOT NULL, PRIMARY KEY(`entityId`))",
+        "fields": [
+          {
+            "fieldPath": "entityId",
+            "columnName": "entityId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mapId",
+            "columnName": "mapId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelNumber",
+            "columnName": "levelNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorIndex",
+            "columnName": "floorIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityName",
+            "columnName": "entityName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entityCategory",
+            "columnName": "entityCategory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coordinateX",
+            "columnName": "coordinateX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "coordinateY",
+            "columnName": "coordinateY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "facingDirection",
+            "columnName": "facingDirection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPassable",
+            "columnName": "isPassable",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isVisibleToPlayer",
+            "columnName": "isVisibleToPlayer",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isAliveOrActive",
+            "columnName": "isAliveOrActive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "health",
+            "columnName": "health",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxHealth",
+            "columnName": "maxHealth",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speed",
+            "columnName": "speed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "visionRadius",
+            "columnName": "visionRadius",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "alertLevel",
+            "columnName": "alertLevel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "metadataPayload",
+            "columnName": "metadataPayload",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastMovedTimestamp",
+            "columnName": "lastMovedTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "entityId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_grid_entity_coordinates_mapId_coordinateX_coordinateY",
+            "unique": false,
+            "columnNames": [
+              "mapId",
+              "coordinateX",
+              "coordinateY"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grid_entity_coordinates_mapId_coordinateX_coordinateY` ON `${TABLE_NAME}` (`mapId`, `coordinateX`, `coordinateY`)"
+          },
+          {
+            "name": "index_grid_entity_coordinates_mapId_entityCategory",
+            "unique": false,
+            "columnNames": [
+              "mapId",
+              "entityCategory"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_grid_entity_coordinates_mapId_entityCategory` ON `${TABLE_NAME}` (`mapId`, `entityCategory`)"
+          },
+          {
+            "name": "index_grid_entity_coordinates_saveSlotId_entityId",
+            "unique": true,
+            "columnNames": [
+              "saveSlotId",
+              "entityId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_grid_entity_coordinates_saveSlotId_entityId` ON `${TABLE_NAME}` (`saveSlotId`, `entityId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "players",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`playerId` TEXT NOT NULL, `saveSlotId` TEXT NOT NULL, `name` TEXT NOT NULL, `runnerClass` TEXT NOT NULL, `health` INTEGER NOT NULL, `maxHealth` INTEGER NOT NULL, `stamina` INTEGER NOT NULL, `maxStamina` INTEGER NOT NULL, `staminaRecoveryRate` INTEGER NOT NULL, `shield` INTEGER NOT NULL, `maxShield` INTEGER NOT NULL, `ram` INTEGER NOT NULL, `maxRam` INTEGER NOT NULL, `ramRecoveryRate` INTEGER NOT NULL, `mapId` TEXT NOT NULL, `levelNumber` INTEGER NOT NULL, `floorIndex` INTEGER NOT NULL, `gridX` INTEGER NOT NULL, `gridY` INTEGER NOT NULL, `facingDirection` TEXT NOT NULL, `currentZone` TEXT NOT NULL, `level` INTEGER NOT NULL, `experience` INTEGER NOT NULL, `xpToNextLevel` INTEGER NOT NULL, `credits` INTEGER NOT NULL, `attackPower` INTEGER NOT NULL, `defense` INTEGER NOT NULL, `speed` INTEGER NOT NULL, `visionRadius` INTEGER NOT NULL, `isAlive` INTEGER NOT NULL, `stepsTaken` INTEGER NOT NULL, `turnsElapsed` INTEGER NOT NULL, `nodesHackedCount` INTEGER NOT NULL, `createdTimestamp` INTEGER NOT NULL, `lastUpdatedTimestamp` INTEGER NOT NULL, PRIMARY KEY(`playerId`))",
+        "fields": [
+          {
+            "fieldPath": "playerId",
+            "columnName": "playerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "saveSlotId",
+            "columnName": "saveSlotId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "runnerClass",
+            "columnName": "runnerClass",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "health",
+            "columnName": "health",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxHealth",
+            "columnName": "maxHealth",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stamina",
+            "columnName": "stamina",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxStamina",
+            "columnName": "maxStamina",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "staminaRecoveryRate",
+            "columnName": "staminaRecoveryRate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "shield",
+            "columnName": "shield",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxShield",
+            "columnName": "maxShield",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ram",
+            "columnName": "ram",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxRam",
+            "columnName": "maxRam",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ramRecoveryRate",
+            "columnName": "ramRecoveryRate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "mapId",
+            "columnName": "mapId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "levelNumber",
+            "columnName": "levelNumber",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "floorIndex",
+            "columnName": "floorIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridX",
+            "columnName": "gridX",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "gridY",
+            "columnName": "gridY",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "facingDirection",
+            "columnName": "facingDirection",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currentZone",
+            "columnName": "currentZone",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "level",
+            "columnName": "level",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "experience",
+            "columnName": "experience",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "xpToNextLevel",
+            "columnName": "xpToNextLevel",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "credits",
+            "columnName": "credits",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "attackPower",
+            "columnName": "attackPower",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defense",
+            "columnName": "defense",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "speed",
+            "columnName": "speed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "visionRadius",
+            "columnName": "visionRadius",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isAlive",
+            "columnName": "isAlive",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stepsTaken",
+            "columnName": "stepsTaken",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "turnsElapsed",
+            "columnName": "turnsElapsed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nodesHackedCount",
+            "columnName": "nodesHackedCount",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdTimestamp",
+            "columnName": "createdTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastUpdatedTimestamp",
+            "columnName": "lastUpdatedTimestamp",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "playerId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_players_saveSlotId",
+            "unique": true,
+            "columnNames": [
+              "saveSlotId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_players_saveSlotId` ON `${TABLE_NAME}` (`saveSlotId`)"
+          },
+          {
+            "name": "index_players_mapId",
+            "unique": false,
+            "columnNames": [
+              "mapId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_players_mapId` ON `${TABLE_NAME}` (`mapId`)"
+          },
+          {
+            "name": "index_players_gridX_gridY",
+            "unique": false,
+            "columnNames": [
+              "gridX",
+              "gridY"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_players_gridX_gridY` ON `${TABLE_NAME}` (`gridX`, `gridY`)"
+          },
+          {
+            "name": "index_players_saveSlotId_levelNumber_floorIndex",
+            "unique": false,
+            "columnNames": [
+              "saveSlotId",
+              "levelNumber",
+              "floorIndex"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_players_saveSlotId_levelNumber_floorIndex` ON `${TABLE_NAME}` (`saveSlotId`, `levelNumber`, `floorIndex`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'bd09bc95302b5ab159a9df39bfdb2bcf')"
+    ]
+  }
+}
