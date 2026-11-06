@@ -29,6 +29,8 @@ import com.example.data.svdag.*
 import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.theme.*
 import com.example.ui.GameUiState
+import com.example.core.model.CellType
+import com.example.core.model.Zone
 
 private data class CyberParticle(
     var xRatio: Float,
@@ -394,7 +396,7 @@ fun FirstPersonPerspectiveCanvas(
         Color(0xFFFB7185)
     } else {
         when (uiState.currentZone) {
-            com.example.data.Zone.BUILDING -> {
+            com.example.core.model.Zone.BUILDING -> {
                 when (uiState.buildingFloor) {
                     1 -> Color(0xFF00E5FF)
                     2 -> Color(0xFF60A5FA)
@@ -403,11 +405,11 @@ fun FirstPersonPerspectiveCanvas(
                     else -> Color(0xFF00E5FF)
                 }
             }
-            com.example.data.Zone.COLLECTORS -> {
+            com.example.core.model.Zone.COLLECTORS -> {
                 if (uiState.collectorsLevel == 1) Color(0xFF10B981)
                 else Color(0xFF8B5CF6)
             }
-            com.example.data.Zone.CITY -> {
+            com.example.core.model.Zone.CITY -> {
                 when (uiState.cityDistrictIndex) {
                     0 -> Color(0xFFEC4899)
                     1 -> Color(0xFFFBBF24)

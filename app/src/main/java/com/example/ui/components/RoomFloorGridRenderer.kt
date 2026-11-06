@@ -94,7 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.CellType
+import com.example.core.model.CellType
 import com.example.data.FloorMapEntity
 import com.example.data.FloorMapRepository
 import com.example.data.FloorMapWithObstacles
