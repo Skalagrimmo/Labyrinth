@@ -1,6 +1,7 @@
 package com.example.ui
 
 import com.example.audio.GameAudioPlayer
+import com.example.core.model.*
 import com.example.data.*
 import com.example.data.EnemyCombatAIScript
 import com.example.data.svdag.IceAlertLevel
