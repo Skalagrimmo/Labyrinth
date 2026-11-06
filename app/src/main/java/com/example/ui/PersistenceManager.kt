@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class PersistenceManager(
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val application: Application,
     private val repository: SaveRepository,
     private val scope: CoroutineScope,
@@ -126,13 +126,13 @@ class PersistenceManager(
     }
 
     fun restartGame() {
-        _uiState.update { GameViewModel.GameUiState(screen = ActiveScreen.START_MENU) }
+        _uiState.update { GameUiState(screen = ActiveScreen.START_MENU) }
         onLog("REBOOTING TERMINAL CORE V8.91...", LogType.ALERT)
         onLog("SELECT ARCHETYPE PROFILE TO COMPILE.", LogType.INFO)
     }
 
     fun startNewRun() {
-        _uiState.update { GameViewModel.GameUiState(screen = ActiveScreen.CHARACTER_CREATION) }
+        _uiState.update { GameUiState(screen = ActiveScreen.CHARACTER_CREATION) }
         onLog("ESTABLISHING SECURE CONNECTION...", LogType.SUCCESS)
         onLog("SELECT NETRUNNER ARCHETYPE PROFILE TO COMPILE.", LogType.INFO)
     }

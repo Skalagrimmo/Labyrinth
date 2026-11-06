@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 class InventoryManager(
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val soundManager: CyberSoundEffectsManager,
     private val repository: GameRepository,
     private val scope: CoroutineScope,
@@ -625,7 +625,7 @@ class InventoryManager(
     // Terminal Command Handler
     // ----------------------------------------------------
 
-    fun runTerminalCommand(parts: List<String>, state: GameViewModel.GameUiState): Boolean {
+    fun runTerminalCommand(parts: List<String>, state: GameUiState): Boolean {
         if (parts.isEmpty()) return false
 
         val command = parts[0].lowercase()

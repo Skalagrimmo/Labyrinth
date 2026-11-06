@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class CombatManager(
-    private val _uiState: MutableStateFlow<GameViewModel.GameUiState>,
+    private val _uiState: MutableStateFlow<GameUiState>,
     private val soundManager: CyberSoundEffectsManager,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
@@ -679,16 +679,17 @@ class CombatManager(
         return record
     }
 
-    fun runTerminalCommand(parts: List<String>, state: GameViewModel.GameUiState): Boolean {
+    fun runTerminalCommand(parts: List<String>, state: GameUiState): Boolean {
         val cmd = parts[0].lowercase()
-        if (state.activeCombatHack != null) {
+        val activeHack = state.activeCombatHack
+        if (activeHack != null) {
             when (cmd) {
                 "clear" -> { clearCombatHackBuffer(); return true }
                 "abort", "exit", "cancel" -> { abortCombatHack(); return true }
                 else -> {
                     val symbolInput = if (cmd == "hack" && parts.size > 1) parts[1].uppercase() else cmd.uppercase()
-                    if (state.activeCombatHack.availablePool.contains(symbolInput)) { selectCombatHackSymbol(symbolInput); return true }
-                    else { onLog("HACK PATTERN COMMAND: Enter a valid symbol e.g. '${state.activeCombatHack.availablePool.first()}', 'clear', or 'abort'", LogType.ALERT); return true }
+                    if (activeHack.availablePool.contains(symbolInput)) { selectCombatHackSymbol(symbolInput); return true }
+                    else { onLog("HACK PATTERN COMMAND: Enter a valid symbol e.g. '${activeHack.availablePool.first()}', 'clear', or 'abort'", LogType.ALERT); return true }
                 }
             }
         }

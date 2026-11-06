@@ -104,6 +104,7 @@ import com.example.ui.theme.CyberMutedText
 import com.example.ui.theme.CyberPink
 import kotlin.math.PI
 import kotlin.math.sin
+import com.example.ui.GameUiState
 
 /**
  * Cyber Vital Status HUD bar providing animated real-time metrics for:
@@ -113,7 +114,7 @@ import kotlin.math.sin
  */
 @Composable
 fun CyberVitalStatusHud(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -451,7 +452,7 @@ fun SignalIntegrityWidget(
  */
 @Composable
 fun TimeToBreachWidget(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     modifier: Modifier = Modifier
 ) {
     // Determine context breach state:
@@ -605,7 +606,7 @@ fun TimeToBreachWidget(
  */
 @Composable
 fun AnimatedCyberHudConsole(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onSendCommand: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {

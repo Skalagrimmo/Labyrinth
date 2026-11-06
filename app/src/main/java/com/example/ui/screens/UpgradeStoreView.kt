@@ -13,13 +13,14 @@ import androidx.compose.ui.unit.*
 import com.example.data.*
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 
 // ==========================================
 // Sub-Composable: Shop Screen
 // ==========================================
 @Composable
 fun UpgradeStoreView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onBuyCyberware: (Cyberware) -> Unit,
     onBuyConsumable: (String, Int) -> Unit,
     onExit: () -> Unit

@@ -18,10 +18,11 @@ import androidx.compose.ui.unit.sp
 import com.example.data.*
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 
 @Composable
 fun TerminalHeader(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     onMenuClick: () -> Unit,
     onLeaderboardClick: () -> Unit,
     onCyberwareClick: () -> Unit,

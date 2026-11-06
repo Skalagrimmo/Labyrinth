@@ -14,7 +14,7 @@ class LegacySaveStateCodec(
     private val cyberwareLookup: (String) -> Cyberware
 ) {
 
-    fun save(state: GameViewModel.GameUiState) {
+    fun save(state: GameUiState) {
         storage.edit {
             putBoolean("has_saved_game", true)
             putString("runnerName", state.runnerName)
@@ -72,7 +72,7 @@ class LegacySaveStateCodec(
         }
     }
 
-    fun load(current: GameViewModel.GameUiState): GameViewModel.GameUiState? {
+    fun load(current: GameUiState): GameUiState? {
         if (!storage.getBoolean("has_saved_game", false)) return null
 
         fun string(key: String, default: String = "") = storage.getString(key, default) ?: default

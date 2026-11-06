@@ -34,9 +34,10 @@ import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
 import com.example.ui.components.CombatRoundClockHud
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.theme.*
+import com.example.ui.GameUiState
 @Composable
 fun ExplorationView(
-    uiState: GameViewModel.GameUiState,
+    uiState: GameUiState,
     viewModel: GameViewModel,
     onShopClick: () -> Unit,
     onSafeDisconnect: () -> Unit
@@ -303,9 +304,10 @@ fun ExplorationView(
                                 )
 
                                  // Active Hacking Pattern Minigame vs Standard Combat Actions
-                                 if (uiState.activeCombatHack != null) {
+                                 val activeHack = uiState.activeCombatHack
+                                 if (activeHack != null) {
                                      CombatHackingMinigameView(
-                                         hackState = uiState.activeCombatHack,
+                                         hackState = activeHack,
                                          onSelectSymbol = { viewModel.selectCombatHackSymbol(it) },
                                          onClearBuffer = { viewModel.clearCombatHackBuffer() },
                                          onAbort = { viewModel.abortCombatHack() },
