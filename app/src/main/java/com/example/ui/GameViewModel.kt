@@ -498,13 +498,13 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         val targetX = (state.gridX + state.direction.dx * throwCells).coerceIn(0, state.maze[0].lastIndex)
         val targetY = (state.gridY + state.direction.dy * throwCells).coerceIn(0, state.maze.lastIndex)
         _uiState.update { it.copy(ram = (it.ram - StealthSessionController.DECOY_RAM_COST).coerceAtLeast(0)) }
-        stealthSessionController.emitNoiseAt(
+        val landing = stealthSessionController.emitNoiseAt(
             cellX = targetX,
             cellY = targetY,
             radiusCells = StealthSessionController.DECOY_RADIUS_CELLS,
             intensity = StealthSessionController.DECOY_INTENSITY
         )
-        addLog("CHAFF DECOY DEPLOYED (-${StealthSessionController.DECOY_RAM_COST} RAM): Phantom signal detonated at ($targetX, $targetY). ICE audio sweeps redirected.", LogType.SUCCESS)
+        addLog("CHAFF DECOY DEPLOYED (-${StealthSessionController.DECOY_RAM_COST} RAM): Phantom signal detonated at (${landing?.first ?: targetX}, ${landing?.second ?: targetY}). ICE audio sweeps redirected.", LogType.SUCCESS)
     }
 
     fun getStructuredInventorySlots() = inventoryManager.getStructuredInventorySlots()

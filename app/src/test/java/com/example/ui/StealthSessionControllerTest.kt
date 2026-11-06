@@ -216,8 +216,9 @@ class StealthSessionControllerTest {
 
     @Test
     fun decoyLandingCellIsClampedIntoTheMaze() {
-        // A throw aimed far beyond the sector edge clamps onto the border cell
-        // and still detonates there.
+        // A throw aimed far beyond the sector edge clamps onto the border cell;
+        // since that border is firewall, the phantom signal slides back along
+        // the throw line to the last walkable cell - where it still detonates.
         val (controller, _) = newController(px = 3, sneaking = true)
         controller.emitNoiseAt(cellX = 99, cellY = 99, radiusCells = 6f, intensity = 1f)
         controller.tickOnce()
