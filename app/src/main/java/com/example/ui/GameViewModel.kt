@@ -79,8 +79,12 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         onAddExperience = ::addExperience
     )
 
+    // d6 slice 5: one shared 100ms world-clock loop drives both RTwP
+    // consumers (stealth world clock + combat round clock).
+    private val worldClockTicker = WorldClockTicker(viewModelScope)
+
     private val combatClockController = CombatClockController(
-        scope = viewModelScope,
+        ticker = worldClockTicker,
         _uiState = _uiState,
         onAutoAction = { type ->
             when (type) {
