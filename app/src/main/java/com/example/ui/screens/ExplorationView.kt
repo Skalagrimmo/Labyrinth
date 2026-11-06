@@ -27,6 +27,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.data.*
+import com.example.stealth.StealthGuardState
 import com.example.ui.GameViewModel
 import com.example.ui.components.VisualTurnIndicator
 import com.example.ui.components.CombatHackingMinigameView
@@ -717,6 +718,44 @@ fun ExplorationView(
                             current = uiState.ram,
                             max = uiState.maxRam,
                             color = CyberPink
+                        )
+
+                        // ICE Threat Trace (d6 slice 4): the stealth world clock
+                        // publishes the most-threatening ICE unit and its suspicion gauge.
+                        val iceThreatColor = when (uiState.iceThreatState) {
+                            StealthGuardState.ALERTED -> CyberCrimson
+                            StealthGuardState.SEARCHING -> CyberAmber
+                            StealthGuardState.INVESTIGATING -> CyberPink
+                            else -> CyberMutedText
+                        }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .background(iceThreatColor, androidx.compose.foundation.shape.CircleShape)
+                            )
+                            Text(
+                                text = "ICE TRACE: " + uiState.iceThreatState.name +
+                                    if (uiState.iceSuspicionPercent > 0) {
+                                        " (" + uiState.iceSuspicionPercent + "%)"
+                                    } else {
+                                        ""
+                                    },
+                                color = iceThreatColor,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 9.sp,
+                                modifier = Modifier.testTag("ice_threat_hud")
+                            )
+                        }
+                        ProgressBarRetro(
+                            current = uiState.iceSuspicionPercent,
+                            max = 100,
+                            color = iceThreatColor
                         )
 
                         // Credits & Upgrades
