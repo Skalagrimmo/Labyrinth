@@ -80,6 +80,15 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import com.example.ui.GameUiState
+import com.example.core.model.NetrunnerClass
+import com.example.core.model.Cyberware
+import com.example.core.model.ActiveStatusEffect
+import com.example.core.model.Program
+import com.example.core.model.CellType
+import com.example.core.model.Zone
+import com.example.core.model.CyberWeather
+import com.example.core.model.Enemy
+import com.example.core.model.LogType
 
 fun Modifier.repeatingClickable(
     enabled: Boolean = true,
@@ -160,9 +169,9 @@ fun TerminalScreen(
                     val ny = py + dy
                     if (ny in maze.indices && nx in maze[0].indices) {
                         val cell = maze[ny][nx]
-                        if (cell == com.example.data.CellType.VIRUS_NODE ||
-                            cell == com.example.data.CellType.ENCRYPTED_PORTAL ||
-                            cell == com.example.data.CellType.HACKABLE_TERMINAL) {
+                        if (cell == com.example.core.model.CellType.VIRUS_NODE ||
+                            cell == com.example.core.model.CellType.ENCRYPTED_PORTAL ||
+                            cell == com.example.core.model.CellType.HACKABLE_TERMINAL) {
                             val dist = Math.hypot(dx.toDouble(), dy.toDouble())
                             if (dist < minDistance) {
                                 minDistance = dist
@@ -237,7 +246,7 @@ fun TerminalScreen(
             .fillMaxSize()
             .drawWithContent {
                 drawContent()
-                if (uiState.activeWeather == com.example.data.CyberWeather.COLD_SPOT) {
+                if (uiState.activeWeather == com.example.core.model.CyberWeather.COLD_SPOT) {
                     drawRect(
                         color = Color(0xFF4B617F).copy(alpha = 0.50f),
                         blendMode = androidx.compose.ui.graphics.BlendMode.Color
@@ -749,7 +758,7 @@ fun TerminalHeader(
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 val locationText = when (uiState.currentZone) {
-                    com.example.data.Zone.BUILDING -> {
+                    com.example.core.model.Zone.BUILDING -> {
                         val floorTheme = when (uiState.buildingFloor) {
                             1 -> "Residential"
                             2 -> "Office"
@@ -759,8 +768,8 @@ fun TerminalHeader(
                         }
                         "рџЏў Floor ${uiState.buildingFloor}: $floorTheme"
                     }
-                    com.example.data.Zone.COLLECTORS -> "рџЊЂ TUNNELS L${uiState.collectorsLevel}"
-                    com.example.data.Zone.CITY -> {
+                    com.example.core.model.Zone.COLLECTORS -> "рџЊЂ TUNNELS L${uiState.collectorsLevel}"
+                    com.example.core.model.Zone.CITY -> {
                         val district = when (uiState.cityDistrictIndex) {
                             0 -> "Neon District"
                             1 -> "Tech Plaza"
@@ -1793,7 +1802,7 @@ fun CyberneticsClinicView(
 // Sub-Composable: Exploration Screen HUD
 // ==========================================
 @Composable
-fun StatusEffectBadge(effect: com.example.data.ActiveStatusEffect) {
+fun StatusEffectBadge(effect: com.example.core.model.ActiveStatusEffect) {
     val badgeColor = Color(effect.type.colorHex)
     Box(
         modifier = Modifier
@@ -2088,7 +2097,7 @@ fun CombatView(
                         }
                     }
                     val standCell = uiState.maze.getOrNull(uiState.gridY)?.getOrNull(uiState.gridX)
-                    if (standCell == com.example.data.CellType.ELEVATED_BALCONY) {
+                    if (standCell == com.example.core.model.CellType.ELEVATED_BALCONY) {
                         Box(
                             modifier = Modifier
                                 .background(CyberAmber.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
@@ -2097,7 +2106,7 @@ fun CombatView(
                         ) {
                             Text("вњЁ BALCONY (+25% ATK)", color = CyberAmber, fontFamily = FontFamily.Monospace, fontSize = 7.5.sp, fontWeight = FontWeight.Bold)
                         }
-                    } else if (standCell == com.example.data.CellType.GRAVITY_SLOPE) {
+                    } else if (standCell == com.example.core.model.CellType.GRAVITY_SLOPE) {
                         Box(
                             modifier = Modifier
                                 .background(CyberCyan.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
@@ -2869,8 +2878,8 @@ fun TelemetryDashboardView(uiState: GameUiState) {
                     val midY = height / 2f
 
                     val isCombat = uiState.gameState != GameState.EXPLORATION
-                    val isWeatherFlare = uiState.activeWeather == com.example.data.CyberWeather.DATA_STORM
-                    val isWeatherCold = uiState.activeWeather == com.example.data.CyberWeather.COLD_SPOT
+                    val isWeatherFlare = uiState.activeWeather == com.example.core.model.CyberWeather.DATA_STORM
+                    val isWeatherCold = uiState.activeWeather == com.example.core.model.CyberWeather.COLD_SPOT
                     val integrityFraction = uiState.integrity.toFloat() / uiState.maxIntegrity.coerceAtLeast(1)
 
                     val baseColor = when {
@@ -3027,7 +3036,7 @@ fun TelemetryDashboardView(uiState: GameUiState) {
                 }
 
                 // LED 2: WTR
-                val isWeatherClear = uiState.activeWeather == com.example.data.CyberWeather.CLEAR
+                val isWeatherClear = uiState.activeWeather == com.example.core.model.CyberWeather.CLEAR
                 Row(
                     modifier = Modifier
                         .weight(1f)

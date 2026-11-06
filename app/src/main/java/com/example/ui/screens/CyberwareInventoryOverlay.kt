@@ -63,6 +63,7 @@ import com.example.data.ItemRarity
 import com.example.ui.GameViewModel
 import com.example.ui.theme.*
 import com.example.ui.GameUiState
+import com.example.core.model.Cyberware
 
 @Composable
 fun CyberwareInventoryOverlay(
