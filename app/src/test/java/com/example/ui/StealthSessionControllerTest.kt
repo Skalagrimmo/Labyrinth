@@ -1,6 +1,7 @@
 package com.example.ui
 
 import com.example.core.model.CellType
+import com.example.core.model.LogType
 import com.example.data.GameSessionMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
