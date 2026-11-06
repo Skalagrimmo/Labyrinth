@@ -80,6 +80,7 @@ dependencies {
   implementation(project(":core:render"))
   implementation(project(":core:game"))
   implementation(project(":core:audio"))
+  implementation(project(":feature:skilltree"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
