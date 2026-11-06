@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.audio.CyberSoundEffectsManager
+import com.example.audio.GameAudioPlayer
 import com.example.data.CosmeticTheme
 import com.example.data.LogType
 import com.example.data.PerformanceBuff
@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.update
 
 class CosmeticVaultManager(
     private val _uiState: MutableStateFlow<GameUiState>,
-    private val soundManager: CyberSoundEffectsManager,
+    private val soundManager: GameAudioPlayer,
     private val onLog: (String, LogType) -> Unit
 ) {
     private val uiState get() = _uiState.value

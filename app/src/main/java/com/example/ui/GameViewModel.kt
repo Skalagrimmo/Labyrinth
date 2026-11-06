@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val soundManager = com.example.audio.CyberSoundEffectsManager.getInstance(application)
+    private val gameAudio = com.example.audio.CyberGameAudioPlayer(soundManager)
 
     private val _bgmEnabled = mutableStateOf(!soundManager.isMuted())
     val bgmEnabled: Boolean get() = _bgmEnabled.value
@@ -56,7 +57,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val combatManager = CombatManager(
         _uiState = _uiState,
-        soundManager = soundManager,
+        soundManager = gameAudio,
         scope = viewModelScope,
         onLog = ::addLog,
         onSave = ::saveGame,
@@ -68,7 +69,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val explorationManager = ExplorationManager(
         _uiState = _uiState,
-        soundManager = soundManager,
+        soundManager = gameAudio,
         scope = viewModelScope,
         onLog = ::addLog,
         onTriggerCombat = ::triggerCombat,
@@ -92,7 +93,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val inventoryManager = InventoryManager(
         _uiState = _uiState,
-        soundManager = soundManager,
+        soundManager = gameAudio,
         repository = repository,
         scope = viewModelScope,
         onLog = ::addLog,
@@ -115,7 +116,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
 
     private val cosmeticVaultManager = CosmeticVaultManager(
         _uiState = _uiState,
-        soundManager = soundManager,
+        soundManager = gameAudio,
         onLog = ::addLog
     )
 

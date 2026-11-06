@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.audio.CyberSoundEffectsManager
+import com.example.audio.GameAudioPlayer
 import com.example.data.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -10,7 +10,7 @@ import kotlinx.coroutines.launch
 
 class InventoryManager(
     private val _uiState: MutableStateFlow<GameUiState>,
-    private val soundManager: CyberSoundEffectsManager,
+    private val soundManager: GameAudioPlayer,
     private val repository: GameRepository,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,

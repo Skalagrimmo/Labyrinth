@@ -1,6 +1,6 @@
 package com.example.ui
 
-import com.example.data.LogType
+import com.example.core.model.LogType
 import com.example.data.SkillBranch
 import com.example.data.SkillTree
 import kotlinx.coroutines.flow.MutableStateFlow
