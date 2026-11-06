@@ -2,13 +2,8 @@ package com.example.ui
 
 import com.example.data.CombatRoundClock
 import com.example.data.GameState
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
 
 /**
  * Real-time-with-pause combat clock controller for the existing combat flow.
@@ -28,35 +23,45 @@ import kotlinx.coroutines.launch
  * combat actions the HUD buttons use, which are gated by
  * isCombatInputEnabled. No changes to CombatManager.
  *
- * The ticker is NOT started on construction: GameViewModel starts it when a
- * combat actually begins (triggerCombat) and it stops itself when the combat
- * is over, so no coroutine spins during menus or UI tests.
+ * The controller rides the shared WorldClockTicker (d6 slice 5): it
+ * subscribes as a world-tick consumer on construction and never owns a
+ * coroutine loop. start() arms the combat clock and makes sure the shared
+ * loop runs; when the encounter is over the controller disengages - resets
+ * the shared clock and publishes the reset fields exactly once - while the
+ * shared world loop keeps ticking exploration.
  */
 class CombatClockController(
-    private val scope: CoroutineScope,
+    private val ticker: WorldClockTicker,
     private val _uiState: MutableStateFlow<GameUiState>,
     private val onAutoAction: (QueuedCombatActionType) -> Unit
 ) {
     private var clock: CombatRoundClock.ClockState<QueuedCombatAction> = CombatRoundClock.start()
-    private var tickerJob: Job? = null
+    private var engaged: Boolean = false
     private var armedPlayerTurnRound: Int = -1
     private var windowArmed: Boolean = false
     private var lastPlayerActionsCount: Int = -1
     private var nextActionId: Long = 0L
 
+    init {
+        // Shared world-clock consumer (d6 slice 5): no private loop - the
+        // GameViewModel-owned WorldClockTicker dispatches every world tick.
+        ticker.subscribe(this::tickOnce)
+    }
+
     fun start() {
-        if (tickerJob?.isActive == true) return
-        tickerJob = scope.launch {
-            while (isActive) {
-                delay(TICK_MILLIS)
-                tickOnce()
-            }
-        }
+        // Arms the combat clock and makes sure the shared world loop runs
+        // (idempotent: exploration usually started it already).
+        engaged = true
+        ticker.start()
     }
 
     fun stop() {
-        tickerJob?.cancel()
-        tickerJob = null
+        // Disengages the combat clock (the encounter is over): resets the
+        // shared clock state and publishes the reset fields ONCE, so a calm
+        // exploration floor never churns GameUiState tick after tick. The
+        // shared world loop keeps running - it is not stopped here.
+        if (!engaged) return
+        engaged = false
         armedPlayerTurnRound = -1
         windowArmed = false
         lastPlayerActionsCount = -1
@@ -87,15 +92,15 @@ class CombatClockController(
         publish()
     }
 
-    private fun tickOnce() {
+    internal fun tickOnce() {
         val state = _uiState.value
         val inCombat = state.activeEnemy != null &&
             state.gameState != GameState.EXPLORATION &&
             state.screen != ActiveScreen.GAME_OVER
         if (!inCombat) {
-            // Combat concluded (victory, flee or defeat): stop the world
-            // clock entirely instead of spinning while the player reads the
-            // aftermath. The next combat re-starts it via start().
+            // Combat concluded (victory, flee or defeat): disengage the
+            // combat clock once; the shared world loop keeps ticking the
+            // exploration phase and the next combat re-arms via start().
             stop()
             return
         }
@@ -128,7 +133,7 @@ class CombatClockController(
                 }
             }
             if (windowArmed) {
-                when (val paced = CombatRoundClock.tick(clock, TICK_MILLIS)) {
+                when (val paced = CombatRoundClock.tick(clock, WorldClockTicker.TICK_MILLIS)) {
                     is CombatRoundClock.TickResult.Running -> clock = paced.state
                     is CombatRoundClock.TickResult.RoundElapsed -> {
                         clock = paced.state
@@ -155,9 +160,5 @@ class CombatClockController(
                 combatActionQueue = clock.queue.map { it.label }
             )
         }
-    }
-
-    companion object {
-        const val TICK_MILLIS: Long = 100L
     }
 }
