@@ -40,7 +40,7 @@ class WorldClockTickerTest {
     fun duplicateSubscriptionsDoNotDoubleDispatch() = runBlocking {
         val ticks = AtomicInteger(0)
         val ticker = WorldClockTicker(CoroutineScope(Dispatchers.Default), tickMillis = 5L)
-        val consumer = { ticks.incrementAndGet() }
+        val consumer: () -> Unit = { ticks.incrementAndGet() }
         ticker.subscribe(consumer)
         ticker.subscribe(consumer)
         ticker.start()
