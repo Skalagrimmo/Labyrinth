@@ -833,6 +833,28 @@ fun ExplorationView(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Button(
+                                onClick = { viewModel.toggleSneakMode() },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (uiState.isSneaking) CyberCyan.copy(alpha = 0.6f) else CyberMutedGreen.copy(alpha = 0.5f),
+                                    disabledContainerColor = CyberMutedGreen.copy(alpha = 0.25f)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(26.dp)
+                                    .testTag("btn_sneak_toggle")
+                            ) {
+                                Text(
+                                    text = if (uiState.isSneaking) "SNEAK: ON" else "SNEAK: OFF",
+                                    color = Color.White,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Button(
                                 onClick = {
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     viewModel.interact()
