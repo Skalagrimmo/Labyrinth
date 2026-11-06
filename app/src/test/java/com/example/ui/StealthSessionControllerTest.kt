@@ -229,6 +229,47 @@ class StealthSessionControllerTest {
         assertTrue(detections.isEmpty())
     }
 
+    @Test
+    fun hudTracksRisingSuspicionUpToAlert() {
+        // Inside the vision cone the gauge climbs: after the first tick the HUD
+        // already shows a non-zero trace while the ICE is still calm.
+        val (controller, flow) = newController(px = 7)
+        controller.tickOnce()
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceThreatState)
+        assertTrue(
+            "HUD must surface suspicion after one tick, got " + flow.value.iceSuspicionPercent,
+            flow.value.iceSuspicionPercent in 1..24
+        )
+        // Full detection pins the gauge at 100 and the threat state at ALERTED.
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 60) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue(detections.isNotEmpty())
+        assertEquals(100, flow.value.iceSuspicionPercent)
+        assertEquals(StealthGuardState.ALERTED, flow.value.iceThreatState)
+    }
+
+    @Test
+    fun hudStaysCalmWhileOutsideTheVisionCone() {
+        val (controller, flow) = newController(px = 1)
+        repeat(40) { controller.tickOnce() }
+        assertEquals(0, flow.value.iceSuspicionPercent)
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceThreatState)
+    }
+
+    @Test
+    fun hudReflectsDecoyNoiseOnTheSuspicionGauge() {
+        // A chaff detonation pins the gauge at the noise-driven suspicion
+        // (40 x intensity, capped at 85) and flips the threat state.
+        val (controller, flow) = newController(px = 3, sneaking = true)
+        controller.emitNoiseAt(cellX = 7, cellY = 1, radiusCells = 6f, intensity = 1f)
+        controller.tickOnce()
+        assertEquals(40, flow.value.iceSuspicionPercent)
+        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceThreatState)
+    }
+
     private fun ticksUntilDetection(sneaking: Boolean, mazeGrid: Array<Array<CellType>>?): Int {
         val (controller, _) = newController(px = 7, sneaking = sneaking, mazeGrid = mazeGrid)
         var ticks = 0

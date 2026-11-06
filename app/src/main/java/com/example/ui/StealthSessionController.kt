@@ -10,11 +10,13 @@ import com.example.stealth.LabyrinthStealthSession
 import com.example.stealth.NoisePulse
 import com.example.stealth.StealthEventType
 import com.example.stealth.StealthGuard
+import com.example.stealth.StealthGuardState
 import com.example.stealth.StealthPosition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -142,6 +144,9 @@ class StealthSessionController(
                 )
             }
         }
+
+        // Slice 4: mirror the sector's threat level onto the HUD state.
+        publishHud(stealth)
     }
 
     /** Footstep stimulus from movement input: fully suppressed while sneaking. */
@@ -296,6 +301,30 @@ class StealthSessionController(
             }
         session = RealTimeGameSession(stealth)
         combatSeen = false
+        publishHud(stealth)
+    }
+
+    /**
+     * Publishes the ICE threat summary for the exploration HUD (slice 4): the
+     * highest suspicion gauge across the sector's ICE units plus the state of
+     * the most threatening one. Equal values are kept as-is so a calm sector
+     * never churns the UI state at the world clock's 10 Hz - StateFlow emits
+     * only when the quantized gauge or the threat state actually moves.
+     */
+    private fun publishHud(stealth: LabyrinthStealthSession) {
+        val guards = stealth.snapshot().guards
+        val percent = guards.maxOfOrNull { it.suspicion.toInt().coerceIn(0, 100) } ?: 0
+        val threatState = guards
+            .maxByOrNull { THREAT_STATE_RANK[it.state] ?: 0 }
+            ?.state
+            ?: StealthGuardState.PATROLLING
+        _uiState.update { state ->
+            if (state.iceSuspicionPercent == percent && state.iceThreatState == threatState) {
+                state
+            } else {
+                state.copy(iceSuspicionPercent = percent, iceThreatState = threatState)
+            }
+        }
     }
 
     private fun newGuard(id: String, x: Int, y: Int, levelId: Int, levelSeed: Long): StealthGuard =
@@ -327,6 +356,13 @@ class StealthSessionController(
             CellType.WALL,
             CellType.SECRET_WALL,
             CellType.TERMINAL_DOOR
+        )
+        private val THREAT_STATE_RANK: Map<StealthGuardState, Int> = mapOf(
+            StealthGuardState.PATROLLING to 0,
+            StealthGuardState.DISABLED to 0,
+            StealthGuardState.INVESTIGATING to 1,
+            StealthGuardState.SEARCHING to 2,
+            StealthGuardState.ALERTED to 3
         )
         private const val MAX_PENDING_NOISE: Int = 16
         private val COVER_CELL_TYPES: Set<CellType> = setOf(

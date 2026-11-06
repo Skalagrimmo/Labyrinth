@@ -21,6 +21,7 @@ import com.example.data.InventorySortOption
 import com.example.data.MultiFloorGridLevel
 import com.example.data.TurnActionRecord
 import com.example.data.TurnPhase
+import com.example.stealth.StealthGuardState
 
     data class GameUiState(
         val screen: ActiveScreen = ActiveScreen.START_MENU,
@@ -163,5 +164,7 @@ import com.example.data.TurnPhase
         val combatClockFrozen: Boolean = false,
         val combatActionQueue: List<String> = emptyList(),
         val environmentalEventsEncountered: Int = 0,
-        val isSneaking: Boolean = false
+        val isSneaking: Boolean = false,
+        val iceSuspicionPercent: Int = 0,
+        val iceThreatState: StealthGuardState = StealthGuardState.PATROLLING
     )
