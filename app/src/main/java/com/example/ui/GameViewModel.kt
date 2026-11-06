@@ -14,6 +14,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.random.Random
 import java.util.concurrent.ConcurrentHashMap
+import com.example.core.model.NetrunnerClass
+import com.example.core.model.Cyberware
+import com.example.core.model.StatusEffectType
+import com.example.core.model.Program
+import com.example.core.model.Direction
+import com.example.core.model.CellType
+import com.example.core.model.Zone
+import com.example.core.model.DigitalMutation
+import com.example.core.model.Enemy
+import com.example.core.model.LogMessage
+import com.example.core.model.LogType
 
 class GameViewModel(application: Application) : AndroidViewModel(application) {
 
