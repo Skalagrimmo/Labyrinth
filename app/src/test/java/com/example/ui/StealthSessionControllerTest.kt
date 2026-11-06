@@ -8,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -231,23 +232,22 @@ class StealthSessionControllerTest {
 
     @Test
     fun hudSuspicionTracksTheMostSuspiciousGuard() {
-        // Inside the vision cone the published HUD slice mirrors the guard's
-        // rising suspicion; once the runner slips behind the node, the guard
-        // walks to the last known cell, sweeps it, and the HUD cools to zero.
+        // TEMPORARY DIAGNOSTIC: dump the per-tick guard/HUD trajectory so the
+        // CI failure detail shows the real suspicion curve (revert this).
         val (controller, flow) = newController(px = 7)
-        repeat(6) { controller.tickOnce() }
-        assertEquals(
-            controller.peekStealthSession()!!.snapshot().guards.first().suspicion,
-            flow.value.iceSuspicion,
-            0.0001f
-        )
-        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
-        assertTrue(flow.value.iceSuspicion > 0f)
-
-        flow.value = flow.value.copy(gridX = 1)
-        repeat(120) { controller.tickOnce() }
-        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
-        assertEquals(StealthGuardState.PATROLLING, flow.value.iceGuardState)
+        val trace = StringBuilder()
+        repeat(12) { i ->
+            controller.tickOnce()
+            val g = controller.peekStealthSession()!!.snapshot().guards.first()
+            trace.append("tick=").append(i + 1)
+                .append(" pos=").append(g.position.x).append(',').append(g.position.y)
+                .append(" facing=").append(g.facingAngleRadians)
+                .append(" susp=").append(g.suspicion)
+                .append(" st=").append(g.state)
+                .append(" pub=").append(flow.value.iceSuspicion).append('/').append(flow.value.iceGuardState)
+                .append('\n')
+        }
+        fail(trace.toString())
     }
 
     @Test
