@@ -27,6 +27,8 @@ dependencies {
   implementation(project(":core:model"))
   implementation(project(":core:engine"))
   implementation(project(":core:persistence"))
+  implementation(project(":core:content"))
+  implementation(project(":core:game"))
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
   implementation(libs.kotlinx.coroutines.core)
