@@ -2,7 +2,7 @@ package com.example.ui
 
 import com.example.audio.GameAudioPlayer
 import com.example.data.CosmeticTheme
-import com.example.data.LogType
+import com.example.core.model.LogType
 import com.example.data.PerformanceBuff
 import com.example.data.TerminalPromptStyle
 import kotlinx.coroutines.flow.MutableStateFlow

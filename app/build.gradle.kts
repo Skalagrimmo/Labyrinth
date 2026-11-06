@@ -82,6 +82,8 @@ dependencies {
   implementation(project(":core:audio"))
   implementation(project(":feature:skilltree"))
   implementation(project(":feature:combat"))
+  implementation(project(":feature:exploration"))
+  implementation(project(":feature:cosmetic"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
