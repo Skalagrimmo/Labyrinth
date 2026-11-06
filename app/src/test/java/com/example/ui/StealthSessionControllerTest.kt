@@ -229,6 +229,48 @@ class StealthSessionControllerTest {
         assertTrue(detections.isEmpty())
     }
 
+    @Test
+    fun hudSuspicionTracksTheMostSuspiciousGuard() {
+        // Inside the vision cone the published HUD slice mirrors the guard's
+        // rising suspicion; once the runner slips behind the node, the guard
+        // walks to the last known cell, sweeps it, and the HUD cools to zero.
+        val (controller, flow) = newController(px = 7)
+        repeat(6) { controller.tickOnce() }
+        assertEquals(
+            controller.peekStealthSession()!!.snapshot().guards.first().suspicion,
+            flow.value.iceSuspicion,
+            0.0001f
+        )
+        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
+        assertTrue(flow.value.iceSuspicion > 0f)
+
+        flow.value = flow.value.copy(gridX = 1)
+        repeat(120) { controller.tickOnce() }
+        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceGuardState)
+    }
+
+    @Test
+    fun hudStaysPassiveWhileTheRunnerIsHidden() {
+        // Outside the vision cone the world tick publishes a dormant HUD:
+        // zero suspicion, PATROLLING state, tick after tick.
+        val (controller, flow) = newController(px = 1)
+        repeat(40) { controller.tickOnce() }
+        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceGuardState)
+    }
+
+    @Test
+    fun hudReflectsDecoyInvestigation() {
+        // A chaff detonation raises the published suspicion to the noise
+        // floor (40 x intensity) and flips the HUD state to INVESTIGATING.
+        val (controller, flow) = newController(px = 3, sneaking = true)
+        controller.emitNoiseAt(cellX = 7, cellY = 1, radiusCells = 6f, intensity = 1f)
+        controller.tickOnce()
+        assertEquals(40f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
+    }
+
     private fun ticksUntilDetection(sneaking: Boolean, mazeGrid: Array<Array<CellType>>?): Int {
         val (controller, _) = newController(px = 7, sneaking = sneaking, mazeGrid = mazeGrid)
         var ticks = 0

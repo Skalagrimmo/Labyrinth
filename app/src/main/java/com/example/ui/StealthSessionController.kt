@@ -10,11 +10,14 @@ import com.example.stealth.LabyrinthStealthSession
 import com.example.stealth.NoisePulse
 import com.example.stealth.StealthEventType
 import com.example.stealth.StealthGuard
+import com.example.stealth.StealthGuardState
 import com.example.stealth.StealthPosition
+import com.example.stealth.StealthSessionFrame
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -39,6 +42,8 @@ import kotlinx.coroutines.launch
  *  - after a concluded combat the KOTOR post-combat policy applies
  *    (ALERTED guards de-escalate to INVESTIGATING/SEARCHING with the player's
  *    last known position) and exploration resumes on the same stealth session;
+ *  - the highest ICE suspicion of the current floor is published into
+ *  GameUiState (iceSuspicion + iceGuardState) for the exploration HUD;
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -129,6 +134,7 @@ class StealthSessionController(
             isInCover = isInCover(state),
             noisePulses = noisePulses
         )
+        publishHud(result.stealthFrame)
         if (result.enteredCombat) {
             combatSeen = true
             val detection = result.detection
@@ -228,6 +234,27 @@ class StealthSessionController(
         return maze[y][x] in COVER_CELL_TYPES
     }
 
+    /**
+     * Publishes the ICE threat HUD slice of GameUiState: the highest suspicion
+     * among the active guards of the current floor plus their most advanced
+     * hunt state. A pure read of the shared simulation frame - no extra
+     * controller state and no gameplay effects. Unchanged values keep the
+     * old GameUiState instance so a calm floor does not trigger recomposition.
+     */
+    private fun publishHud(frame: StealthSessionFrame?) {
+        if (frame == null) return
+        val activeGuards = frame.guards.filter { it.state != StealthGuardState.DISABLED }
+        val suspicion = activeGuards.maxOfOrNull { it.suspicion } ?: 0f
+        val guardState = activeGuards
+            .maxByOrNull { it.state.ordinal }
+            ?.state
+            ?: StealthGuardState.PATROLLING
+        _uiState.update { s ->
+            if (s.iceSuspicion == suspicion && s.iceGuardState == guardState) s
+            else s.copy(iceSuspicion = suspicion, iceGuardState = guardState)
+        }
+    }
+
     private fun drainNoise(): List<NoisePulse> {
         val pulses = pendingNoise.toList()
         pendingNoise.clear()
@@ -294,6 +321,7 @@ class StealthSessionController(
                     LogType.INFO
                 )
             }
+        publishHud(frame)
         session = RealTimeGameSession(stealth)
         combatSeen = false
     }
