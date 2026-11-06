@@ -45,13 +45,26 @@ jobs:
         with:
           script: |
             const fs = require('fs');
+            const { execSync } = require('child_process');
             const lines = [];
             for (const f of ['gradle-test.log', 'gradle-lint.log', 'gradle-assemble.log']) {
               if (!fs.existsSync(f)) continue;
               const text = fs.readFileSync(f, 'utf8');
-              const interesting = text.split('\n').filter(l => l.startsWith('e: ') || l.includes('FAILED') || l.includes('What went wrong') || l.includes('> Task') && l.includes('FAILED'));
+              const interesting = text.split('\n').filter(l => l.startsWith('e: ') || l.includes('FAILED') || l.includes('What went wrong'));
               for (const l of interesting.slice(0, 120)) lines.push('[' + f + '] ' + l);
             }
+            try {
+              const out = execSync("find . -path '*/test-results/*' -name '*.xml' | xargs grep -l '<failure' 2>/dev/null || true", { encoding: 'utf8' });
+              const files = out.split('\n').filter(Boolean);
+              for (const f of files.slice(0, 12)) {
+                const text = fs.readFileSync(f, 'utf8');
+                const fm = text.match(/<failure[^>]*message="([^"]*)"/);
+                const body = text.match(/<failure[^>]*>([\s\S]*?)<\/failure>/);
+                lines.push('[FAILDETAIL] ' + f);
+                if (fm) lines.push('[FAILDETAIL] message: ' + fm[1].substring(0, 800));
+                if (body) lines.push('[FAILDETAIL] body: ' + body[1].replace(/&#10;/g, '\n').replace(/&#9;/g, ' ').substring(0, 2500));
+              }
+            } catch (e) { lines.push('[FAILDETAIL] extraction failed: ' + e.message); }
             if (lines.length === 0) lines.push('No interesting lines found');
             const body = '## CI Diagnostics\n```\n' + lines.join('\n') + '\n```';
             await github.rest.issues.createComment({
