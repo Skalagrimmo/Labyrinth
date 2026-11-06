@@ -37,8 +37,8 @@ class ExplorationManager(
     // Movement & Exploration Actions
     // ----------------------------------------------------
 
-    fun moveForward() {
-        if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
+    fun moveForward(): Boolean? {
+        if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return null
 
         val state = uiState
         val movement = ExplorationMovementRules.resolveMove(
@@ -79,11 +79,13 @@ class ExplorationManager(
             }
         } else {
             addLog("ACCESS DENIED: Physical Firewall Blocked.", LogType.ERROR)
+            return false
         }
+        return true
     }
 
-    fun moveBackward() {
-        if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return
+    fun moveBackward(): Boolean? {
+        if (uiState.screen != ActiveScreen.EXPLORATION || uiState.gameState != GameState.EXPLORATION) return null
 
         val state = uiState
         val movement = ExplorationMovementRules.resolveMove(
@@ -122,7 +124,9 @@ class ExplorationManager(
             }
         } else {
             addLog("ACCESS DENIED: Solid Core Boundary.", LogType.ERROR)
+            return false
         }
+        return true
     }
 
     fun turnLeft() {

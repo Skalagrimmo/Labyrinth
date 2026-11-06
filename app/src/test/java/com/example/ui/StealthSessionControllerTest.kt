@@ -168,6 +168,66 @@ class StealthSessionControllerTest {
         )
     }
 
+    @Test
+    fun bumpNoiseIsHeardEvenWhileSneaking() {
+        // Sneaking runner one cell west of the guard, fully behind its cone:
+        // silence alone keeps the ICE patrol calm.
+        val (controller, _) = newController(px = 4, sneaking = true)
+        controller.emitFootstep()
+        repeat(3) { controller.tickOnce() }
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+
+        // Crashing into the firewall is clumsy, not loud: the silent protocol
+        // cannot suppress the scrape, and the guard hugging that wall hears it.
+        controller.emitBump()
+        controller.tickOnce()
+        assertEquals(
+            StealthGuardState.INVESTIGATING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun decoyThrowPullsGuardsTowardTheLandingCell() {
+        // The decoy lands east of the guard: a tiny pulse there goes unheard,
+        // a full-power chaff detonation pulls the ICE off its patrol.
+        val (controller, _) = newController(px = 3, sneaking = true)
+        controller.emitNoiseAt(cellX = 7, cellY = 1, radiusCells = 0.5f, intensity = 1f)
+        repeat(2) { controller.tickOnce() }
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+
+        controller.emitNoiseAt(cellX = 7, cellY = 1, radiusCells = 6f, intensity = 1f)
+        controller.tickOnce()
+        assertEquals(
+            StealthGuardState.INVESTIGATING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        // The phantom signature diverts the ICE: the runner stays undetected.
+        repeat(3) { controller.tickOnce() }
+        assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun decoyLandingCellIsClampedIntoTheMaze() {
+        // A throw aimed far beyond the sector edge clamps onto the border cell
+        // and still detonates there.
+        val (controller, _) = newController(px = 3, sneaking = true)
+        controller.emitNoiseAt(cellX = 99, cellY = 99, radiusCells = 6f, intensity = 1f)
+        controller.tickOnce()
+        assertEquals(
+            StealthGuardState.INVESTIGATING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        assertTrue(detections.isEmpty())
+    }
+
     private fun ticksUntilDetection(sneaking: Boolean, mazeGrid: Array<Array<CellType>>?): Int {
         val (controller, _) = newController(px = 7, sneaking = sneaking, mazeGrid = mazeGrid)
         var ticks = 0

@@ -151,6 +151,16 @@ class StealthSessionController(
     }
 
     /**
+     * Accidental wall bump (a blocked move): a short scrape against the
+     * firewall that the silent protocol cannot suppress - it is clumsiness,
+     * not a footstep. Tiny radius: only ICE units hugging the crashed wall
+     * will pick it up.
+     */
+    fun emitBump() {
+        emitNoise(radiusCells = BUMP_RADIUS_CELLS, intensity = BUMP_INTENSITY)
+    }
+
+    /**
      * Emits a one-shot noise stimulus (radar pings, interactions). Reaches every
      * guard within radiusCells on the current level at the next world tick.
      */
@@ -160,6 +170,30 @@ class StealthSessionController(
         pendingNoise.addLast(
             NoisePulse(
                 position = StealthPosition(state.gridX + 0.5f, state.gridY + 0.5f, state.level),
+                radius = radiusCells,
+                intensity = intensity
+            )
+        )
+        while (pendingNoise.size > MAX_PENDING_NOISE) pendingNoise.removeFirst()
+    }
+
+    /**
+     * Emits a one-shot noise pulse at an arbitrary cell of the current level
+     * (chaff decoy throws). The landing cell is clamped into the maze, so a
+     * throw aimed past the sector edge still detonates on the border cell -
+     * ICE units inside the radius investigate the phantom signal instead of
+     * the runner position.
+     */
+    fun emitNoiseAt(cellX: Int, cellY: Int, radiusCells: Float, intensity: Float) {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) return
+        val maze = state.maze
+        if (maze.isEmpty()) return
+        val x = cellX.coerceIn(0, maze[0].lastIndex)
+        val y = cellY.coerceIn(0, maze.lastIndex)
+        pendingNoise.addLast(
+            NoisePulse(
+                position = StealthPosition(x + 0.5f, y + 0.5f, state.level),
                 radius = radiusCells,
                 intensity = intensity
             )
@@ -269,6 +303,12 @@ class StealthSessionController(
         const val TICK_MILLIS: Long = 100L
         const val FOOTSTEP_RADIUS_CELLS: Float = 2.5f
         const val FOOTSTEP_INTENSITY: Float = 0.35f
+        const val BUMP_RADIUS_CELLS: Float = 1.5f
+        const val BUMP_INTENSITY: Float = 0.25f
+        const val DECOY_THROW_CELLS: Int = 4
+        const val DECOY_RADIUS_CELLS: Float = 6f
+        const val DECOY_INTENSITY: Float = 1f
+        const val DECOY_RAM_COST: Int = 1
         private const val MAX_PENDING_NOISE: Int = 16
         private val COVER_CELL_TYPES: Set<CellType> = setOf(
             CellType.SCAN_CACHE,
