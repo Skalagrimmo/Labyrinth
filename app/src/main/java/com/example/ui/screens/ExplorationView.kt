@@ -35,6 +35,7 @@ import com.example.ui.components.CombatRoundClockHud
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.theme.*
 import com.example.ui.GameUiState
+import com.example.stealth.StealthGuardState
 @Composable
 fun ExplorationView(
     uiState: GameUiState,
@@ -717,6 +718,28 @@ fun ExplorationView(
                             current = uiState.ram,
                             max = uiState.maxRam,
                             color = CyberPink
+                        )
+
+                        // ICE Threat Indicator (RTwP stealth HUD): the highest
+                        // suspicion among the floor's ICE units plus their most
+                        // advanced hunt state, published by the world clock.
+                        val (iceHuntLabel, iceHuntColor) = when (uiState.iceGuardState) {
+                            StealthGuardState.ALERTED -> "TRACE LOCKED" to CyberPink
+                            StealthGuardState.SEARCHING -> "SWEEPING" to CyberAmber
+                            StealthGuardState.INVESTIGATING -> "PROBING" to CyberAmber
+                            else -> "PASSIVE" to CyberMutedGreen
+                        }
+                        Text(
+                            text = "ICE THREAT: ${uiState.iceSuspicion.toInt()}% [$iceHuntLabel]",
+                            color = iceHuntColor,
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 9.sp
+                        )
+                        ProgressBarRetro(
+                            current = uiState.iceSuspicion.toInt().coerceIn(0, 100),
+                            max = 100,
+                            color = iceHuntColor,
+                            modifier = Modifier.testTag("hud_ice_suspicion")
                         )
 
                         // Credits & Upgrades
