@@ -14,7 +14,7 @@ import com.example.core.model.StatusEffectType
  *
  * The registry is a pure object (no Android dependencies) so it can be unit-tested and
  * reused anywhere. Loading from an actual Android asset is done by the
- * app-level ContentModLoader helper (Android module).
+ * platform-level ContentModLoader helper (:core:platform).
  *
  * Field reference (all keys case-insensitive):
  *
