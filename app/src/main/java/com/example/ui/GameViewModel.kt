@@ -340,7 +340,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("COMBAT: 'attack', 'defend', 'flee', 'scan'", LogType.INFO)
                 addLog("INVENTORY: 'inventory', 'use <item>', 'equip <item>', 'unequip <slot>'", LogType.INFO)
                 addLog("SYSTEM: 'status', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
-                addLog("STEALTH: 'sneak' (toggle silent movement protocol)", LogType.INFO)
+                addLog("STEALTH: 'sneak' (toggle silent movement), 'throw' (chaff decoy ahead, 1 RAM)", LogType.INFO)
                 addLog("SKILLS: 'skilltree', 'skill learn <HACKING|COMBAT|ENGINEERING> <#>', 'skill points'", LogType.INFO)
                 addLog("TUTORIAL: 'tutorial next', 'tutorial skip'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>'", LogType.INFO)
@@ -398,6 +398,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "seed" -> { addLog("LEVEL SEED: ${state.levelSeed}", LogType.INFO); addLog("Share this seed with friends to play the same dungeon!", LogType.INFO) }
             "menu" -> persistenceManager.returnToStartMenu()
             "sneak", "stealth", "crouch" -> toggleSneakMode()
+            "throw", "decoy", "chaff" -> throwDecoy()
             "clear" -> { _uiState.update { it.copy(logFeed = emptyList()) }; addLog("Log console cleared.", LogType.INFO) }
             "tutorial", "helpme", "assist" -> {
                 when (parts.getOrNull(1)?.lowercase()) {
@@ -410,8 +411,21 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun moveForward() { explorationManager.moveForward(); stealthSessionController.emitFootstep() }
-    fun moveBackward() { explorationManager.moveBackward(); stealthSessionController.emitFootstep() }
+    fun moveForward() {
+        when (explorationManager.moveForward()) {
+            true -> stealthSessionController.emitFootstep()
+            false -> stealthSessionController.emitBump()
+            null -> {}
+        }
+    }
+
+    fun moveBackward() {
+        when (explorationManager.moveBackward()) {
+            true -> stealthSessionController.emitFootstep()
+            false -> stealthSessionController.emitBump()
+            null -> {}
+        }
+    }
     fun turnLeft() = explorationManager.turnLeft()
     fun turnRight() = explorationManager.turnRight()
     fun triggerMapScan() { explorationManager.triggerMapScan(); stealthSessionController.emitNoise(radiusCells = 4.5f, intensity = 0.9f) }
@@ -461,6 +475,36 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         } else {
             addLog("STEALTH PROTOCOL DISENGAGED: standard movement profile restored.", LogType.INFO)
         }
+    }
+
+    /**
+     * Throws a chaff decoy four cells ahead of the runner: a loud one-shot
+     * noise pulse detonates at the landing cell (clamped into the sector),
+     * not at the runner. ICE units inside the radius break off their patrol
+     * to investigate the phantom signal instead of the runner position.
+     */
+    fun throwDecoy() {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION || state.gameState != GameState.EXPLORATION) {
+            addLog("DECOY ERROR: Chaff launcher only available during free-roam infiltration.", LogType.ERROR)
+            return
+        }
+        if (state.maze.isEmpty()) return
+        if (state.ram < StealthSessionController.DECOY_RAM_COST) {
+            addLog("DECOY FAILED: Insufficient RAM (Requires ${StealthSessionController.DECOY_RAM_COST} MB RAM).", LogType.ERROR)
+            return
+        }
+        val throwCells = StealthSessionController.DECOY_THROW_CELLS
+        val targetX = (state.gridX + state.direction.dx * throwCells).coerceIn(0, state.maze[0].lastIndex)
+        val targetY = (state.gridY + state.direction.dy * throwCells).coerceIn(0, state.maze.lastIndex)
+        _uiState.update { it.copy(ram = (it.ram - StealthSessionController.DECOY_RAM_COST).coerceAtLeast(0)) }
+        val landing = stealthSessionController.emitNoiseAt(
+            cellX = targetX,
+            cellY = targetY,
+            radiusCells = StealthSessionController.DECOY_RADIUS_CELLS,
+            intensity = StealthSessionController.DECOY_INTENSITY
+        )
+        addLog("CHAFF DECOY DEPLOYED (-${StealthSessionController.DECOY_RAM_COST} RAM): Phantom signal detonated at (${landing?.first ?: targetX}, ${landing?.second ?: targetY}). ICE audio sweeps redirected.", LogType.SUCCESS)
     }
 
     fun getStructuredInventorySlots() = inventoryManager.getStructuredInventorySlots()

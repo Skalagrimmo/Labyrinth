@@ -857,6 +857,32 @@ fun ExplorationView(
                             Button(
                                 onClick = {
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    viewModel.throwDecoy()
+                                },
+                                enabled = uiState.ram >= 1,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = CyberAmber.copy(alpha = 0.5f),
+                                    disabledContainerColor = CyberAmber.copy(alpha = 0.2f)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(26.dp)
+                                    .testTag("btn_decoy_throw")
+                            ) {
+                                Text(
+                                    text = "DECOY (1 RAM)",
+                                    color = Color.White,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     viewModel.interact()
                                 },
                                 colors = ButtonDefaults.buttonColors(

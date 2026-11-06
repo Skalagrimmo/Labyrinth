@@ -151,6 +151,16 @@ class StealthSessionController(
     }
 
     /**
+     * Accidental wall bump (a blocked move): a short scrape against the
+     * firewall that the silent protocol cannot suppress - it is clumsiness,
+     * not a footstep. Tiny radius: only ICE units hugging the crashed wall
+     * will pick it up.
+     */
+    fun emitBump() {
+        emitNoise(radiusCells = BUMP_RADIUS_CELLS, intensity = BUMP_INTENSITY)
+    }
+
+    /**
      * Emits a one-shot noise stimulus (radar pings, interactions). Reaches every
      * guard within radiusCells on the current level at the next world tick.
      */
@@ -165,6 +175,44 @@ class StealthSessionController(
             )
         )
         while (pendingNoise.size > MAX_PENDING_NOISE) pendingNoise.removeFirst()
+    }
+
+    /**
+     * Emits a one-shot noise pulse at an arbitrary cell of the current level
+     * (chaff decoy throws). The landing cell is clamped into the maze and,
+     * if it lands inside a firewall, walked back toward the runner until it
+     * sits on a cell the ICE can actually walk to. Returns the landing cell,
+     * or null when no pulse could be emitted.
+     */
+    fun emitNoiseAt(cellX: Int, cellY: Int, radiusCells: Float, intensity: Float): Pair<Int, Int>? {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) return null
+        val maze = state.maze
+        if (maze.isEmpty()) return null
+        var x = cellX.coerceIn(0, maze[0].lastIndex)
+        var y = cellY.coerceIn(0, maze.lastIndex)
+        // A phantom signal embedded in a firewall cannot be investigated:
+        // walk the landing point straight back toward the runner until it
+        // sits on a cell the ICE can actually reach (same movement blockers
+        // as the stealth world adapter, so guard pathing agrees with the
+        // pulse spot).
+        while (maze[y][x] in NOISE_LANDING_BLOCKERS && (x != state.gridX || y != state.gridY)) {
+            when {
+                x > state.gridX -> x--
+                x < state.gridX -> x++
+                y > state.gridY -> y--
+                else -> y++
+            }
+        }
+        pendingNoise.addLast(
+            NoisePulse(
+                position = StealthPosition(x + 0.5f, y + 0.5f, state.level),
+                radius = radiusCells,
+                intensity = intensity
+            )
+        )
+        while (pendingNoise.size > MAX_PENDING_NOISE) pendingNoise.removeFirst()
+        return x to y
     }
 
     /**
@@ -269,6 +317,17 @@ class StealthSessionController(
         const val TICK_MILLIS: Long = 100L
         const val FOOTSTEP_RADIUS_CELLS: Float = 2.5f
         const val FOOTSTEP_INTENSITY: Float = 0.35f
+        const val BUMP_RADIUS_CELLS: Float = 1.5f
+        const val BUMP_INTENSITY: Float = 0.25f
+        const val DECOY_THROW_CELLS: Int = 4
+        const val DECOY_RADIUS_CELLS: Float = 6f
+        const val DECOY_INTENSITY: Float = 1f
+        const val DECOY_RAM_COST: Int = 1
+        private val NOISE_LANDING_BLOCKERS: Set<CellType> = setOf(
+            CellType.WALL,
+            CellType.SECRET_WALL,
+            CellType.TERMINAL_DOOR
+        )
         private const val MAX_PENDING_NOISE: Int = 16
         private val COVER_CELL_TYPES: Set<CellType> = setOf(
             CellType.SCAN_CACHE,
