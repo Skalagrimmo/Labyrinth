@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- CyberVibrationManager (moved from :app) requires VIBRATE to drive haptics.
+         Declaring it here keeps lintDebug (MissingPermission) green in this library
+         module and the manifest merger propagates it into the final app manifest. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+
+</manifest>

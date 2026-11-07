@@ -30,6 +30,7 @@ dependencies {
   implementation(project(":core:persistence"))
   implementation(project(":core:content"))
   implementation(project(":core:game"))
+  implementation(project(":core:audio"))
   implementation(libs.androidx.room.runtime)
   implementation(libs.androidx.room.ktx)
   implementation(libs.kotlinx.coroutines.core)
