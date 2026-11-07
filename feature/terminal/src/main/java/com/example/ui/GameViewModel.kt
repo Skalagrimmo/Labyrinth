@@ -355,7 +355,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
                 addLog("COMBAT: 'attack', 'defend', 'flee', 'scan'", LogType.INFO)
                 addLog("INVENTORY: 'inventory', 'use <item>', 'equip <item>', 'unequip <slot>'", LogType.INFO)
                 addLog("SYSTEM: 'status', 'save', 'load', 'menu', 'shop', 'clear'", LogType.INFO)
-                addLog("STEALTH: 'sneak' (toggle silent movement), 'throw' (chaff decoy ahead, 1 RAM)", LogType.INFO)
+                addLog("STEALTH: 'sneak' (silent movement), 'throw' (chaff decoy ahead, 1 RAM), 'jam' (node spike: disable nearest ICE, 2 RAM)", LogType.INFO)
                 addLog("SKILLS: 'skilltree', 'skill learn <HACKING|COMBAT|ENGINEERING> <#>', 'skill points'", LogType.INFO)
                 addLog("TUTORIAL: 'tutorial next', 'tutorial skip'", LogType.INFO)
                 addLog("HACKING: 'hack <row> <col>'", LogType.INFO)
@@ -414,6 +414,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             "menu" -> persistenceManager.returnToStartMenu()
             "sneak", "stealth", "crouch" -> toggleSneakMode()
             "throw", "decoy", "chaff" -> throwDecoy()
+            "jam", "spike", "icespike" -> jamNearestIceUnit()
             "clear" -> { _uiState.update { it.copy(logFeed = emptyList()) }; addLog("Log console cleared.", LogType.INFO) }
             "tutorial", "helpme", "assist" -> {
                 when (parts.getOrNull(1)?.lowercase()) {
@@ -520,6 +521,38 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
             intensity = StealthSessionController.DECOY_INTENSITY
         )
         addLog("CHAFF DECOY DEPLOYED (-${StealthSessionController.DECOY_RAM_COST} RAM): Phantom signal detonated at (${landing?.first ?: targetX}, ${landing?.second ?: targetY}). ICE audio sweeps redirected.", LogType.SUCCESS)
+    }
+
+    /**
+     * d8 slice 4: overclocked node spike - burns RAM to force the nearest
+     * ICE unit into a controlled reboot. While the unit is down it cannot
+     * see, hear, move or relay the alarm, and the ICE threat HUD goes
+     * dormant; when it reboots it starts from a clean PATROLLING slate.
+     */
+    fun jamNearestIceUnit() {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION || state.gameState != GameState.EXPLORATION) {
+            addLog("SPIKE ERROR: Node overload only available during free-roam infiltration.", LogType.ERROR)
+            return
+        }
+        if (state.ram < StealthSessionController.JAM_RAM_COST) {
+            addLog("SPIKE FAILED: Insufficient RAM (Requires ${StealthSessionController.JAM_RAM_COST} MB RAM).", LogType.ERROR)
+            return
+        }
+        val disabledId = stealthSessionController.disableNearestIceUnit(
+            maxRangeCells = StealthSessionController.JAM_RANGE_CELLS,
+            durationSeconds = StealthSessionController.JAM_DURATION_SECONDS
+        )
+        if (disabledId == null) {
+            addLog("SPIKE FAILED: No ICE unit within ${StealthSessionController.JAM_RANGE_CELLS.toInt()} cells.", LogType.ERROR)
+            return
+        }
+        _uiState.update { it.copy(ram = (it.ram - StealthSessionController.JAM_RAM_COST).coerceAtLeast(0)) }
+        addLog(
+            "ICE SPIKE DEPLOYED (-${StealthSessionController.JAM_RAM_COST} RAM): unit $disabledId forced into controlled reboot " +
+                "for ${StealthSessionController.JAM_DURATION_SECONDS.toInt()}s - cone dead, net link severed.",
+            LogType.SUCCESS
+        )
     }
 
     fun getStructuredInventorySlots() = inventoryManager.getStructuredInventorySlots()

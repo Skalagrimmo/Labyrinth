@@ -82,6 +82,9 @@ class StealthGuard(
         internal set
     var searchSecondsRemaining: Float = 0f
         internal set
+    /** d8 slice 4: seconds of forced reboot left; counts down inside update() while DISABLED. */
+    var disableSecondsRemaining: Float = 0f
+        internal set
 
     internal var cachedPathTarget: GridCell? = null
     internal var cachedPath: List<GridCell>? = null
@@ -144,7 +147,16 @@ class StealthSimulation(
         val newlyAlerted = mutableListOf<StealthGuard>()
 
         for (guard in guards) {
-            if (guard.state == StealthGuardState.DISABLED) continue
+            if (guard.state == StealthGuardState.DISABLED) {
+                // d8 slice 4: count down the forced reboot; the unit wakes
+                // into a clean PATROLLING slate when the spike expires.
+                guard.disableSecondsRemaining = max(0f, guard.disableSecondsRemaining - dt)
+                if (guard.disableSecondsRemaining <= 0f) {
+                    guard.disableSecondsRemaining = 0f
+                    changeState(guard, StealthGuardState.PATROLLING, events)
+                }
+                continue
+            }
             if (guard.position.levelId != world.levelId) continue
             val wasAlerted = guard.state == StealthGuardState.ALERTED
 
@@ -202,6 +214,32 @@ class StealthSimulation(
     /** Call after a wall/door changes state so guards don't reuse stale routes. */
     fun invalidatePaths() {
         guards.forEach { it.clearPath() }
+    }
+
+    /**
+     * d8 slice 4: ICE neutralization - the runner's overclocked node spike.
+     *
+     * Forces the identified unit into DISABLED for durationSeconds: while
+     * down it cannot see, hear, move, chase or relay the alarm, and every
+     * hunt memory (last known position, investigation target, suspicion)
+     * is wiped. When the spike expires the unit reboots into PATROLLING
+     * with a clean slate. Returns the emitted state-change events, or an
+     * empty list when the id is unknown, the duration is not positive, or
+     * the unit is already disabled.
+     */
+    fun disableGuard(guardId: String, durationSeconds: Float): List<StealthEvent> {
+        if (!durationSeconds.isFinite() || durationSeconds <= 0f) return emptyList()
+        val guard = guards.firstOrNull { it.id == guardId } ?: return emptyList()
+        if (guard.state == StealthGuardState.DISABLED) return emptyList()
+        guard.suspicion = 0f
+        guard.lastKnownPlayerPosition = null
+        guard.investigationTarget = null
+        guard.searchSecondsRemaining = 0f
+        guard.disableSecondsRemaining = durationSeconds
+        guard.clearPath()
+        val events = mutableListOf<StealthEvent>()
+        changeState(guard, StealthGuardState.DISABLED, events)
+        return events
     }
 
     /**
