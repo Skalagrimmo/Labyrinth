@@ -43,32 +43,22 @@ jobs:
         run: ./gradlew assembleDebug 2>&1 | tee gradle-assemble.log
         continue-on-error: true
 
-      - name: Comment on PR
+      - name: FAILDETAIL-ANNOTATE
         if: always()
-        uses: actions/github-script@v7
+        run: |
+          echo "Emitting error annotations"
+          grep -hE '^e: ' gradle-tests.log gradle-lint.log gradle-assemble.log 2>/dev/null | head -12 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          grep -hE 'Error: ' gradle-lint.log 2>/dev/null | head -5 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+          grep -hE '> Task.*FAILED' gradle-tests.log gradle-lint.log gradle-assemble.log 2>/dev/null || true
+          exit 0
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
-            const names = ['gradle-tests.log', 'gradle-lint.log', 'gradle-assemble.log'];
-            let body = 'CI FAILDETAIL v3 (diagnostic run)\n';
-            for (const f of names) {
-              if (!fs.existsSync(f)) continue;
-              const text = fs.readFileSync(f, 'utf8');
-              const lines = text.split('\n');
-              const errs = lines.filter(l => l.startsWith('e: ') || l.includes('Error: ') || l.includes(' FAILED') || l.includes('FAILURE') || l.includes('What went wrong') || l.includes('> Task').includes ? false : false);
-              const picked = [];
-              for (let i = 0; i < lines.length; i++) {
-                const l = lines[i];
-                if (l.startsWith('e: ') || l.includes('Error: ') || l.includes(' FAILED') || l.startsWith('FAILURE') || l.includes('What went wrong')) {
-                  for (let k = i; k < Math.min(i + 6, lines.length); k++) picked.push(lines[k]);
-                  i = i + 6;
-                }
-              }
-              if (picked.length > 0) body += '\n**' + f + '**\n' + picked.slice(0, 80).join('\n') + '\n';
-            }
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
+          name: netcrawler-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
