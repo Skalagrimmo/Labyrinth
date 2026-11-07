@@ -34,7 +34,8 @@ data class NoisePulse(
 enum class StealthEventType {
     GUARD_STATE_CHANGED,
     PLAYER_DETECTED,
-    NOISE_HEARD
+    NOISE_HEARD,
+    ICE_ALERT_RELAYED
 }
 
 data class StealthEvent(
@@ -124,6 +125,11 @@ class StealthSimulation(
     /**
      * Advances the simulation by deltaTimeSeconds. Large frame gaps are capped at 0.25 s
      * to avoid teleport-like movement after an app pause or a slow frame.
+     *
+     * d8 slice 3 (ICE coordination): a guard that crosses into ALERTED broadcasts the
+     * runner's last known position once, in the same update. Every other unit within
+     * the relay radius (scaled by the weather's hearingFactor) converges on the
+     * detection spot - see [relayAlerts].
      */
     fun update(
         deltaTimeSeconds: Float,
@@ -135,10 +141,12 @@ class StealthSimulation(
 
         val dt = min(deltaTimeSeconds, MAX_DELTA_SECONDS)
         val events = mutableListOf<StealthEvent>()
+        val newlyAlerted = mutableListOf<StealthGuard>()
 
         for (guard in guards) {
             if (guard.state == StealthGuardState.DISABLED) continue
             if (guard.position.levelId != world.levelId) continue
+            val wasAlerted = guard.state == StealthGuardState.ALERTED
 
             val canSeePlayer = canSee(guard, player, weather)
             if (canSeePlayer) {
@@ -179,6 +187,13 @@ class StealthSimulation(
             }
 
             advanceGuard(guard, player, canSeePlayer, dt, weather, events)
+            if (!wasAlerted && guard.state == StealthGuardState.ALERTED) {
+                newlyAlerted.add(guard)
+            }
+        }
+
+        if (newlyAlerted.isNotEmpty()) {
+            relayAlerts(newlyAlerted, weather, events)
         }
 
         return events
@@ -273,6 +288,57 @@ class StealthSimulation(
                 )
             )
             return
+        }
+    }
+
+    /**
+     * d8 slice 3: ICE coordination - the alert relay.
+     *
+     * A guard that crossed into ALERTED this update broadcasts the runner's
+     * last known position once (edge-triggered, never a continuous magnet).
+     * Every other unit on the floor within the relay radius - scaled by the
+     * weather's hearingFactor, the same medium that carries noise - receives
+     * the detection spot: it adopts it as its investigation target, primes to
+     * the coordination suspicion floor and converges. Walls do not block the
+     * call (ICE chatter rides the network, not the light), ALERTED and
+     * DISABLED units ignore it, and a unit is relayed at most once per update
+     * even when several guards raise the alarm in the same tick.
+     */
+    private fun relayAlerts(
+        alerted: List<StealthGuard>,
+        weather: WeatherPerception,
+        events: MutableList<StealthEvent>
+    ) {
+        val relayed = mutableSetOf<String>()
+        val effectiveRadius = ALERT_COORDINATION_RADIUS_CELLS * weather.hearingFactor
+        for (alerter in alerted) {
+            val alertPosition = alerter.lastKnownPlayerPosition ?: alerter.position
+            for (guard in guards) {
+                if (guard === alerter) continue
+                if (guard.id in relayed) continue
+                if (guard.state == StealthGuardState.DISABLED) continue
+                if (guard.state == StealthGuardState.ALERTED) continue
+                if (guard.position.levelId != alertPosition.levelId) continue
+                if (guard.position.distanceTo(alertPosition) > effectiveRadius) continue
+
+                relayed.add(guard.id)
+                val previousState = guard.state
+                guard.lastKnownPlayerPosition = alertPosition
+                guard.investigationTarget = alertPosition
+                guard.suspicion = max(guard.suspicion, ALERT_COORDINATION_SUSPICION)
+                if (guard.state != StealthGuardState.INVESTIGATING) {
+                    changeState(guard, StealthGuardState.INVESTIGATING, events)
+                }
+                events.add(
+                    StealthEvent(
+                        type = StealthEventType.ICE_ALERT_RELAYED,
+                        guardId = guard.id,
+                        position = alertPosition,
+                        previousState = previousState,
+                        currentState = guard.state
+                    )
+                )
+            }
         }
     }
 
@@ -462,5 +528,11 @@ class StealthSimulation(
         const val MAX_DELTA_SECONDS = 0.25f
         const val ARRIVAL_DISTANCE = 0.22f
         const val SEARCH_TURN_RATE = 1.4f
+
+        /** d8 slice 3: how far (cells) an ALERTED unit's alarm call reaches, scaled by the weather's hearingFactor. */
+        const val ALERT_COORDINATION_RADIUS_CELLS: Float = 8f
+
+        /** d8 slice 3: suspicion floor a coordinated unit starts the convergence with (a full noise pulse's worth). */
+        const val ALERT_COORDINATION_SUSPICION: Float = 40f
     }
 }

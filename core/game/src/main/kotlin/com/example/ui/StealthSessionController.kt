@@ -49,6 +49,9 @@ import kotlinx.coroutines.flow.update
  *  patrols - roaming sweep units whose waypoint loops are hashed from
  *  the level seed (seed determinism); small corridors stay patrol-free
  *  and the stationary node guards keep their exact behaviour;
+ *  - d8 slice 3: ICE coordination - a unit that raises the alarm relays the
+ *    runner's last known position to every other unit within the relay radius
+ *    (weather-scaled); each relay is surfaced as an ICE NET TRAFFIC log line;
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -144,6 +147,17 @@ class StealthSessionController(
             weather = state.activeWeather
         )
         publishHud(result.stealthFrame)
+        // d8 slice 3: surface the alert relay - nearby units acknowledging the
+        // alarm and converging on the runner's last known position.
+        result.stealthFrame?.events
+            ?.filter { it.type == StealthEventType.ICE_ALERT_RELAYED }
+            ?.forEach { event ->
+                onLog(
+                    "ICE NET TRAFFIC: unit " + event.guardId +
+                        " acknowledges the alarm - hostile sweep converging.",
+                    LogType.ALERT
+                )
+            }
         if (result.enteredCombat) {
             combatSeen = true
             val detection = result.detection
