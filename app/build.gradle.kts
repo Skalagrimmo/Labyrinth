@@ -75,6 +75,7 @@ dependencies {
   implementation(project(":core:game"))
   implementation(project(":core:audio"))
   implementation(project(":core:platform"))
+  implementation(project(":core:designsystem"))
   implementation(project(":feature:skilltree"))
   implementation(project(":feature:combat"))
   implementation(project(":feature:exploration"))
