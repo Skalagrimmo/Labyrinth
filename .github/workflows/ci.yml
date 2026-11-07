@@ -5,10 +5,6 @@ on:
     branches: [ main, master ]
   pull_request:
 
-permissions:
-  contents: read
-  pull-requests: write
-
 jobs:
   build:
     name: Build, lint & test
@@ -30,31 +26,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: |
-          set -o pipefail
-          ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test 2>&1 | tee gradle-tests.log
-        continue-on-error: true
+        run: ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test
 
       - name: Run lint
-        run: ./gradlew lintDebug 2>&1 | tee gradle-lint.log
-        continue-on-error: true
+        run: ./gradlew lintDebug
 
       - name: Assemble debug APK
-        run: ./gradlew assembleDebug 2>&1 | tee gradle-assemble.log
-        continue-on-error: true
-
-      - name: FAILDETAIL-ANNOTATE
-        if: always()
-        run: |
-          echo "Emitting error annotations"
-          grep -hE '^e: ' gradle-tests.log gradle-lint.log gradle-assemble.log 2>/dev/null | head -12 | while IFS= read -r line; do
-            echo "::error::${line}"
-          done
-          grep -hE 'Error: ' gradle-lint.log 2>/dev/null | head -5 | while IFS= read -r line; do
-            echo "::error::${line}"
-          done
-          grep -hE '> Task.*FAILED' gradle-tests.log gradle-lint.log gradle-assemble.log 2>/dev/null || true
-          exit 0
+        run: ./gradlew assembleDebug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
