@@ -11,6 +11,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -523,6 +524,88 @@ class StealthSessionControllerTest {
             .first { it.id == "ice_4_1" }
         assertEquals(StealthGuardState.PATROLLING, west.state)
         assertEquals(0f, west.suspicion, 0.0001f)
+    }
+
+    @Test
+    fun spikeDisablesTheNearestIceUnitAndFreezesTheHud() {
+        // d8 slice 4: levelSeed = 1 turns the node guard to face EAST, dead
+        // ahead of the runner at x=7, so suspicion climbs. The node spike
+        // drops the unit into a controlled reboot: the HUD freezes to
+        // 0%/PATROLLING (a disabled unit does not count) and the 8s window
+        // (60 ticks = 6s here) outlasts the runner's exposure.
+        val (controller, flow) = newController(px = 7, levelSeed = 1L)
+        repeat(6) { controller.tickOnce() }
+        assertTrue(flow.value.iceSuspicion > 0f)
+
+        val disabled = controller.disableNearestIceUnit(
+            StealthSessionController.JAM_RANGE_CELLS,
+            StealthSessionController.JAM_DURATION_SECONDS
+        )
+        assertEquals("ice_5_1", disabled)
+        assertEquals(
+            StealthGuardState.DISABLED,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.PATROLLING, flow.value.iceGuardState)
+
+        repeat(60) { controller.tickOnce() }
+        assertEquals(
+            StealthGuardState.DISABLED,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun spikeOutOfRangeFindsNoTarget() {
+        // The runner four cells west of the node is beyond a 2-cell spike:
+        // no target, no spent spike, the unit keeps patrolling. One tick
+        // first - the spike needs the live session that syncSession creates.
+        val (controller, _) = newController(px = 1)
+        controller.tickOnce()
+        assertNull(
+            controller.disableNearestIceUnit(maxRangeCells = 2f, durationSeconds = 8f)
+        )
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+    }
+
+    @Test
+    fun spikedUnitRebootsAndResumesPerception() {
+        // 80 ticks = the 8s spike: the unit reboots (ICE REBOOT log), resumes
+        // its patrol and - still facing the runner dead ahead - rebuilds
+        // suspicion from the clean slate and routes the detection into the
+        // legacy combat flow.
+        val (controller, _) = newController(px = 7, levelSeed = 1L)
+        controller.tickOnce()
+        assertNotNull(
+            controller.disableNearestIceUnit(
+                StealthSessionController.JAM_RANGE_CELLS,
+                StealthSessionController.JAM_DURATION_SECONDS
+            )
+        )
+
+        repeat(80) { controller.tickOnce() }
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        assertTrue(
+            logs.any { it.first.contains("ICE REBOOT") && it.first.contains("ice_5_1") }
+        )
+
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 120) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue(
+            "expected the rebooted unit to re-acquire the runner, ticks=" + ticks,
+            detections.isNotEmpty()
+        )
     }
 
     private fun ticksUntilDetection(sneaking: Boolean,
