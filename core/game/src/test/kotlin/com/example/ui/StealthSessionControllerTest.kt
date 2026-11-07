@@ -453,6 +453,78 @@ class StealthSessionControllerTest {
         assertEquals(GameSessionMode.COMBAT, controller.peekSession()?.mode)
     }
 
+    private fun relayCorridor(): Array<Array<CellType>> {
+        // 13x3 corridor split by a firewall at x=6: an east-chamber node
+        // guard with a clear line on the runner, and a west-chamber node
+        // guard that cannot see them (7 cells, wall in between) but sits
+        // inside the 8-cell relay radius of the detection spot.
+        val grid = Array(3) { y -> Array(13) { x -> CellType.PATH } }
+        for (x in 0 until 13) {
+            grid[0][x] = CellType.WALL
+            grid[2][x] = CellType.WALL
+        }
+        for (y in 0 until 3) {
+            grid[y][0] = CellType.WALL
+            grid[y][12] = CellType.WALL
+        }
+        grid[1][6] = CellType.WALL
+        grid[1][10] = CellType.VIRUS_NODE
+        grid[1][4] = CellType.VIRUS_NODE
+        return grid
+    }
+
+    @Test
+    fun alertedGuardRelaysTheAlarmThroughTheIceNet() {
+        // levelSeed = 2 turns the east node guard (10, 1) to face EAST -
+        // dead on the runner at x=11 - while the west node guard (4, 1)
+        // faces WEST, blind. When the east unit raises the alarm, the west
+        // unit is relayed the runner's position over the ICE net and
+        // converges on the detection spot.
+        val (controller, _) = newController(px = 11, levelSeed = 2L, mazeGrid = relayCorridor())
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 120) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue("expected detection within 120 ticks, got " + ticks, detections.isNotEmpty())
+        assertEquals(Pair(10, 1), detections.first())
+        assertEquals(GameSessionMode.COMBAT, controller.peekSession()?.mode)
+        assertTrue(
+            logs.any { it.first.contains("ICE NET TRAFFIC") && it.first.contains("ice_4_1") }
+        )
+        val west = controller.peekStealthSession()!!.snapshot().guards
+            .first { it.id == "ice_4_1" }
+        assertEquals(StealthGuardState.INVESTIGATING, west.state)
+        assertEquals(40f, west.suspicion, 0.0001f)
+        assertEquals(StealthPosition(11.5f, 1.5f, 1), west.lastKnownPlayerPosition)
+    }
+
+    @Test
+    fun ghostProtocolMutesTheIceNetRelay() {
+        // Same split corridor under GHOST_PROTOCOL: the relay radius
+        // shrinks (8 x 0.85 = 6.8 cells) below the west guard's 7-cell
+        // distance, so the alarm never reaches it - the unit keeps
+        // patrolling while the detecting guard fights alone.
+        val (controller, _) = newController(
+            px = 11,
+            levelSeed = 2L,
+            mazeGrid = relayCorridor(),
+            weather = CyberWeather.GHOST_PROTOCOL
+        )
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 120) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue("expected detection within 120 ticks, got " + ticks, detections.isNotEmpty())
+        assertEquals(Pair(10, 1), detections.first())
+        assertTrue(logs.none { it.first.contains("ICE NET TRAFFIC") })
+        val west = controller.peekStealthSession()!!.snapshot().guards
+            .first { it.id == "ice_4_1" }
+        assertEquals(StealthGuardState.PATROLLING, west.state)
+        assertEquals(0f, west.suspicion, 0.0001f)
+    }
+
     private fun ticksUntilDetection(sneaking: Boolean,
         mazeGrid: Array<Array<CellType>>?,
         weather: CyberWeather = CyberWeather.CLEAR
