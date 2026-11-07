@@ -82,6 +82,7 @@ dependencies {
   implementation(project(":feature:cosmetic"))
   implementation(project(":feature:inventory"))
   implementation(project(":feature:hacking"))
+  implementation(project(":feature:terminal"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
