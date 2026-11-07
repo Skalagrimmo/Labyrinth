@@ -5,6 +5,7 @@ import com.example.core.model.CyberWeather
 import com.example.core.model.LogType
 import com.example.data.GameSessionMode
 import com.example.stealth.StealthGuardState
+import com.example.stealth.StealthPosition
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,8 +41,31 @@ class StealthSessionControllerTest {
         return grid
     }
 
+    private fun patrolRoom(width: Int, height: Int): Array<Array<CellType>> {
+        // Open room with a wall border and no virus nodes: the walkable
+        // area is (width - 2) * (height - 2) cells, large enough for mobile
+        // ICE patrols to roam.
+        val grid = Array(height) { y -> Array(width) { x -> CellType.PATH } }
+        for (x in 0 until width) {
+            grid[0][x] = CellType.WALL
+            grid[height - 1][x] = CellType.WALL
+        }
+        for (y in 0 until height) {
+            grid[y][0] = CellType.WALL
+            grid[y][width - 1] = CellType.WALL
+        }
+        return grid
+    }
+
+    private fun patrolIdsIn(roomWidth: Int, roomHeight: Int): List<String> {
+        val (controller, _) = newController(px = 1, py = 1, mazeGrid = patrolRoom(roomWidth, roomHeight))
+        controller.tickOnce()
+        return controller.peekStealthSession()!!.snapshot().guards.map { it.id }
+    }
+
     private fun newController(
         px: Int,
+        py: Int = 1,
         sneaking: Boolean = false,
         mazeGrid: Array<Array<CellType>>? = null,
         levelSeed: Long = 0L,
@@ -54,7 +78,7 @@ class StealthSessionControllerTest {
                 screen = ActiveScreen.EXPLORATION,
                 maze = mazeGrid ?: maze(),
                 gridX = px,
-                gridY = 1,
+                gridY = py,
                 level = 1,
                 levelSeed = levelSeed,
                 isSneaking = sneaking,
@@ -328,6 +352,105 @@ class StealthSessionControllerTest {
         }
         assertTrue("ICE should have chased a phantom echo, stayed " + state, state != StealthGuardState.PATROLLING)
         assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun smallFloorsStayPatrolFree() {
+        // The 9x3 corridor (7 walkable cells) is far below the patrol size
+        // threshold: the floor hosts only the stationary node guard and
+        // no patrol advisory is logged.
+        val (controller, _) = newController(px = 1)
+        controller.tickOnce()
+        val guards = controller.peekStealthSession()!!.snapshot().guards
+        assertEquals(1, guards.size)
+        assertEquals("ice_5_1", guards.first().id)
+        assertTrue(guards.none { it.id.contains("patrol") })
+        assertTrue(logs.none { it.first.contains("ICE PATROL") })
+    }
+
+    @Test
+    fun patrolCountScalesWithTheWalkableArea() {
+        // 91 walkable cells -> 1 patrol, 207 -> 2, 341 -> 3 (constants:
+        // PATROL_MIN_WALKABLE_CELLS = 40, PATROL_AREA_PER_UNIT = 100,
+        // MAX_PATROLS_PER_FLOOR = 3).
+        assertEquals(listOf("ice_patrol_1_0"), patrolIdsIn(15, 9))
+        assertEquals(
+            listOf("ice_patrol_1_0", "ice_patrol_1_1"),
+            patrolIdsIn(25, 11)
+        )
+        assertEquals(
+            listOf("ice_patrol_1_0", "ice_patrol_1_1", "ice_patrol_1_2"),
+            patrolIdsIn(33, 13)
+        )
+    }
+
+    @Test
+    fun patrolRoutesAreDeterministicPerLevelSeed() {
+        // Same floor + same seed -> the identical patrol set replaying
+        // the identical route: two independent sessions agree tick for
+        // tick (seed determinism).
+        val (alpha, _) = newController(px = 1, py = 1, mazeGrid = patrolRoom(15, 9), levelSeed = 7L)
+        val (beta, _) = newController(px = 1, py = 1, mazeGrid = patrolRoom(15, 9), levelSeed = 7L)
+        repeat(20) {
+            alpha.tickOnce()
+            beta.tickOnce()
+        }
+        val a = alpha.peekStealthSession()!!.snapshot().guards
+        val b = beta.peekStealthSession()!!.snapshot().guards
+        assertEquals(b.map { it.id }, a.map { it.id })
+        assertTrue(a.any { it.id.startsWith("ice_patrol_") })
+        for (i in a.indices) {
+            assertEquals(a[i].position, b[i].position)
+        }
+    }
+
+    @Test
+    fun patrolGuardsRoamTheirRoute() {
+        // The roaming unit leaves its spawn waypoint and keeps sweeping
+        // the floor; the patrol advisory is logged exactly once per
+        // floor. The runner waits in the corner farthest from the spawn
+        // so the patrol has room to roam (a single tick cannot raise an
+        // alert: suspicion grows at most 6 points per tick).
+        val (controller, flow) = newController(px = 1, py = 1, mazeGrid = patrolRoom(15, 9))
+        controller.tickOnce()
+        val spawn = controller.peekStealthSession()!!.snapshot().guards.first().position
+        assertEquals(1, logs.count { it.first.contains("ICE PATROL SIGNATURES") })
+        val farCorner = listOf(1 to 1, 13 to 1, 1 to 7, 13 to 7).maxBy { corner ->
+            spawn.distanceTo(StealthPosition(corner.first + 0.5f, corner.second + 0.5f, spawn.levelId))
+        }
+        flow.value = flow.value.copy(gridX = farCorner.first, gridY = farCorner.second)
+        var maxDisplacement = 0f
+        repeat(90) {
+            controller.tickOnce()
+            val position = controller.peekStealthSession()!!.snapshot().guards.first().position
+            val displacement = spawn.distanceTo(position)
+            if (displacement > maxDisplacement) maxDisplacement = displacement
+        }
+        assertTrue(
+            "patrol should clearly leave its spawn waypoint, max displacement: " + maxDisplacement,
+            maxDisplacement > 0.9f
+        )
+        assertEquals(1, logs.count { it.first.contains("ICE PATROL SIGNATURES") })
+    }
+
+    @Test
+    fun patrolDetectionRoutesCombatToTheRunnerCell() {
+        // A loud chaff-style ping at the runner's cell lures the roaming
+        // patrol straight in; walking into the runner raises the alert,
+        // and the detection routes into the legacy combat flow at the
+        // runner's cell - this floor has no virus nodes, only the
+        // mobile patrol, so the fallback position routing is exercised.
+        val (controller, _) = newController(px = 7, py = 4, mazeGrid = patrolRoom(15, 9))
+        controller.tickOnce()
+        controller.emitNoiseAt(cellX = 7, cellY = 4, radiusCells = 25f, intensity = 1f)
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 300) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue("expected the lured patrol to reach the runner, got " + ticks, detections.isNotEmpty())
+        assertEquals(Pair(7, 4), detections.first())
+        assertEquals(GameSessionMode.COMBAT, controller.peekSession()?.mode)
     }
 
     private fun ticksUntilDetection(sneaking: Boolean,
