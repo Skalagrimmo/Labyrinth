@@ -41,6 +41,9 @@ import kotlinx.coroutines.flow.update
  *    last known position) and exploration resumes on the same stealth session;
  *  - the highest ICE suspicion of the current floor is published into
  *  GameUiState (iceSuspicion + iceGuardState) for the exploration HUD;
+ *  - the current CyberWeather scales ICE perception (WeatherPerception in
+ *  :core:engine) and ECHOES spawns phantom echo pulses that lure ICE off
+ *  patrol (d8 slice 1: weather -> ICE perception binding);
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -130,7 +133,8 @@ class StealthSessionController(
             gridY = state.gridY,
             isSneaking = state.isSneaking,
             isInCover = isInCover(state),
-            noisePulses = noisePulses
+            noisePulses = noisePulses,
+            weather = state.activeWeather
         )
         publishHud(result.stealthFrame)
         if (result.enteredCombat) {

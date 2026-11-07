@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.core.model.CyberWeather
 import com.example.stealth.LabyrinthStealthSession
 import com.example.stealth.NoisePulse
 import com.example.stealth.StealthEvent
@@ -77,6 +78,7 @@ class RealTimeGameSession(
         isInvisible: Boolean = false,
         isInCover: Boolean = false,
         noisePulses: List<NoisePulse> = emptyList(),
+        weather: CyberWeather = CyberWeather.CLEAR,
         random: Random = Random.Default
     ): SessionTickResult {
         if (isPaused || deltaMillis <= 0L) {
@@ -91,7 +93,8 @@ class RealTimeGameSession(
                 isSneaking = isSneaking,
                 isInvisible = isInvisible,
                 isInCover = isInCover,
-                noisePulses = noisePulses
+                noisePulses = noisePulses,
+                weather = weather
             )
             val detection = frame.events.firstOrNull { it.type == StealthEventType.PLAYER_DETECTED }
             if (detection != null) {

@@ -128,7 +128,8 @@ class StealthSimulation(
     fun update(
         deltaTimeSeconds: Float,
         player: StealthPlayer,
-        noisePulses: List<NoisePulse> = emptyList()
+        noisePulses: List<NoisePulse> = emptyList(),
+        weather: WeatherPerception = WeatherPerception.NONE
     ): List<StealthEvent> {
         if (!deltaTimeSeconds.isFinite() || deltaTimeSeconds <= 0f) return emptyList()
 
@@ -139,7 +140,7 @@ class StealthSimulation(
             if (guard.state == StealthGuardState.DISABLED) continue
             if (guard.position.levelId != world.levelId) continue
 
-            val canSeePlayer = canSee(guard, player)
+            val canSeePlayer = canSee(guard, player, weather)
             if (canSeePlayer) {
                 guard.lastKnownPlayerPosition = player.position
                 guard.investigationTarget = player.position
@@ -148,7 +149,7 @@ class StealthSimulation(
                     changeState(guard, StealthGuardState.INVESTIGATING, events)
                 }
 
-                val effectiveRange = effectiveViewRange(guard, player)
+                val effectiveRange = effectiveViewRange(guard, player, weather)
                 val distanceFactor =
                     (1f - 0.6f * (guard.position.distanceTo(player.position) / effectiveRange))
                         .coerceIn(0.25f, 1f)
@@ -156,7 +157,8 @@ class StealthSimulation(
                     (if (player.isSneaking) 0.45f else 1f) *
                     (if (player.isInCover) 0.55f else 1f)
                 guard.suspicion = (guard.suspicion +
-                    guard.detectionRatePerSecond * distanceFactor * stealthFactor * dt)
+                    guard.detectionRatePerSecond * distanceFactor * stealthFactor *
+                    weather.detectionFactor * dt)
                     .coerceIn(0f, 100f)
 
                 if (guard.suspicion >= 100f) {
@@ -173,10 +175,10 @@ class StealthSimulation(
             }
 
             if (!canSeePlayer && guard.state != StealthGuardState.ALERTED) {
-                hearNoise(guard, noisePulses, events)
+                hearNoise(guard, noisePulses, weather, events)
             }
 
-            advanceGuard(guard, player, canSeePlayer, dt, events)
+            advanceGuard(guard, player, canSeePlayer, dt, weather, events)
         }
 
         return events
@@ -213,11 +215,11 @@ class StealthSimulation(
         return events
     }
 
-    private fun canSee(guard: StealthGuard, player: StealthPlayer): Boolean {
+    private fun canSee(guard: StealthGuard, player: StealthPlayer, weather: WeatherPerception): Boolean {
         if (player.isInvisible || player.position.levelId != world.levelId) return false
 
         val distance = guard.position.distanceTo(player.position)
-        val range = effectiveViewRange(guard, player)
+        val range = effectiveViewRange(guard, player, weather)
         if (distance > range) return false
         if (distance <= 0.05f) return true
 
@@ -231,20 +233,26 @@ class StealthSimulation(
         return world.hasLineOfSight(guard.position, player.position)
     }
 
-    private fun effectiveViewRange(guard: StealthGuard, player: StealthPlayer): Float {
+    private fun effectiveViewRange(
+        guard: StealthGuard,
+        player: StealthPlayer,
+        weather: WeatherPerception
+    ): Float {
         val stanceFactor = (if (player.isSneaking) 0.72f else 1f) *
             (if (player.isInCover) 0.65f else 1f)
-        return max(0.1f, guard.viewRange * stanceFactor)
+        return max(0.1f, guard.viewRange * stanceFactor * weather.viewRangeFactor)
     }
 
     private fun hearNoise(
         guard: StealthGuard,
         pulses: List<NoisePulse>,
+        weather: WeatherPerception,
         events: MutableList<StealthEvent>
     ) {
         for (pulse in pulses) {
             if (pulse.position.levelId != guard.position.levelId) continue
-            val effectiveRadius = max(0f, pulse.radius) * guard.hearingMultiplier
+            val effectiveRadius =
+                max(0f, pulse.radius) * guard.hearingMultiplier * weather.hearingFactor
             if (guard.position.distanceTo(pulse.position) > effectiveRadius) continue
 
             guard.lastKnownPlayerPosition = pulse.position
@@ -273,10 +281,11 @@ class StealthSimulation(
         player: StealthPlayer,
         canSeePlayer: Boolean,
         dt: Float,
+        weather: WeatherPerception,
         events: MutableList<StealthEvent>
     ) {
         when (guard.state) {
-            StealthGuardState.PATROLLING -> advancePatrol(guard, dt)
+            StealthGuardState.PATROLLING -> advancePatrol(guard, dt, weather)
 
             StealthGuardState.INVESTIGATING -> {
                 val target = guard.investigationTarget ?: guard.lastKnownPlayerPosition
@@ -284,7 +293,7 @@ class StealthSimulation(
                     beginSearch(guard, events)
                 } else if (guard.position.distanceTo(target) <= ARRIVAL_DISTANCE) {
                     beginSearch(guard, events)
-                } else if (!moveTowards(guard, target, guard.investigationSpeed, dt)) {
+                } else if (!moveTowards(guard, target, guard.investigationSpeed * weather.speedFactor, dt)) {
                     beginSearch(guard, events)
                 }
             }
@@ -297,7 +306,7 @@ class StealthSimulation(
                     guard.position.distanceTo(target) <= ARRIVAL_DISTANCE
                 ) {
                     beginSearch(guard, events)
-                } else if (!moveTowards(guard, target, guard.chaseSpeed, dt)) {
+                } else if (!moveTowards(guard, target, guard.chaseSpeed * weather.speedFactor, dt)) {
                     beginSearch(guard, events)
                 }
             }
@@ -320,7 +329,7 @@ class StealthSimulation(
         }
     }
 
-    private fun advancePatrol(guard: StealthGuard, dt: Float) {
+    private fun advancePatrol(guard: StealthGuard, dt: Float, weather: WeatherPerception) {
         if (guard.patrolRoute.isEmpty()) {
             guard.facingAngleRadians = normalizeAngle(
                 guard.facingAngleRadians + SEARCH_TURN_RATE * 0.25f * dt
@@ -342,7 +351,7 @@ class StealthSimulation(
                 guard.clearPath()
                 return
             }
-            if (!moveTowards(guard, target, guard.patrolSpeed, dt)) {
+            if (!moveTowards(guard, target, guard.patrolSpeed * weather.speedFactor, dt)) {
                 guard.patrolIndex = (guard.patrolIndex + 1) % guard.patrolRoute.size
                 guard.clearPath()
             }

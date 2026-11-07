@@ -1,6 +1,7 @@
 package com.example.ui
 
 import com.example.core.model.CellType
+import com.example.core.model.CyberWeather
 import com.example.core.model.LogType
 import com.example.data.GameSessionMode
 import com.example.stealth.StealthGuardState
@@ -43,7 +44,8 @@ class StealthSessionControllerTest {
         px: Int,
         sneaking: Boolean = false,
         mazeGrid: Array<Array<CellType>>? = null,
-        levelSeed: Long = 0L
+        levelSeed: Long = 0L,
+        weather: CyberWeather = CyberWeather.CLEAR
     ): Pair<StealthSessionController, MutableStateFlow<GameUiState>> {
         logs.clear()
         detections.clear()
@@ -55,7 +57,8 @@ class StealthSessionControllerTest {
                 gridY = 1,
                 level = 1,
                 levelSeed = levelSeed,
-                isSneaking = sneaking
+                isSneaking = sneaking,
+                activeWeather = weather
             )
         )
         val controller = StealthSessionController(
@@ -277,8 +280,66 @@ class StealthSessionControllerTest {
         assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
     }
 
-    private fun ticksUntilDetection(sneaking: Boolean, mazeGrid: Array<Array<CellType>>?): Int {
-        val (controller, _) = newController(px = 7, sneaking = sneaking, mazeGrid = mazeGrid)
+    @Test
+    fun ghostProtocolWeatherSlowsVisualDetection() {
+        // GHOST_PROTOCOL masks the runner (0.65 x detection): the rotating
+        // cone still finds them, but suspicion climbs far slower.
+        val clearTicks = ticksUntilDetection(sneaking = false, mazeGrid = null, weather = CyberWeather.CLEAR)
+        val ghostTicks = ticksUntilDetection(sneaking = false, mazeGrid = null, weather = CyberWeather.GHOST_PROTOCOL)
+        assertTrue("clear detection expected, got " + clearTicks, clearTicks in 1..119)
+        assertTrue("ghost detection expected, got " + ghostTicks, ghostTicks in 1..119)
+        assertTrue(
+            "ghost protocol must slow detection: ghost=" + ghostTicks + " clear=" + clearTicks,
+            ghostTicks > clearTicks + 10
+        )
+    }
+
+    @Test
+    fun apexStormWeatherAcceleratesVisualDetection() {
+        // APEX_STORM overdrives the ICE (1.25 x detection): the alarm
+        // sounds measurably earlier than in clear bandwidth.
+        val clearTicks = ticksUntilDetection(sneaking = false, mazeGrid = null, weather = CyberWeather.CLEAR)
+        val apexTicks = ticksUntilDetection(sneaking = false, mazeGrid = null, weather = CyberWeather.APEX_STORM)
+        assertTrue("clear detection expected, got " + clearTicks, clearTicks in 1..119)
+        assertTrue("apex detection expected, got " + apexTicks, apexTicks in 1..119)
+        // The stationary guard's cone rotates in discrete steps, so the
+        // detection tick count is quantized: with levelSeed=0 the clear-weather
+        // alarm fires at tick 50 and the apex storm at tick 46 (deterministic).
+        assertTrue(
+            "apex storm must accelerate detection: apex=" + apexTicks + " clear=" + clearTicks,
+            apexTicks < clearTicks - 3
+        )
+    }
+
+    @Test
+    fun echoWeatherStirsIceWithoutExposingTheRunner() {
+        // ECHOES pulses a phantom telemetry fragment every 40 ticks: the ICE
+        // leaves its post to investigate the remnant while the runner stays
+        // undetected in the far west of the corridor.
+        val (controller, _) = newController(px = 1, weather = CyberWeather.ECHOES)
+        var ticks = 0
+        var state = StealthGuardState.PATROLLING
+        val maxTicks = 3 * 40
+        while (ticks < maxTicks) {
+            controller.tickOnce()
+            ticks++
+            state = controller.peekStealthSession()!!.snapshot().guards.first().state
+            if (state != StealthGuardState.PATROLLING) break
+        }
+        assertTrue("ICE should have chased a phantom echo, stayed " + state, state != StealthGuardState.PATROLLING)
+        assertTrue(detections.isEmpty())
+    }
+
+    private fun ticksUntilDetection(sneaking: Boolean,
+        mazeGrid: Array<Array<CellType>>?,
+        weather: CyberWeather = CyberWeather.CLEAR
+    ): Int {
+        val (controller, _) = newController(
+            px = 7,
+            sneaking = sneaking,
+            mazeGrid = mazeGrid,
+            weather = weather
+        )
         var ticks = 0
         while (detections.isEmpty() && ticks < 120) {
             controller.tickOnce()
