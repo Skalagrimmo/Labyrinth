@@ -335,6 +335,7 @@ class ExplorationManager(
                             }
                             currentMaze = mutableMaze
                             pendingLogs.add(Pair("DANGER: Memory Fragmentation is shifting firewall partitions dynamically!", LogType.ALERT))
+                            pendingLogs.add(Pair("STEALTH ADVISORY: ICE optics track normally - the shifting partitions do not mask the runner.", LogType.INFO))
                         }
                         CyberWeather.ECHOES -> {
                             val mutableMaze = Array(currentMaze.size) { r -> currentMaze[r].copyOf() }
@@ -352,21 +353,27 @@ class ExplorationManager(
                             }
                             currentMaze = mutableMaze
                             pendingLogs.add(Pair("ALERT: Sub-sector telemetry streams are bleeding. Ghost netrunner hosts detected.", LogType.ALERT))
+                            pendingLogs.add(Pair("STEALTH ADVISORY: Phantom telemetry pulses lure ICE patrols off their routes every 40 ticks.", LogType.INFO))
                         }
                         CyberWeather.COLD_SPOT -> {
                             pendingLogs.add(Pair("ALERT: System bus temperature critical low. Overclocking modules frozen.", LogType.ALERT))
+                            pendingLogs.add(Pair("STEALTH ADVISORY: Sluggish ICE cores run 25% slower, hear 10% worse and track 15% duller.", LogType.INFO))
                         }
                         CyberWeather.HOT_NODE -> {
                             pendingLogs.add(Pair("ALERT: High-voltage core packets discharging. Overclock active, but taking damage!", LogType.ALERT))
+                            pendingLogs.add(Pair("STEALTH ADVISORY: Overheated ICE sweep 10% harder - avoid open corridors.", LogType.INFO))
                         }
                         CyberWeather.DATA_STORM -> {
                             pendingLogs.add(Pair("ALERT: Dense signal interference static detected. Direction controllers scrambled!", LogType.ALERT))
+                            pendingLogs.add(Pair("STEALTH ADVISORY: Interference cuts ICE sight range by 25% and dulls tracking by 10% - move while it lasts.", LogType.INFO))
                         }
                         CyberWeather.APEX_STORM -> {
                             pendingLogs.add(Pair("ALERT: Layered firewall surge overloading the sector. Expect heat bleed and vector scrambling!", LogType.ALERT))
+                            pendingLogs.add(Pair("STEALTH ADVISORY: Overdriven ICE see 20% farther, hear 15% sharper and run 10% faster - stay in cover.", LogType.INFO))
                         }
                         CyberWeather.GHOST_PROTOCOL -> {
                             pendingLogs.add(Pair("ALERT: Phasing field saturating the sector. Constructs are flickering out of spectral range!", LogType.ALERT))
+                            pendingLogs.add(Pair("STEALTH ADVISORY: The phase field cuts ICE visual detection by 35% - a window for silent runs.", LogType.INFO))
                         }
                         else -> {}
                     }
