@@ -1,6 +1,7 @@
 package com.example.stealth
 
 import com.example.core.model.CellType
+import com.example.core.model.CyberWeather
 import com.example.core.model.Direction
 import kotlin.math.PI
 
@@ -53,11 +54,16 @@ class LabyrinthStealthSession(
     )
     private val simulation = StealthSimulation(world, guards)
     private var currentPlayerPosition: StealthPosition? = null
+    private var echoPulseCounter: Int = 0
 
     /**
      * Advances the AI and returns a compact snapshot for UI/renderer code.
      * A missing frame does not imply that the player has been detected; inspect
      * StealthSessionFrame.playerDetected or the guard states in the returned frame.
+     *
+     * The optional weather maps the current CyberWeather onto perception factors
+     * (WeatherPerception) and, for ECHOES, spawns deterministic phantom echo
+     * pulses that lure ICE off their patrol routes.
      */
     fun update(
         deltaTimeSeconds: Float,
@@ -66,7 +72,8 @@ class LabyrinthStealthSession(
         isSneaking: Boolean = false,
         isInvisible: Boolean = false,
         isInCover: Boolean = false,
-        noisePulses: List<NoisePulse> = emptyList()
+        noisePulses: List<NoisePulse> = emptyList(),
+        weather: CyberWeather = CyberWeather.CLEAR
     ): StealthSessionFrame {
         val position = StealthPosition(
             x = gridX + 0.5f,
@@ -80,8 +87,52 @@ class LabyrinthStealthSession(
             isInvisible = isInvisible,
             isInCover = isInCover
         )
-        val events = simulation.update(deltaTimeSeconds, player, noisePulses)
+        val effectivePulses = if (weather == CyberWeather.ECHOES) {
+            echoPulseCounter++
+            val phantom = if (echoPulseCounter % ECHO_PULSE_INTERVAL_TICKS == 0) {
+                phantomEchoPulse(position)
+            } else {
+                null
+            }
+            if (phantom != null) noisePulses + phantom else noisePulses
+        } else {
+            noisePulses
+        }
+        val events = simulation.update(
+            deltaTimeSeconds = deltaTimeSeconds,
+            player = player,
+            noisePulses = effectivePulses,
+            weather = WeatherPerception.forWeather(weather)
+        )
         return snapshot(events)
+    }
+
+    /**
+     * Deterministic phantom echo stimulus (ECHOES weather): a dead netrunner's
+     * telemetry fragment flickering back into reality at a walkable cell away
+     * from the runner. The cell is derived from the echo tick counter and the
+     * level id alone - the same session state always replays the same
+     * sequence, so seed determinism holds. ICE hears the remnant and drifts
+     * off its patrol to investigate it.
+     */
+    private fun phantomEchoPulse(playerPosition: StealthPosition): NoisePulse? {
+        val candidates = mutableListOf<StealthPosition>()
+        for (y in 0 until world.height) {
+            for (x in 0 until world.width) {
+                if (!world.isWalkable(x, y)) continue
+                val cellCenter = StealthPosition(x + 0.5f, y + 0.5f, levelId)
+                if (cellCenter.distanceTo(playerPosition) <= ECHO_PLAYER_EXCLUSION_CELLS) continue
+                candidates.add(cellCenter)
+            }
+        }
+        if (candidates.isEmpty()) return null
+        val hash = (echoPulseCounter.toLong() * 2654435761L + levelId * 40503L).toInt()
+        val index = ((hash % candidates.size) + candidates.size) % candidates.size
+        return NoisePulse(
+            position = candidates[index],
+            radius = ECHO_PULSE_RADIUS_CELLS,
+            intensity = ECHO_PULSE_INTENSITY
+        )
     }
 
     /**
@@ -122,6 +173,18 @@ class LabyrinthStealthSession(
         )
 
     companion object {
+        /** One phantom echo per N session ticks (100 ms cadence -> 4 s). */
+        const val ECHO_PULSE_INTERVAL_TICKS: Int = 40
+
+        /** Phantom echoes are heard by ICE within this radius (cells). */
+        const val ECHO_PULSE_RADIUS_CELLS: Float = 3.5f
+
+        /** Investigation weight of a phantom echo (see NoisePulse.intensity). */
+        const val ECHO_PULSE_INTENSITY: Float = 0.6f
+
+        /** Echoes never spawn this close to the runner: they lure, not reveal. */
+        const val ECHO_PLAYER_EXCLUSION_CELLS: Float = 2.5f
+
         val DEFAULT_MOVEMENT_BLOCKERS: Set<CellType> = setOf(
             CellType.WALL,
             CellType.SECRET_WALL,
