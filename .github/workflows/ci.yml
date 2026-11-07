@@ -5,10 +5,6 @@ on:
     branches: [ main, master ]
   pull_request:
 
-permissions:
-  contents: read
-  pull-requests: write
-
 jobs:
   build:
     name: Build, lint & test
@@ -30,35 +26,17 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test 2>&1 | tee gradle-full.log
-        continue-on-error: true
+        run: ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test
 
-      - name: FAILDETAIL
-        if: always()
-        run: |
-          {
-            echo '### CI failure detail (auto-diagnostic v2)'
-            echo '#### Which task failed'
-            grep -E '^> Task .*(FAILED|ksp)' gradle-full.log | tail -30 || echo '(none)'
-            echo '#### ApplicationManager context'
-            grep -B 10 -A 5 'ApplicationManager' gradle-full.log | head -60 || echo '(none)'
-            echo '#### FAILURE section'
-            sed -n '/FAILURE/,/^$/p' gradle-full.log | head -40 || echo '(none)'
-            echo '#### Kotlin compile errors'
-            grep '^e: ' gradle-full.log | head -30 || echo '(none)'
-          } > faildetail.md || true
+      - name: Run lint
+        run: ./gradlew lintDebug
 
-      - name: Comment on PR
-        if: always()
-        uses: actions/github-script@v7
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
-            let body = '(no detail captured)';
-            try { body = fs.readFileSync('faildetail.md', 'utf8').slice(0, 25000); } catch (e) {}
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body
-            });
+          name: netcrawler-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
