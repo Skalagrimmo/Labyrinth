@@ -32,16 +32,15 @@ jobs:
           code=${PIPESTATUS[0]}
           set -e
           if [ "$code" -ne 0 ]; then
-            grep -E '^e: ' /tmp/test-output.log | head -40 > /tmp/fails.txt || true
-            grep -E 'FAILED' /tmp/test-output.log | head -40 >> /tmp/fails.txt || true
-            find . -path '*build/test-results*' -name 'TEST-*.xml' | while read -r f; do
-              grep -l '<failure' "$f" >/dev/null 2>&1 || continue
-              echo "XMLSUITE $f" >> /tmp/fails.txt
-              sed -n 's/.*<testcase name="\([^"]*\)".*/CASE: \1/p' "$f" >> /tmp/fails.txt
-              sed -n 's/.*<failure[^>]*message="\([^"]*\)".*/FAILMSG: \1/p' "$f" | head -12 >> /tmp/fails.txt
-            done
-            tr -d '\r' < /tmp/fails.txt | sed 's/%/%25/g' | head -250 | while IFS= read -r line; do
-              echo "::error::$(echo "$line" | cut -c1-250)"
+            {
+              grep -E 'Task.*FAILED|BUILD FAILED' /tmp/test-output.log | head -4
+              find . -path '*build/test-results*' -name 'TEST-*.xml' | while read -r f; do
+                grep -q '<failure' "$f" || continue
+                grep -B1 -A2 '<failure' "$f" | sed 's/^[[:space:]]*//' | head -12
+              done
+            } > /tmp/fails.txt || true
+            tr -d '\r' < /tmp/fails.txt | sed 's/%/%25/g' | head -10 | while IFS= read -r line; do
+              echo "::error::$(echo "$line" | cut -c1-400)"
             done
             exit "$code"
           fi
