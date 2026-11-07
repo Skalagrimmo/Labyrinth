@@ -6,6 +6,7 @@ import com.example.core.model.LogType
 import com.example.data.GameSessionMode
 import com.example.data.GameState
 import com.example.data.RealTimeGameSession
+import com.example.stealth.GridCell
 import com.example.stealth.LabyrinthStealthSession
 import com.example.stealth.NoisePulse
 import com.example.stealth.StealthEventType
@@ -44,6 +45,10 @@ import kotlinx.coroutines.flow.update
  *  - the current CyberWeather scales ICE perception (WeatherPerception in
  *  :core:engine) and ECHOES spawns phantom echo pulses that lure ICE off
  *  patrol (d8 slice 1: weather -> ICE perception binding);
+ *  - d8 slice 2: floors with enough walkable area host 1-3 mobile ICE
+ *  patrols - roaming sweep units whose waypoint loops are hashed from
+ *  the level seed (seed determinism); small corridors stay patrol-free
+ *  and the stationary node guards keep their exact behaviour;
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -67,6 +72,8 @@ class StealthSessionController(
     private var lastMaze: Array<Array<CellType>>? = null
     private var lastLevelId: Int = -1
     private var combatSeen: Boolean = false
+    /** Remembers which floor+count was last announced, so the patrol advisory log fires once per level. */
+    private var lastPatrolLogSignature: String = ""
 
     /** One-shot noise stimuli queued from player input; consumed by the next world tick. */
     private val pendingNoise = ArrayDeque<NoisePulse>()
@@ -281,11 +288,24 @@ class StealthSessionController(
                 if (maze[y][x] == CellType.VIRUS_NODE) nodes.add(x to y)
             }
         }
+        // d8 slice 2: the mobile patrol set derives from the floor's walkable
+        // area, so the patrol count joins the node list in the guard-set
+        // signature (a count change rebuilds the session).
+        val walkable = mutableListOf<GridCell>()
+        for (y in maze.indices) {
+            for (x in maze[y].indices) {
+                if (maze[y][x] !in LabyrinthStealthSession.DEFAULT_MOVEMENT_BLOCKERS) {
+                    walkable.add(GridCell(x, y, levelId))
+                }
+            }
+        }
+        val patrolCount = patrolCountFor(walkable.size)
         val signature = buildString {
             append(levelId).append(':')
             nodes.sortedWith(compareBy({ it.second }, { it.first })).forEach {
                 append(it.first).append(',').append(it.second).append(';')
             }
+            append('|').append(patrolCount)
         }
 
         if (levelChanged) guards.clear()
@@ -296,6 +316,14 @@ class StealthSessionController(
             val id = guardId(x, y)
             guardCells[id] = x to y
             nextGuards.add(existingById[id] ?: newGuard(id, x, y, levelId, levelSeed))
+        }
+        // d8 slice 2: mobile ICE patrols - roaming sweep units with
+        // deterministic waypoint loops. Surviving patrol guards keep their
+        // runtime state across maze array replacement, exactly like the
+        // stationary node guards; a floor switch reseeds the patrol set.
+        for (n in 0 until patrolCount) {
+            val id = patrolId(levelId, n)
+            nextGuards.add(existingById[id] ?: newPatrol(id, n, walkable, levelId, levelSeed))
         }
         guards = nextGuards
 
@@ -309,6 +337,21 @@ class StealthSessionController(
             session = RealTimeGameSession(stealthSession!!)
         } else if (mazeChanged) {
             stealthSession!!.replaceMaze(maze)
+        }
+
+        // d8 slice 2: announce the roaming sweep units once per floor. The
+        // controller re-syncs on every maze array replacement, so the log
+        // fires only when the level or the patrol count changes.
+        if (patrolCount > 0) {
+            val patrolLogSignature = levelId.toString() + ":" + patrolCount
+            if (patrolLogSignature != lastPatrolLogSignature) {
+                lastPatrolLogSignature = patrolLogSignature
+                onLog(
+                    "ICE PATROL SIGNATURES: " + patrolCount +
+                        " roaming sweep unit(s) detected on this floor.",
+                    LogType.INFO
+                )
+            }
         }
     }
 
@@ -335,6 +378,60 @@ class StealthSessionController(
             facingAngleRadians = LabyrinthStealthSession.angleForDirection(facingFor(x, y, levelSeed))
         )
 
+    /**
+     * d8 slice 2: deterministic mobile patrols. The floor's walkable area
+     * decides how many roam it (0 below the size threshold, then 1-3), so
+     * cramped corridors and test mazes stay patrol-free while real floors
+     * feel inhabited. Derived from the maze alone - seed determinism holds.
+     */
+    private fun patrolCountFor(walkableCells: Int): Int {
+        if (walkableCells < PATROL_MIN_WALKABLE_CELLS) return 0
+        return (walkableCells / PATROL_AREA_PER_UNIT).coerceIn(1, MAX_PATROLS_PER_FLOOR)
+    }
+
+    private fun patrolId(levelId: Int, n: Int): String = "ice_patrol_" + levelId + "_" + n
+
+    /**
+     * A patrol is a closed waypoint loop hashed out of the floor's walkable
+     * cells (the same Knuth-style hash family as the ECHOES phantom pulses,
+     * salted with the patrol index and the seed). The same maze + level seed
+     * always replay the same routes; the engine's advancePatrol walks the
+     * loop cell-by-cell through A* and skips waypoints a floor mutation
+     * turned into a wall.
+     */
+    private fun newPatrol(
+        id: String,
+        n: Int,
+        walkable: List<GridCell>,
+        levelId: Int,
+        levelSeed: Long
+    ): StealthGuard {
+        val route = mutableListOf<GridCell>()
+        var attempt = 0
+        while (route.size < PATROL_ROUTE_WAYPOINTS && attempt < walkable.size * 2) {
+            val hash = (
+                levelSeed * 2654435761L +
+                    levelId * 40503L +
+                    n * 97L +
+                    route.size * 31L +
+                    attempt * 7L
+                ).toInt()
+            val index = ((hash % walkable.size) + walkable.size) % walkable.size
+            val cell = walkable[index]
+            if (cell !in route) route.add(cell)
+            attempt++
+        }
+        val start = route.first()
+        return StealthGuard(
+            id = id,
+            position = start.center(),
+            facingAngleRadians = LabyrinthStealthSession.angleForDirection(
+                facingFor(start.x, start.y, levelSeed)
+            ),
+            patrolRoute = route
+        )
+    }
+
     private fun guardId(x: Int, y: Int): String = "ice_" + x + "_" + y
 
     private fun facingFor(x: Int, y: Int, levelSeed: Long): Direction {
@@ -352,6 +449,16 @@ class StealthSessionController(
         const val DECOY_RADIUS_CELLS: Float = 6f
         const val DECOY_INTENSITY: Float = 1f
         const val DECOY_RAM_COST: Int = 1
+
+        /** d8 slice 2: floors with fewer walkable cells host no mobile patrols. */
+        const val PATROL_MIN_WALKABLE_CELLS: Int = 40
+
+        /** One extra roaming patrol per this many walkable cells. */
+        const val PATROL_AREA_PER_UNIT: Int = 100
+
+        const val MAX_PATROLS_PER_FLOOR: Int = 3
+
+        const val PATROL_ROUTE_WAYPOINTS: Int = 4
         private val NOISE_LANDING_BLOCKERS: Set<CellType> = setOf(
             CellType.WALL,
             CellType.SECRET_WALL,
