@@ -588,10 +588,25 @@ class StealthSessionControllerTest {
             )
         )
 
-        repeat(80) { controller.tickOnce() }
+        // 80 ticks at the 100ms cadence = the 8s spike. Iterated float
+        // subtraction can leave a ~1e-6 residue on the exact boundary, so
+        // allow a tick of slack before demanding the clean PATROLLING
+        // reboot (and keep a hard bound so a broken timer still fails).
+        var ticksAfterSpike = 0
+        while (
+            controller.peekStealthSession()!!.snapshot().guards.first().state ==
+                StealthGuardState.DISABLED && ticksAfterSpike < 90
+        ) {
+            controller.tickOnce()
+            ticksAfterSpike++
+        }
         assertEquals(
             StealthGuardState.PATROLLING,
             controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        assertTrue(
+            "expected the reboot at ~80 ticks, got " + ticksAfterSpike,
+            ticksAfterSpike in 78..85
         )
         assertTrue(
             logs.any { it.first.contains("ICE REBOOT") && it.first.contains("ice_5_1") }
