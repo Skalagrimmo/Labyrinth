@@ -5,6 +5,10 @@ on:
     branches: [ main, master ]
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   build:
     name: Build, lint & test
