@@ -25,6 +25,8 @@ dependencies {
   implementation(project(":core:engine"))
   implementation(project(":core:game"))
   implementation(project(":core:platform"))
+  implementation(project(":core:persistence"))
+  implementation(libs.androidx.room.runtime)
   implementation(project(":core:content"))
   implementation(project(":core:audio"))
   implementation(project(":core:designsystem"))
