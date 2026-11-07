@@ -413,4 +413,136 @@ class StealthSimulationTest {
         )
         assertTrue(hot > clear)
     }
+
+    @Test
+    fun alertedGuardRelaysTheAlarmToNearbyUnits() {
+        // d8 slice 3: the unit that spots the runner broadcasts the detection
+        // spot once; units inside the relay radius converge on it, units
+        // beyond it never hear the call.
+        val world = openWorld(width = 13)
+        val alerter = StealthGuard(
+            id = "guard-alarm",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 80f
+        )
+        val near = StealthGuard(
+            id = "guard-near",
+            position = StealthPosition(5.5f, 2.5f),
+            facingAngleRadians = 0f,
+            fieldOfViewRadians = PI.toFloat() / 3f
+        )
+        val far = StealthGuard(
+            id = "guard-far",
+            position = StealthPosition(11.5f, 2.5f),
+            facingAngleRadians = 0f,
+            fieldOfViewRadians = PI.toFloat() / 3f
+        )
+        val simulation = StealthSimulation(world, listOf(alerter, near, far))
+        val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+
+        val events = mutableListOf<StealthEvent>()
+        var safety = 0
+        while (alerter.state != StealthGuardState.ALERTED && safety < 40) {
+            events += simulation.update(0.1f, player)
+            safety++
+        }
+
+        assertEquals(StealthGuardState.ALERTED, alerter.state)
+        // The nearby unit (3 cells from the detection spot) is relayed the
+        // alarm: it turns to investigate the spot, primed to the
+        // coordination suspicion floor.
+        assertEquals(StealthGuardState.INVESTIGATING, near.state)
+        assertEquals(StealthPosition(2.5f, 2.5f), near.investigationTarget)
+        assertEquals(40f, near.suspicion, 0.001f)
+        // The distant unit (9 cells out) never hears the call.
+        assertEquals(StealthGuardState.PATROLLING, far.state)
+        assertEquals(0f, far.suspicion, 0.001f)
+        assertTrue(
+            events.any {
+                it.type == StealthEventType.ICE_ALERT_RELAYED && it.guardId == "guard-near"
+            }
+        )
+        assertFalse(
+            events.any {
+                it.type == StealthEventType.ICE_ALERT_RELAYED && it.guardId == "guard-far"
+            }
+        )
+    }
+
+    @Test
+    fun alertRelayRangeTracksTheWeatherPropagation() {
+        // The alarm call rides the same medium as sound: its effective radius
+        // is the coordination base scaled by the weather's hearingFactor.
+        fun relayed(weather: WeatherPerception): Boolean {
+            val world = openWorld(width = 12)
+            val alerter = StealthGuard(
+                id = "guard-alarm",
+                position = StealthPosition(1.5f, 2.5f),
+                facingAngleRadians = 0f,
+                viewRange = 6f,
+                fieldOfViewRadians = PI.toFloat() / 2f,
+                detectionRatePerSecond = 80f
+            )
+            val edge = StealthGuard(
+                id = "guard-edge",
+                position = StealthPosition(9.5f, 2.5f),
+                facingAngleRadians = 0f,
+                fieldOfViewRadians = PI.toFloat() / 3f
+            )
+            val simulation = StealthSimulation(world, listOf(alerter, edge))
+            val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+            var safety = 0
+            while (alerter.state != StealthGuardState.ALERTED && safety < 40) {
+                simulation.update(0.1f, player, emptyList(), weather)
+                safety++
+            }
+            return edge.state == StealthGuardState.INVESTIGATING
+        }
+
+        // The edge unit sits 7 cells from the detection spot: clear bandwidth
+        // (radius 8.0) relays the alarm, a ghost-protocol sector (8 x 0.85 =
+        // 6.8) mutes it, an apex storm (8 x 1.15 = 9.2) carries it.
+        assertTrue(relayed(WeatherPerception.NONE))
+        assertFalse(relayed(WeatherPerception.forWeather(CyberWeather.GHOST_PROTOCOL)))
+        assertTrue(relayed(WeatherPerception.forWeather(CyberWeather.APEX_STORM)))
+    }
+
+    @Test
+    fun alertRelayReplaysIdenticallyAcrossSessions() {
+        // Seed determinism: two independent sessions replay the same alert,
+        // relay and convergence tick for tick (no randomness anywhere in
+        // the coordination path).
+        fun runSession(): List<Triple<String, StealthGuardState, StealthPosition?>> {
+            val world = openWorld(width = 13)
+            val alerter = StealthGuard(
+                id = "guard-alarm",
+                position = StealthPosition(1.5f, 2.5f),
+                facingAngleRadians = 0f,
+                viewRange = 6f,
+                fieldOfViewRadians = PI.toFloat() / 2f,
+                detectionRatePerSecond = 80f
+            )
+            val near = StealthGuard(
+                id = "guard-near",
+                position = StealthPosition(5.5f, 2.5f),
+                facingAngleRadians = 0f,
+                fieldOfViewRadians = PI.toFloat() / 3f
+            )
+            val far = StealthGuard(
+                id = "guard-far",
+                position = StealthPosition(11.5f, 2.5f),
+                facingAngleRadians = 0f,
+                fieldOfViewRadians = PI.toFloat() / 3f
+            )
+            val simulation = StealthSimulation(world, listOf(alerter, near, far))
+            val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+            repeat(25) { simulation.update(0.1f, player) }
+            return simulation.guards.map { Triple(it.id, it.state, it.investigationTarget) }
+        }
+
+        assertEquals(runSession(), runSession())
+    }
 }
