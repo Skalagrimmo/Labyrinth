@@ -1,6 +1,7 @@
 package com.example.stealth
 
 import com.example.core.model.CellType
+import com.example.core.model.CyberWeather
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -293,5 +294,106 @@ class StealthSimulationTest {
         simulation.update(-0.5f, StealthPlayer(StealthPosition(6.5f, 4.5f)))
 
         assertEquals(before, guard.position)
+    }
+
+    @Test
+    fun dataStormHidesPlayerBeyondShortenedViewRange() {
+        fun guardAfterTwoSeconds(weather: WeatherPerception): StealthGuard {
+            val world = openWorld()
+            val guard = StealthGuard(
+                id = "guard-storm",
+                position = StealthPosition(1.5f, 2.5f),
+                facingAngleRadians = 0f,
+                viewRange = 5f,
+                fieldOfViewRadians = PI.toFloat() / 2f,
+                detectionRatePerSecond = 100f
+            )
+            val simulation = StealthSimulation(world, listOf(guard))
+            val player = StealthPlayer(StealthPosition(5.5f, 2.5f))
+            repeat(20) { simulation.update(0.1f, player, emptyList(), weather) }
+            return guard
+        }
+
+        assertEquals(StealthGuardState.ALERTED, guardAfterTwoSeconds(WeatherPerception.NONE).state)
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            guardAfterTwoSeconds(WeatherPerception.forWeather(CyberWeather.DATA_STORM)).state
+        )
+    }
+
+    @Test
+    fun apexStormAcceleratesSuspicionGrowth() {
+        fun suspicionAfterOneTick(weather: WeatherPerception): Float {
+            val world = openWorld()
+            val guard = StealthGuard(
+                id = "guard-apex",
+                position = StealthPosition(1.5f, 2.5f),
+                facingAngleRadians = 0f,
+                viewRange = 6f,
+                fieldOfViewRadians = PI.toFloat() / 2f,
+                detectionRatePerSecond = 60f,
+                patrolSpeed = 0f,
+                investigationSpeed = 0f,
+                chaseSpeed = 0f
+            )
+            val simulation = StealthSimulation(world, listOf(guard))
+            simulation.update(0.25f, StealthPlayer(StealthPosition(2.5f, 2.5f)), emptyList(), weather)
+            return guard.suspicion
+        }
+
+        val clear = suspicionAfterOneTick(WeatherPerception.NONE)
+        val apex = suspicionAfterOneTick(WeatherPerception.forWeather(CyberWeather.APEX_STORM))
+        assertTrue(apex > clear)
+        assertEquals(clear * 1.25f, apex, 0.01f)
+    }
+
+    @Test
+    fun coldSpotDampensNoiseRadiusWhileEchoesHeightenIt() {
+        fun hears(weather: WeatherPerception): Boolean {
+            val world = openWorld()
+            val guard = StealthGuard(
+                id = "guard-cold",
+                position = StealthPosition(1.5f, 2.5f),
+                facingAngleRadians = PI.toFloat(),
+                fieldOfViewRadians = PI.toFloat() / 3f
+            )
+            val simulation = StealthSimulation(world, listOf(guard))
+            val playerOnAnotherLayer = StealthPlayer(StealthPosition(6.5f, 4.5f, levelId = 1))
+            val events = simulation.update(
+                0.1f,
+                playerOnAnotherLayer,
+                listOf(NoisePulse(StealthPosition(6.2f, 2.5f), radius = 5f)),
+                weather
+            )
+            return events.any { it.type == StealthEventType.NOISE_HEARD }
+        }
+
+        // The pulse sits 4.7 cells away: clear weather (radius 5.0) hears it,
+        // a frozen sector (0.9 x 5.0 = 4.5) does not, echoes (1.25 x 5.0 = 6.25) do.
+        assertTrue(hears(WeatherPerception.NONE))
+        assertFalse(hears(WeatherPerception.forWeather(CyberWeather.COLD_SPOT)))
+        assertTrue(hears(WeatherPerception.forWeather(CyberWeather.ECHOES)))
+    }
+
+    @Test
+    fun hotNodeSpeedsUpPatrolMovement() {
+        fun distanceCovered(weather: WeatherPerception): Float {
+            val world = openWorld()
+            val guard = StealthGuard(
+                id = "guard-hot",
+                position = StealthPosition(1.5f, 2.5f),
+                patrolRoute = listOf(GridCell(6, 2)),
+                patrolSpeed = 1f
+            )
+            val simulation = StealthSimulation(world, listOf(guard))
+            val playerOnAnotherLayer = StealthPlayer(StealthPosition(6.5f, 4.5f, levelId = 1))
+            repeat(10) { simulation.update(0.1f, playerOnAnotherLayer, emptyList(), weather) }
+            return guard.position.distanceTo(StealthPosition(1.5f, 2.5f))
+        }
+
+        val clear = distanceCovered(WeatherPerception.NONE)
+        val hot = distanceCovered(WeatherPerception.forWeather(CyberWeather.HOT_NODE))
+        assertEquals(1f, clear, 0.01f)
+        assertEquals(clear * 1.15f, hot, 0.01f)
     }
 }
