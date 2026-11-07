@@ -26,24 +26,7 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: |
-          set +e
-          ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test 2>&1 | tee /tmp/test-output.log
-          code=${PIPESTATUS[0]}
-          set -e
-          if [ "$code" -ne 0 ]; then
-            {
-              grep -E 'Task.*FAILED|BUILD FAILED' /tmp/test-output.log | head -4
-              find . -path '*build/test-results*' -name 'TEST-*.xml' | while read -r f; do
-                grep -q '<failure' "$f" || continue
-                grep -B1 -A2 '<failure' "$f" | sed 's/^[[:space:]]*//' | head -12
-              done
-            } > /tmp/fails.txt || true
-            tr -d '\r' < /tmp/fails.txt | sed 's/%/%25/g' | head -10 | while IFS= read -r line; do
-              echo "::error::$(echo "$line" | cut -c1-400)"
-            done
-            exit "$code"
-          fi
+        run: ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test
 
       - name: Run lint
         run: ./gradlew lintDebug
