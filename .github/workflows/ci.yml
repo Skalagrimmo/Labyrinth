@@ -5,6 +5,10 @@ on:
     branches: [ main, master ]
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   build:
     name: Build, lint & test
@@ -29,7 +33,38 @@ jobs:
         run: ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test
 
       - name: Run lint
-        run: ./gradlew lintDebug
+        run: ./gradlew lintDebug 2>&1 | tee lint-full.log
+        continue-on-error: true
+
+      - name: LINTDETAIL
+        if: always()
+        run: |
+          {
+            echo '### CI lint failure detail (auto-diagnostic v3)'
+            echo '#### Lint errors'
+            grep -E 'Error: ' lint-full.log | head -40 || echo '(none)'
+            echo '#### Which module failed'
+            grep -E '^> Task .*lint.* FAILED' lint-full.log | head -10 || echo '(none)'
+            echo '#### Failure section'
+            sed -n '/FAILURE/,/What went wrong/p' lint-full.log | head -20 || echo '(none)'
+            echo '#### Lint summary lines'
+            grep -E 'Lint found|errors?,|[0-9]+ errors' lint-full.log | head -20 || echo '(none)'
+          } > lintdetail.md || true
+
+      - name: Comment on PR
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '(no lint detail captured)';
+            try { body = fs.readFileSync('lintdetail.md', 'utf8').slice(0, 25000); } catch (e) {}
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body
+            });
 
       - name: Assemble debug APK
         run: ./gradlew assembleDebug
