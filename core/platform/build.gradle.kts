@@ -15,6 +15,7 @@ android {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
+  testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
 // Export Room schema JSON to core/platform/schemas so the v6 migration baseline
@@ -34,6 +35,7 @@ dependencies {
   implementation(libs.kotlinx.coroutines.core)
   "ksp"(libs.androidx.room.compiler)
   testImplementation(libs.junit)
+  testImplementation(libs.robolectric)
   // JVM tests need a real JSON implementation; production keeps Android org.json for API compatibility.
   testImplementation("org.json:json:20240303")
 }
