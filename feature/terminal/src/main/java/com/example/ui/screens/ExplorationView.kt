@@ -909,6 +909,32 @@ fun ExplorationView(
                             Button(
                                 onClick = {
                                     view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                                    viewModel.jamNearestIceUnit()
+                                },
+                                enabled = uiState.ram >= 2,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF8B5CF6).copy(alpha = 0.5f),
+                                    disabledContainerColor = Color(0xFF8B5CF6).copy(alpha = 0.2f)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(26.dp)
+                                    .testTag("btn_ice_jam")
+                            ) {
+                                Text(
+                                    text = "JAM (2 RAM)",
+                                    color = Color.White,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Button(
+                                onClick = {
+                                    view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
                                     viewModel.interact()
                                 },
                                 colors = ButtonDefaults.buttonColors(

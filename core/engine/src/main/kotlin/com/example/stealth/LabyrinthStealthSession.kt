@@ -155,6 +155,19 @@ class LabyrinthStealthSession(
         return snapshot(events)
     }
 
+    /**
+     * d8 slice 4: forces an ICE unit into DISABLED for durationSeconds
+     * (the runner's node spike). While down the unit is blind, deaf,
+     * immobile and cut off from the ICE net; it reboots into PATROLLING
+     * when the spike expires. Returns the frame carrying the emitted
+     * state-change events (empty events when the id is unknown or the
+     * unit is already disabled).
+     */
+    fun disableGuard(guardId: String, durationSeconds: Float): StealthSessionFrame {
+        val events = simulation.disableGuard(guardId, durationSeconds)
+        return snapshot(events)
+    }
+
     fun snapshot(events: List<StealthEvent> = emptyList()): StealthSessionFrame =
         StealthSessionFrame(
             playerPosition = currentPlayerPosition,

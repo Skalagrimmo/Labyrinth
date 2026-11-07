@@ -52,6 +52,9 @@ import kotlinx.coroutines.flow.update
  *  - d8 slice 3: ICE coordination - a unit that raises the alarm relays the
  *    runner's last known position to every other unit within the relay radius
  *    (weather-scaled); each relay is surfaced as an ICE NET TRAFFIC log line;
+ *  - d8 slice 4: ICE neutralization - the runner's node spike forces the
+ *    nearest active unit into a temporary controlled reboot (DISABLED);
+ *    the unit coming back online is surfaced as an ICE REBOOT log line;
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -158,6 +161,19 @@ class StealthSessionController(
                     LogType.ALERT
                 )
             }
+        // d8 slice 4: a spiked unit coming back online announces its reboot.
+        result.stealthFrame?.events
+            ?.filter {
+                it.type == StealthEventType.GUARD_STATE_CHANGED &&
+                    it.previousState == StealthGuardState.DISABLED
+            }
+            ?.forEach { event ->
+                onLog(
+                    "ICE REBOOT: unit " + event.guardId +
+                        " back online - perception restored.",
+                    LogType.ALERT
+                )
+            }
         if (result.enteredCombat) {
             combatSeen = true
             val detection = result.detection
@@ -242,6 +258,30 @@ class StealthSessionController(
         )
         while (pendingNoise.size > MAX_PENDING_NOISE) pendingNoise.removeFirst()
         return x to y
+    }
+
+    /**
+     * d8 slice 4: ICE neutralization (the runner's overclocked node spike).
+     * Disables the nearest active ICE unit of the current floor within
+     * maxRangeCells for durationSeconds: while down it cannot see, hear,
+     * move or relay the alarm, then it reboots into PATROLLING with a
+     * clean slate. Returns the disabled unit's id, or null when the world
+     * is not live, the floor has no active unit, or the nearest one sits
+     * out of range.
+     */
+    fun disableNearestIceUnit(maxRangeCells: Float, durationSeconds: Float): String? {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) return null
+        val stealth = stealthSession ?: return null
+        val player = StealthPosition(state.gridX + 0.5f, state.gridY + 0.5f, state.level)
+        val target = stealth.snapshot().guards
+            .filter { it.state != StealthGuardState.DISABLED }
+            .filter { it.position.levelId == state.level }
+            .minByOrNull { it.position.distanceTo(player) }
+            ?: return null
+        if (target.position.distanceTo(player) > maxRangeCells) return null
+        publishHud(stealth.disableGuard(target.id, durationSeconds))
+        return target.id
     }
 
     /**
@@ -463,6 +503,15 @@ class StealthSessionController(
         const val DECOY_RADIUS_CELLS: Float = 6f
         const val DECOY_INTENSITY: Float = 1f
         const val DECOY_RAM_COST: Int = 1
+
+        /** d8 slice 4: the node spike reaches this far from the runner (cells). */
+        const val JAM_RANGE_CELLS: Float = 6f
+
+        /** d8 slice 4: how long a spiked unit stays in a forced reboot. */
+        const val JAM_DURATION_SECONDS: Float = 8f
+
+        /** d8 slice 4: RAM cost of the overclocked node spike. */
+        const val JAM_RAM_COST: Int = 2
 
         /** d8 slice 2: floors with fewer walkable cells host no mobile patrols. */
         const val PATROL_MIN_WALKABLE_CELLS: Int = 40

@@ -545,4 +545,111 @@ class StealthSimulationTest {
 
         assertEquals(runSession(), runSession())
     }
+
+    @Test
+    fun disabledGuardIsBlindDeafAndImmobile() {
+        // d8 slice 4: a spiked unit cannot see, hear or move - even a noise
+        // pulse detonating on top of it leaves it cold for the whole window.
+        val world = openWorld()
+        val guard = StealthGuard(
+            id = "guard-jam",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 200f,
+            patrolRoute = listOf(GridCell(5, 2)),
+            patrolSpeed = 1f
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+        val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+
+        repeat(5) { simulation.update(0.1f, player) }
+        assertTrue(guard.suspicion > 0f)
+
+        val events = simulation.disableGuard(guard.id, durationSeconds = 2f)
+        assertEquals(StealthGuardState.DISABLED, guard.state)
+        assertTrue(
+            events.any {
+                it.type == StealthEventType.GUARD_STATE_CHANGED &&
+                    it.currentState == StealthGuardState.DISABLED
+            }
+        )
+
+        val frozenAt = guard.position
+        repeat(10) {
+            simulation.update(
+                0.1f,
+                player,
+                listOf(NoisePulse(StealthPosition(1.5f, 2.5f), radius = 5f))
+            )
+        }
+        // Still inside the 2s spike window (10 x 0.1s): blind, deaf and frozen.
+        assertEquals(StealthGuardState.DISABLED, guard.state)
+        assertEquals(0f, guard.suspicion, 0.001f)
+        assertNull(guard.lastKnownPlayerPosition)
+        assertEquals(frozenAt, guard.position)
+    }
+
+    @Test
+    fun disabledGuardRebootsCleanAfterTheSpikeExpires() {
+        // The spike counts down inside update(): the reboot lands exactly on
+        // the 10th tick (10 x 0.1s = the 1s duration) into a clean PATROLLING
+        // slate - wiped suspicion, no last known position - and perception
+        // resumes from the next tick.
+        val world = openWorld()
+        val guard = StealthGuard(
+            id = "guard-reboot",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 200f
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+        val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+
+        repeat(5) { simulation.update(0.1f, player) }
+        assertTrue(guard.suspicion > 0f)
+        simulation.disableGuard(guard.id, durationSeconds = 1f)
+
+        val events = mutableListOf<StealthEvent>()
+        repeat(10) { events += simulation.update(0.1f, player) }
+
+        assertEquals(StealthGuardState.PATROLLING, guard.state)
+        assertEquals(0f, guard.suspicion, 0.001f)
+        assertNull(guard.lastKnownPlayerPosition)
+        assertTrue(
+            events.any {
+                it.type == StealthEventType.GUARD_STATE_CHANGED &&
+                    it.previousState == StealthGuardState.DISABLED &&
+                    it.currentState == StealthGuardState.PATROLLING
+            }
+        )
+    }
+
+    @Test
+    fun disableGuardIsIgnoredForUnknownOrAlreadyDisabledUnits() {
+        val world = openWorld()
+        val guard = StealthGuard(
+            id = "guard-spike",
+            position = StealthPosition(1.5f, 2.5f)
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+
+        // Unknown id: no such unit, nothing happens.
+        assertTrue(simulation.disableGuard("guard-ghost", durationSeconds = 1f).isEmpty())
+        // Non-positive duration: rejected, the unit stays on patrol.
+        assertTrue(simulation.disableGuard(guard.id, durationSeconds = 0f).isEmpty())
+        assertEquals(StealthGuardState.PATROLLING, guard.state)
+
+        // A valid spike drops the unit and emits its state change.
+        val events = simulation.disableGuard(guard.id, durationSeconds = 1f)
+        assertTrue(events.isNotEmpty())
+        assertEquals(StealthGuardState.DISABLED, guard.state)
+
+        // Already disabled: the second spike finds nothing to reset.
+        assertTrue(simulation.disableGuard(guard.id, durationSeconds = 1f).isEmpty())
+        assertEquals(StealthGuardState.DISABLED, guard.state)
+    }
 }
