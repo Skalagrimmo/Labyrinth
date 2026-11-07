@@ -41,27 +41,16 @@ jobs:
         run: ./gradlew assembleDebug 2>&1 | tee gradle-assemble.log
         continue-on-error: true
 
-      - name: FAILDETAIL
-        if: always()
-        run: |
-          echo "=== COMPILE ERRORS ==="
-          grep -E "^e: " gradle-tests.log gradle-lint.log gradle-assemble.log || true
-          echo "=== LINT ERRORS ==="
-          grep -E "Error: " gradle-lint.log | head -50 || true
-          echo "=== FAILING TEST XML ==="
-          find . -path "*/test-results/*/TEST-*.xml" -newer gradlew | xargs -r grep -l -E "<failure|<error" || true
-
       - name: Comment on PR
         if: always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const glob = require('@actions/glob');
-            const globber = await glob.create('gradle-*.log');
-            const files = await globber.glob();
+            const names = ['gradle-tests.log', 'gradle-lint.log', 'gradle-assemble.log'];
             let body = 'CI FAILDETAIL (diagnostic run)\n';
-            for (const f of files) {
+            for (const f of names) {
+              if (!fs.existsSync(f)) continue;
               const text = fs.readFileSync(f, 'utf8');
               const errs = text.split('\n').filter(l => l.startsWith('e: ') || l.includes('Error: ')).slice(0, 40);
               if (errs.length > 0) body += '\n**' + f + '**\n' + errs.join('\n') + '\n';
@@ -72,10 +61,3 @@ jobs:
               issue_number: context.issue.number,
               body
             });
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: netcrawler-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
