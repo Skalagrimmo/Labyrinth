@@ -3,6 +3,7 @@ package com.example.ui
 import com.example.audio.SilentAudioPlayer
 import com.example.core.model.CellType
 import com.example.core.model.Direction
+import com.example.data.GameState
 import com.example.stealth.StealthGuardState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
