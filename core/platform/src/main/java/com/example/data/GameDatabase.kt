@@ -118,7 +118,7 @@ abstract class GameDatabase : RoomDatabase() {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
-                    ```
+                    """
                     CREATE TABLE IF NOT EXISTS `character_profiles` (
                         `profileId` TEXT NOT NULL,
                         `runnerName` TEXT NOT NULL,
@@ -132,11 +132,11 @@ abstract class GameDatabase : RoomDatabase() {
                         `createdTimestamp` INTEGER NOT NULL,
                         PRIMARY KEY(`profileId`)
                     )
-                    ```.trimIndent()
+                    """.trimIndent()
                 )
 
                 db.execSQL(
-                    ```
+                    """
                     CREATE TABLE IF NOT EXISTS `game_save_progress` (
                         `saveSlotId` TEXT NOT NULL,
                         `runnerName` TEXT NOT NULL,
@@ -164,11 +164,11 @@ abstract class GameDatabase : RoomDatabase() {
                         `lastSavedTimestamp` INTEGER NOT NULL,
                         PRIMARY KEY(`saveSlotId`)
                     )
-                    ```.trimIndent()
+                    """.trimIndent()
                 )
 
                 db.execSQL(
-                    ```
+                    """
                     CREATE TABLE IF NOT EXISTS `inventory_items` (
                         `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         `saveSlotId` TEXT NOT NULL,
@@ -178,7 +178,7 @@ abstract class GameDatabase : RoomDatabase() {
                         `description` TEXT NOT NULL,
                         `acquiredTimestamp` INTEGER NOT NULL
                     )
-                    ```.trimIndent()
+                    """.trimIndent()
                 )
             }
         }
