@@ -40,6 +40,7 @@ dependencies {
   implementation(project(":feature:cybergl"))
   implementation(project(":feature:widgets"))
   implementation(project(":feature:exploration-ui"))
+  implementation(project(":feature:svdag-inspector"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.ui)
