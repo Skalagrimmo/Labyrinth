@@ -39,7 +39,16 @@ class CombatManager(
         }
     }
 
-    fun triggerCombat(targetX: Int, targetY: Int) {
+    /**
+     * d8 slice 6: KOTOR combat openings - the enemy's starting status is
+     * decided by how the fight began. A shadow strike ([CombatOpening.AMBUSHED])
+     * catches the hostile process mid-patrol: it opens the fight STUNNED for
+     * a surprise round. A trace lock ([CombatOpening.CAUGHT]) means the ICE
+     * traced the runner before the engagement: it opens OVERCLOCKED with its
+     * combat protocols pre-loaded. A standard engagement opens flat, exactly
+     * as before.
+     */
+    fun triggerCombat(targetX: Int, targetY: Int, opening: CombatOpening = CombatOpening.STANDARD) {
         if (uiState.gameState != GameState.EXPLORATION) {
             onLog("⚠️ ALREADY IN COMBAT: Cannot initiate new engagement.", LogType.ALERT)
             return
@@ -98,6 +107,22 @@ class CombatManager(
 
         if (uiState.runnerClass == NetrunnerClass.CYBER_SHIELD) {
             onLog("SENTINEL PROTOCOL: +30 Shield initialized.", LogType.SUCCESS)
+        }
+
+        // d8 slice 6: KOTOR combat opening - how the fight began decides the
+        // hostile's starting status. A shadow strike freezes the process for
+        // a surprise round; a trace lock means it enters the engagement with
+        // its combat protocols already hot (+50% damage).
+        when (opening) {
+            CombatOpening.AMBUSHED -> {
+                onLog("SHADOW STRIKE: hostile process caught mid-patrol - surprise round!", LogType.SUCCESS)
+                applyStatusEffectToEnemy(StatusEffectType.STUNNED, turns = 1, source = "Shadow Strike")
+            }
+            CombatOpening.CAUGHT -> {
+                onLog("TRACE LOCK: the ICE traced your position - hostile combat protocols pre-loaded!", LogType.ALERT)
+                applyStatusEffectToEnemy(StatusEffectType.BUFFED, turns = 2, source = "ICE Trace Lock")
+            }
+            CombatOpening.STANDARD -> {}
         }
 
         scope.launch {
