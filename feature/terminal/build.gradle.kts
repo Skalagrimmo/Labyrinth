@@ -37,6 +37,8 @@ dependencies {
   implementation(project(":feature:cosmetic"))
   implementation(project(":feature:skilltree"))
   implementation(project(":feature:hacking"))
+  implementation(project(":feature:cybergl"))
+  implementation(project(":feature:widgets"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.ui)
