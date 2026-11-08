@@ -3,13 +3,11 @@ package com.example.data
 import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
-import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.Flow
@@ -31,20 +29,9 @@ interface CharacterProfileDao {
     @Query("SELECT * FROM character_profiles ORDER BY createdTimestamp DESC")
     fun getAllProfiles(): Flow<List<CharacterProfileEntity>>
 
-    @Query("SELECT * FROM character_profiles WHERE profileId = :profileId LIMIT 1")
-    fun getProfileById(profileId: String): Flow<CharacterProfileEntity?>
-
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProfile(profile: CharacterProfileEntity)
 
-    @Update
-    suspend fun updateProfile(profile: CharacterProfileEntity)
-
-    @Delete
-    suspend fun deleteProfileEntity(profile: CharacterProfileEntity)
-
-    @Query("DELETE FROM character_profiles WHERE profileId = :profileId")
-    suspend fun deleteProfile(profileId: String)
 }
 
 @Dao
@@ -58,14 +45,6 @@ interface GameSaveProgressDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSaveProgress(saveProgress: GameSaveProgressEntity)
 
-    @Update
-    suspend fun updateSaveProgress(saveProgress: GameSaveProgressEntity)
-
-    @Delete
-    suspend fun deleteSaveProgressEntity(saveProgress: GameSaveProgressEntity)
-
-    @Query("DELETE FROM game_save_progress WHERE saveSlotId = :slotId")
-    suspend fun deleteSaveProgress(slotId: String = "current_save")
 }
 
 @Dao
@@ -79,17 +58,9 @@ interface InventoryItemDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItems(items: List<InventoryItemEntity>)
 
-    @Update
-    suspend fun updateItem(item: InventoryItemEntity)
-
-    @Delete
-    suspend fun deleteItem(item: InventoryItemEntity)
-
     @Query("DELETE FROM inventory_items WHERE saveSlotId = :slotId")
     suspend fun clearInventoryForSlot(slotId: String = "current_save")
 
-    @Query("DELETE FROM inventory_items WHERE saveSlotId = :slotId AND itemName = :itemName")
-    suspend fun deleteItemByName(slotId: String = "current_save", itemName: String)
 }
 
 @Database(
@@ -113,13 +84,6 @@ abstract class GameDatabase : RoomDatabase() {
     abstract fun characterProfileDao(): CharacterProfileDao
     abstract fun gameSaveProgressDao(): GameSaveProgressDao
     abstract fun inventoryItemDao(): InventoryItemDao
-    abstract fun floorMapDao(): FloorMapDao
-    abstract fun floorObstacleDao(): FloorObstacleDao
-    abstract fun playerMapPositionDao(): PlayerMapPositionDao
-    abstract fun gridMapStateDao(): GridMapStateDao
-    abstract fun gridEntityCoordinateDao(): GridEntityCoordinateDao
-    abstract fun playerDao(): PlayerDao
-    abstract fun playerNpcCoordinatesDao(): PlayerNpcCoordinatesDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -207,30 +171,5 @@ abstract class GameDatabase : RoomDatabase() {
                 instance
             }
         }
-
-        fun getFloorMapRepository(context: Context): FloorMapRepository {
-            val db = getDatabase(context)
-            return FloorMapRepository(
-                floorMapDao = db.floorMapDao(),
-                floorObstacleDao = db.floorObstacleDao(),
-                playerMapPositionDao = db.playerMapPositionDao()
-            )
-        }
-
-        fun getGridGameStateRepository(context: Context): GridGameStateRepository {
-            val db = getDatabase(context)
-            return GridGameStateRepository(
-                gridMapStateDao = db.gridMapStateDao(),
-                gridEntityCoordinateDao = db.gridEntityCoordinateDao()
-            )
-        }
-
-        fun getPlayerRepository(context: Context): PlayerRepository {
-            val db = getDatabase(context)
-            return PlayerRepository(
-                playerDao = db.playerDao()
-            )
-        }
     }
 }
-
