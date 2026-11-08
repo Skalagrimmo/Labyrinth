@@ -1,1 +1,23 @@
-Y0dGamEyRm5aU0JqYjIwdVpYaGhiWEJzWlM1MWFRb0tMeW9xQ2lBcUlHUTRJSE5zYVdObElEWTZJRXRQVkU5U0lHTnZiV0poZENCdmNHVnVhVzVuY3lBdElHaHZkeUIwYUdVZ1ptbG5hSFFnWW1WbllXNGdaR1ZqYVdSbGN5QjBhR1VLSUNvZ2FHOXpkR2xzWlNkeklITjBZWEowYVc1bklHTnZiV0poZENCemRHRjBkWE1nS0hObFpTQkRiMjFpWVhSTllXNWhaMlZ5TG5SeWFXZG5aWEpEYjIxaVlYUXBMZ29nS2dvZ0tpQlVhR1VnWTJ4aGMzTnBabWxqWVhScGIyNGdiR2wyWlhNZ1lYUWdkR2hsSUdOaGJHd2djMmwwWlNCMGFHRjBJR3R1YjNkeklHaHZkeUIwYUdVZ1pXNW5ZV2RsYldWdWRBb2dLaUJ6ZEdGeWRHVmtPaUIwYUdVZ2MzUmxZV3gwYUNCbmRXRnlaQzFrWlhSbFkzUnBiMjRnWTJGc2JHSmhZMnNnWVd4M1lYbHpJSEpsY0c5eWRITWdRMEZWUjBoVUlDaDBhR1VLSUNvZ1NVTkZJSFJ5WVdObFpDQjBhR1VnY25WdWJtVnlJR0psWm05eVpTQjBhR1VnWm1seWMzUWdZbXh2ZHlCM1lYTWdjM1J5ZFdOcktTd2djR3hoZVdWeUxXbHVhWFJwWVhSbFpBb2dLaUJ1YjJSbElITjBjbWxyWlhNZ2NtVndiM0owSUVGTlFsVlRTRVZFSUhkb2FXeGxJSFJvWlNCemFXeGxiblFnY0hKdmRHOWpiMndnYVhNZ1pXNW5ZV2RsWkNCdmJpQmhDaUFxSUdOaGJHMGdabXh2YjNJc0lHRnVaQ0JsZG1WeWVTQnZkR2hsY2lCbGJuUnllU0J3YjJsdWRDQW9jR2hoYm5SdmJTQmxZMmh2SUhKbExXRnliU3dnZEdoeVpXRjBMWE5qWVc0S0lDb2dZV1JxWVdObGJtTjVMQ0JUVmtSQlJ5QnBiblJsY21ObGNIUXBJSEpsY0c5eWRITWdVMVJCVGtSQlVrUXVDaUFxTHdwbGJuVnRJR05zWVhOeklFTnZiV0poZEU5d1pXNXBibWNnZXdvZ0lDQWdMeW9xSUVobFlXUXRiMjRnWlc1bllXZGxiV1Z1ZERvZ2RHaGxJR2h2YzNScGJHVWdiM0JsYm5NZ2RHaGxJR1pwWjJoMElIZHBkR2dnWVNCbWJHRjBJSE4wWVhSMWN5NGdLaThLSUNBZ0lGTlVRVTVFUVZKRUxBb0tJQ0FnSUM4cUtpQlRhR0ZrYjNjZ2MzUnlhV3RsT2lCMGFHVWdhRzl6ZEdsc1pTQnBjeUJqWVhWbmFIUWdiV2xrTFhCaGRISnZiQ0JoYm1RZ2IzQmxibk1nVTFSVlRrNUZSQ0FvYzNWeWNISnBjMlVnY205MWJtUXBMaUFxTHdvZ0lDQWdRVTFDVlZOSVJVUXNDZ29nSUNBZ0x5b3FJRlJ5WVdObElHeHZZMnM2SUhSb1pTQkpRMFVnZEhKaFkyVmtJSFJvWlNCeWRXNXVaWElnWm1seWMzUWdZVzVrSUc5d1pXNXpJRTlXUlZKRFRFOURTMFZFSUNod2NtOTBiMk52YkhNZ2NISmxMV3h2WVdSbFpDa3VJQ292Q2lBZ0lDQkRRVlZIU0ZRS2ZRbz0=
+package com.example.ui
+
+/**
+ * d8 slice 6: KOTOR combat openings - how the fight began decides the
+ * hostile's starting combat status (see CombatManager.triggerCombat).
+ *
+ * The classification lives at the call site that knows how the engagement
+ * started: the stealth guard-detection callback always reports CAUGHT (the
+ * ICE traced the runner before the first blow was struck), player-initiated
+ * node strikes report AMBUSHED while the silent protocol is engaged on a
+ * calm floor, and every other entry point (phantom echo re-arm, threat-scan
+ * adjacency, SVDAG intercept) reports STANDARD.
+ */
+enum class CombatOpening {
+    /** Head-on engagement: the hostile opens the fight with a flat status. */
+    STANDARD,
+
+    /** Shadow strike: the hostile is caught mid-patrol and opens STUNNED (surprise round). */
+    AMBUSHED,
+
+    /** Trace lock: the ICE traced the runner first and opens OVERCLOCKED (protocols pre-loaded). */
+    CAUGHT
+}
