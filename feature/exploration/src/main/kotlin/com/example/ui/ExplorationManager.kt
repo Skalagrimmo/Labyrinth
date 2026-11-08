@@ -108,7 +108,7 @@ class ExplorationManager(
                 if (state.gameState != GameState.EXPLORATION) {
                     addLog("ACCESS DENIED: Cannot overlap active threat host. Use Attack program.", LogType.ERROR)
                 } else {
-                    onTriggerCombat(nextX, nextY)
+                    onTriggerCombat(nextX, nextY, playerStrikeOpening(state))
                 }
             } else {
                 _uiState.update { it.copy(gridX = nextX, gridY = nextY) }
