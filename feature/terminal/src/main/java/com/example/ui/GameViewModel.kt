@@ -276,6 +276,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (obtainedKeycard) { addLog("SECURE KEYCARD RETRIEVED FROM CRYPT-CACHE!", LogType.SUCCESS); addLog("ELEVATOR LINK ONLINE!", LogType.SUCCESS) }
         if (isSecretCache) { addLog("CLASSIFIED VAULT INTRUSION SUCCEEDED!", LogType.SUCCESS); addLog("EXTRACTED ULTRA CREDITS: +$bountyCredits MB!", LogType.SUCCESS) }
         else { addLog("DECRYPTION CRACKED SUCCESSFULLY!", LogType.SUCCESS); addLog("RETRIEVED CREDITS: +$bountyCredits MB. UTILITY: $randomReward", LogType.SUCCESS) }
+        stealthSessionController.emitBreachOutcome(state.targetNodeX, state.targetNodeY, success = true)
     }
 
     private fun handleHackingFailure() {
@@ -285,6 +286,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         if (state.targetNodeY in updatedMaze.indices && state.targetNodeX in updatedMaze[0].indices) updatedMaze[state.targetNodeY][state.targetNodeX] = CellType.PATH
         _uiState.update { it.copy(screen = if (newIntegrity <= 0) ActiveScreen.GAME_OVER else ActiveScreen.EXPLORATION, integrity = newIntegrity, maze = updatedMaze, activePuzzle = null) }
         updatePerspective(); addLog("BUFFER OVERFLOW: INTRUSION DETECTED!", LogType.ERROR); addLog("HARDWARE FEEDBACK DAMAGE: -$penaltyDmg INTEGRITY.", LogType.ERROR)
+        stealthSessionController.emitBreachOutcome(state.targetNodeX, state.targetNodeY, success = false)
         if (newIntegrity <= 0) handleGameOver("Hacking Malware Core Injection Feedback")
     }
 

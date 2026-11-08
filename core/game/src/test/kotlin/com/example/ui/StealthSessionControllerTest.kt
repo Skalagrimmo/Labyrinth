@@ -623,6 +623,100 @@ class StealthSessionControllerTest {
         )
     }
 
+    @Test
+    fun failedBreachTripsTheNodeKlaxon() {
+        // d8 slice 5: a buffer overflow at the hacked node detonates a
+        // full-power klaxon AT THE NODE: every ICE unit inside the 5.5-cell
+        // radius converges on the terminal, not on the runner's position.
+        val (controller, flow) = newController(px = 1)
+        controller.tickOnce()
+        val landing = controller.emitBreachOutcome(3, 1, success = false)
+        assertEquals(Pair(3, 1), landing)
+        assertTrue(
+            logs.any { it.first.contains("ACOUSTIC SPIKE") && it.first.contains("(3, 1)") }
+        )
+        assertTrue(
+            logs.any { it.first.contains("ACOUSTIC SPIKE") && it.second == LogType.ALERT }
+        )
+        controller.tickOnce()
+        val guard = controller.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.INVESTIGATING, guard.state)
+        assertEquals(StealthPosition(3.5f, 1.5f, 1), guard.lastKnownPlayerPosition)
+        assertEquals(40f, guard.suspicion, 0.0001f)
+        assertEquals(40f, flow.value.iceSuspicion, 0.0001f)
+        assertEquals(StealthGuardState.INVESTIGATING, flow.value.iceGuardState)
+        assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun quietBreachLeavesOnlyAFaintBackwash() {
+        // d8 slice 5: a clean breach is a faint backwash - a 2-cell radius
+        // at the 0.3 noise floor. A node three cells away from the ICE goes
+        // unnoticed; a node one cell away only earns a glance (the floor
+        // is 40 x 0.3 = 12 suspicion, a stir, not a sweep).
+        val (controller, _) = newController(px = 1)
+        controller.tickOnce()
+        val landing = controller.emitBreachOutcome(2, 1, success = true)
+        assertEquals(Pair(2, 1), landing)
+        assertTrue(
+            logs.any { it.first.contains("QUIET BREACH") && it.first.contains("(2, 1)") }
+        )
+        assertTrue(
+            logs.any { it.first.contains("QUIET BREACH") && it.second == LogType.INFO }
+        )
+        // The guard at (5, 1) sits 3.0 cells from the backwash - outside
+        // the 2-cell radius, the sweep is not even stirred.
+        controller.tickOnce()
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        // A backwash one cell from the ICE hugging the node: a glance over.
+        controller.emitBreachOutcome(4, 1, success = true)
+        controller.tickOnce()
+        val guard = controller.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.INVESTIGATING, guard.state)
+        assertEquals(12f, guard.suspicion, 0.0001f)
+        assertEquals(StealthPosition(4.5f, 1.5f, 1), guard.lastKnownPlayerPosition)
+        assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun klaxonConvergesOnTheNodeWhileTheRunnerSlipsAway() {
+        // d8 slice 5: the getaway window. A failed breach far from the
+        // runner: the klaxon pulls the ICE onto the hacked node (the
+        // guard walks the corridor, sweeps the terminal in SEARCHING,
+        // then falls back to its patrol) while the runner ten cells west
+        // - far beyond the spent sweep's 5.5-cell view range - slips
+        // away undetected.
+        val grid = Array(3) { y -> Array(15) { x -> CellType.PATH } }
+        for (x in 0 until 15) {
+            grid[0][x] = CellType.WALL
+            grid[2][x] = CellType.WALL
+        }
+        for (y in 0 until 3) {
+            grid[y][0] = CellType.WALL
+            grid[y][14] = CellType.WALL
+        }
+        grid[1][4] = CellType.VIRUS_NODE
+        val (controller, _) = newController(px = 12, mazeGrid = grid)
+        controller.tickOnce()
+        val landing = controller.emitBreachOutcome(2, 1, success = false)
+        assertEquals(Pair(2, 1), landing)
+        assertTrue(logs.any { it.first.contains("ACOUSTIC SPIKE") })
+        var sawSearching = false
+        repeat(120) {
+            controller.tickOnce()
+            if (controller.peekStealthSession()!!.snapshot().guards.first().state ==
+                StealthGuardState.SEARCHING
+            ) {
+                sawSearching = true
+            }
+        }
+        assertTrue("expected the klaxon to pull the ICE onto the node", sawSearching)
+        assertTrue(detections.isEmpty())
+    }
+
     private fun ticksUntilDetection(sneaking: Boolean,
         mazeGrid: Array<Array<CellType>>?,
         weather: CyberWeather = CyberWeather.CLEAR

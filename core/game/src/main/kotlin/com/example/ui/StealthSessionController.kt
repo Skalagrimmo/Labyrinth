@@ -55,6 +55,11 @@ import kotlinx.coroutines.flow.update
  *  - d8 slice 4: ICE neutralization - the runner's node spike forces the
  *    nearest active unit into a temporary controlled reboot (DISABLED);
  *    the unit coming back online is surfaced as an ICE REBOOT log line;
+ *  - d8 slice 5: breach acoustics - the breach-protocol outcome leaves an
+ *    acoustic trace at the hacked node, never at the runner: a clean breach
+ *    is a faint backwash, a failed breach trips the node's klaxon and pulls
+ *    nearby ICE onto the terminal while the runner slips away (see
+ *    [emitBreachOutcome]);
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -285,6 +290,46 @@ class StealthSessionController(
     }
 
     /**
+     * d8 slice 5: breach acoustics - the breach-protocol outcome leaves an
+     * acoustic trace at the hacked node, never at the runner. A clean breach
+     * is a faint backwash (only ICE units hugging the terminal glance over,
+     * at the low noise floor); a failed breach trips the node's
+     * buffer-overflow klaxon - a full-power noise pulse that pulls every ICE
+     * unit within the radius onto the terminal, buying the runner a getaway
+     * window while the alarm burns out away from their position. Returns the
+     * pulse's landing cell, or null when the world is not live (e.g. the
+     * feedback damage flatlined the runner).
+     */
+    fun emitBreachOutcome(cellX: Int, cellY: Int, success: Boolean): Pair<Int, Int>? {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) return null
+        val radiusCells = if (success) BREACH_SUCCESS_RADIUS_CELLS else BREACH_FAILURE_RADIUS_CELLS
+        val intensity = if (success) BREACH_SUCCESS_INTENSITY else BREACH_FAILURE_INTENSITY
+        val landing = emitNoiseAt(
+            cellX = cellX,
+            cellY = cellY,
+            radiusCells = radiusCells,
+            intensity = intensity
+        ) ?: return null
+        if (success) {
+            onLog(
+                "QUIET BREACH: faint intrusion backwash at (" +
+                    landing.first + ", " + landing.second +
+                    ") - ICE hugging the node may glance over.",
+                LogType.INFO
+            )
+        } else {
+            onLog(
+                "ACOUSTIC SPIKE: buffer-overflow klaxon at (" +
+                    landing.first + ", " + landing.second +
+                    ") - ICE audio sweeps converge on the node!",
+                LogType.ALERT
+            )
+        }
+        return landing
+    }
+
+    /**
      * Cover rule for the Labyrinth grid: standing on a hardened/hidden cell
      * (stealth cache, crypt-cache, service vents) dampens ICE perception.
      * Deterministic from the maze alone, so seed determinism is preserved.
@@ -512,6 +557,18 @@ class StealthSessionController(
 
         /** d8 slice 4: RAM cost of the overclocked node spike. */
         const val JAM_RAM_COST: Int = 2
+
+        /** d8 slice 5: acoustic radius of a clean breach (faint backwash at the hacked node). */
+        const val BREACH_SUCCESS_RADIUS_CELLS: Float = 2f
+
+        /** d8 slice 5: noise-floor multiplier of a clean breach (a glance, not a sweep). */
+        const val BREACH_SUCCESS_INTENSITY: Float = 0.3f
+
+        /** d8 slice 5: acoustic radius of a failed breach (the node's klaxon). */
+        const val BREACH_FAILURE_RADIUS_CELLS: Float = 5.5f
+
+        /** d8 slice 5: full-power klaxon of a buffer overflow at the hacked node. */
+        const val BREACH_FAILURE_INTENSITY: Float = 1f
 
         /** d8 slice 2: floors with fewer walkable cells host no mobile patrols. */
         const val PATROL_MIN_WALKABLE_CELLS: Int = 40
