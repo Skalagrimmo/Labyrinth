@@ -36,10 +36,6 @@ class GameRepository(
         characterProfileDao.insertProfile(profile)
     }
 
-    suspend fun deleteProfile(profileId: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        characterProfileDao.deleteProfile(profileId)
-    }
-
     override suspend fun saveGameProgress(
         saveProgress: GameSaveProgressEntity,
         inventoryItems: List<InventoryItemEntity>
@@ -55,11 +51,6 @@ class GameRepository(
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             gameSaveProgressDao.getSaveProgressSync(slotId)
         }
-
-    suspend fun deleteSaveProgress(slotId: String = "current_save") = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        gameSaveProgressDao.deleteSaveProgress(slotId)
-        inventoryItemDao.clearInventoryForSlot(slotId)
-    }
 
     suspend fun insertInventoryItem(item: InventoryItemEntity) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         inventoryItemDao.insertItem(item)
