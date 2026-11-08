@@ -113,19 +113,12 @@ abstract class GameDatabase : RoomDatabase() {
     abstract fun characterProfileDao(): CharacterProfileDao
     abstract fun gameSaveProgressDao(): GameSaveProgressDao
     abstract fun inventoryItemDao(): InventoryItemDao
-    abstract fun floorMapDao(): FloorMapDao
-    abstract fun floorObstacleDao(): FloorObstacleDao
-    abstract fun playerMapPositionDao(): PlayerMapPositionDao
-    abstract fun gridMapStateDao(): GridMapStateDao
-    abstract fun gridEntityCoordinateDao(): GridEntityCoordinateDao
-    abstract fun playerDao(): PlayerDao
-    abstract fun playerNpcCoordinatesDao(): PlayerNpcCoordinatesDao
 
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
-                    """
+                    ```
                     CREATE TABLE IF NOT EXISTS `character_profiles` (
                         `profileId` TEXT NOT NULL,
                         `runnerName` TEXT NOT NULL,
@@ -139,11 +132,11 @@ abstract class GameDatabase : RoomDatabase() {
                         `createdTimestamp` INTEGER NOT NULL,
                         PRIMARY KEY(`profileId`)
                     )
-                    """.trimIndent()
+                    ```.trimIndent()
                 )
 
                 db.execSQL(
-                    """
+                    ```
                     CREATE TABLE IF NOT EXISTS `game_save_progress` (
                         `saveSlotId` TEXT NOT NULL,
                         `runnerName` TEXT NOT NULL,
@@ -171,11 +164,11 @@ abstract class GameDatabase : RoomDatabase() {
                         `lastSavedTimestamp` INTEGER NOT NULL,
                         PRIMARY KEY(`saveSlotId`)
                     )
-                    """.trimIndent()
+                    ```.trimIndent()
                 )
 
                 db.execSQL(
-                    """
+                    ```
                     CREATE TABLE IF NOT EXISTS `inventory_items` (
                         `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
                         `saveSlotId` TEXT NOT NULL,
@@ -185,7 +178,7 @@ abstract class GameDatabase : RoomDatabase() {
                         `description` TEXT NOT NULL,
                         `acquiredTimestamp` INTEGER NOT NULL
                     )
-                    """.trimIndent()
+                    ```.trimIndent()
                 )
             }
         }
@@ -207,30 +200,5 @@ abstract class GameDatabase : RoomDatabase() {
                 instance
             }
         }
-
-        fun getFloorMapRepository(context: Context): FloorMapRepository {
-            val db = getDatabase(context)
-            return FloorMapRepository(
-                floorMapDao = db.floorMapDao(),
-                floorObstacleDao = db.floorObstacleDao(),
-                playerMapPositionDao = db.playerMapPositionDao()
-            )
-        }
-
-        fun getGridGameStateRepository(context: Context): GridGameStateRepository {
-            val db = getDatabase(context)
-            return GridGameStateRepository(
-                gridMapStateDao = db.gridMapStateDao(),
-                gridEntityCoordinateDao = db.gridEntityCoordinateDao()
-            )
-        }
-
-        fun getPlayerRepository(context: Context): PlayerRepository {
-            val db = getDatabase(context)
-            return PlayerRepository(
-                playerDao = db.playerDao()
-            )
-        }
     }
 }
-

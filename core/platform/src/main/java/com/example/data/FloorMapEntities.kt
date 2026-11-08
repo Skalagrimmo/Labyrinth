@@ -1,11 +1,8 @@
 package com.example.data
 
-import androidx.room.Embedded
 import androidx.room.Entity
-import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import androidx.room.Relation
 
 /**
  * Represents a single 2D grid-based floor map for a level in the roguelike system.
@@ -106,16 +103,4 @@ data class PlayerMapPositionEntity(
     val totalObstaclesBypassed: Int = 0,
     val exploredTilesHistoryCsv: String = "",
     val lastMovedTimestamp: Long = System.currentTimeMillis()
-)
-
-/**
- * Relational Room composite pairing a Floor Map with all its contained Obstacles.
- */
-data class FloorMapWithObstacles(
-    @Embedded val floorMap: FloorMapEntity,
-    @Relation(
-        parentColumn = "mapId",
-        entityColumn = "mapId"
-    )
-    val obstacles: List<FloorObstacleEntity>
 )
