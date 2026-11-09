@@ -3,6 +3,7 @@ package com.example.ui
 import com.example.core.model.CellType
 import com.example.core.model.Direction
 import com.example.core.model.LogType
+import com.example.data.GameItemRegistry
 import com.example.data.GameSessionMode
 import com.example.data.GameState
 import com.example.data.RealTimeGameSession
@@ -69,6 +70,11 @@ import kotlinx.coroutines.flow.update
  *    a hardened cover cell keeps the perception dampening for a short
  *    grace window so cover-to-cover slips stay quiet (see
  *    [isRunnerInDuct] and [COVER_GRACE_TICKS]);
+ *  - d8 slice 8: field acoustics - actions from the UI depth leave an EM
+ *    footprint at the runner's cell: compiling a utility from the inventory
+ *    overlay (or the terminal `use` command) blooms a tiered noise pulse
+ *    derived from the item's own effect profile, and rummaging a cache
+ *    rattles it open (see [emitItemUsage]);
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -378,6 +384,50 @@ class StealthSessionController(
     }
 
     /**
+     * d8 slice 8: field acoustics - a utility compiled from the UI depth
+     * (the inventory overlay or the terminal `use` command) blooms an EM
+     * footprint at the runner's cell. The acoustic signature is derived
+     * from the item's own effect profile (a registry lookup - deterministic,
+     * no RNG): a hardware reconfiguration screams, a RAM surge howls, a
+     * nano-injector hisses, everything else hums. Combat compiles are the
+     * combat flow's business and stay out of the stealth sim. Returns the
+     * (radius, intensity) signature used, or null when the world is not
+     * live.
+     */
+    fun emitItemUsage(itemName: String): Pair<Float, Float>? {
+        val state = _uiState.value
+        if (state.screen != ActiveScreen.EXPLORATION) return null
+        if (state.activeEnemy != null || state.gameState != GameState.EXPLORATION) return null
+        val item = GameItemRegistry.getItemByName(itemName)
+        val radiusCells: Float
+        val intensity: Float
+        when {
+            item.damageBonus > 0 || item.defenseBonus > 0 -> {
+                radiusCells = ITEM_RECONFIGURE_RADIUS_CELLS
+                intensity = ITEM_RECONFIGURE_INTENSITY
+            }
+            item.restoreRam > 0 -> {
+                radiusCells = ITEM_SURGE_RADIUS_CELLS
+                intensity = ITEM_SURGE_INTENSITY
+            }
+            item.healIntegrity > 0 -> {
+                radiusCells = ITEM_INJECTOR_RADIUS_CELLS
+                intensity = ITEM_INJECTOR_INTENSITY
+            }
+            else -> {
+                radiusCells = ITEM_SOFT_RADIUS_CELLS
+                intensity = ITEM_SOFT_INTENSITY
+            }
+        }
+        emitNoise(radiusCells = radiusCells, intensity = intensity)
+        onLog(
+            "FIELD COMPILE: '" + item.name + "' deployed - EM bloom at your cell.",
+            LogType.INFO
+        )
+        return radiusCells to intensity
+    }
+
+    /**
      * Cover rule for the Labyrinth grid: standing on a hardened/hidden cell
      * (stealth cache, crypt-cache, service vents) dampens ICE perception.
      * Deterministic from the maze alone, so seed determinism is preserved.
@@ -633,6 +683,22 @@ class StealthSessionController(
 
         /** d8 slice 5: full-power klaxon of a buffer overflow at the hacked node. */
         const val BREACH_FAILURE_INTENSITY: Float = 1f
+
+        /** d8 slice 8: hardware reconfiguration (damage/defense mods) - the loudest field compile. */
+        const val ITEM_RECONFIGURE_RADIUS_CELLS: Float = 4f
+        const val ITEM_RECONFIGURE_INTENSITY: Float = 0.6f
+
+        /** d8 slice 8: a RAM surge draws hard on the local power rail. */
+        const val ITEM_SURGE_RADIUS_CELLS: Float = 3.5f
+        const val ITEM_SURGE_INTENSITY: Float = 0.55f
+
+        /** d8 slice 8: a nano-injector hisses as it knits the runner's core. */
+        const val ITEM_INJECTOR_RADIUS_CELLS: Float = 3f
+        const val ITEM_INJECTOR_INTENSITY: Float = 0.4f
+
+        /** d8 slice 8: quiet compiles (credits, forecasts, combat stims) barely hum. */
+        const val ITEM_SOFT_RADIUS_CELLS: Float = 2.5f
+        const val ITEM_SOFT_INTENSITY: Float = 0.3f
 
         /** d8 slice 2: floors with fewer walkable cells host no mobile patrols. */
         const val PATROL_MIN_WALKABLE_CELLS: Int = 40

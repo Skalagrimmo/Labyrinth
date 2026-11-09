@@ -134,7 +134,11 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         onRecordPlayerAction = { _: CombatActionType, _: String, _: Int, _: String? -> },
         onCombatAction = { combatManager.onPlayerActionCompleted() },
         onApplyStatusEffectToPlayer = { type, turns, source -> combatManager.applyStatusEffectToPlayer(type, turns, 0, source) },
-        onApplyStatusEffectToEnemy = { type, turns, source -> combatManager.applyStatusEffectToEnemy(type, turns, 0, source) }
+        onApplyStatusEffectToEnemy = { type, turns, source -> combatManager.applyStatusEffectToEnemy(type, turns, 0, source) },
+        // d8 slice 8: field acoustics - compiles and cache runs leave an EM
+        // footprint in the stealth sim.
+        onItemCompiled = { itemName -> stealthSessionController.emitItemUsage(itemName) },
+        onCacheScavenged = { stealthSessionController.emitNoise(radiusCells = 3.5f, intensity = 0.6f) }
     )
 
     private val persistenceManager = PersistenceManager(
