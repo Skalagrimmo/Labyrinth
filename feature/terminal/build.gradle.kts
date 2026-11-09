@@ -1,3 +1,4 @@
+
 plugins {
   alias(libs.plugins.android.library)
   alias(libs.plugins.kotlin.compose)
@@ -31,6 +32,7 @@ dependencies {
   implementation(project(":core:content"))
   implementation(project(":core:audio"))
   implementation(project(":core:designsystem"))
+  implementation(project(":feature:gamevm"))
   implementation(project(":feature:combat"))
   implementation(project(":feature:exploration"))
   implementation(project(":feature:inventory"))

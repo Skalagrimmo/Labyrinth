@@ -1,3 +1,4 @@
+
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 
 plugins {
@@ -83,6 +84,7 @@ dependencies {
   implementation(project(":feature:inventory"))
   implementation(project(":feature:hacking"))
   implementation(project(":feature:terminal"))
+  implementation(project(":feature:gamevm"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.activity.compose)
   implementation(libs.androidx.compose.material.icons.core)
