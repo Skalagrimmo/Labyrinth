@@ -20,10 +20,6 @@ dependencies {
   implementation(project(":core:model"))
   implementation(project(":core:engine"))
   implementation(project(":core:game"))
-dependencies {
-  implementation(project(":core:model"))
-  implementation(project(":core:engine"))
-  implementation(project(":core:game"))
   implementation(project(":core:content"))
   implementation(project(":core:persistence"))
   implementation(project(":core:platform"))
