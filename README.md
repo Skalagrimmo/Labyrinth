@@ -1,3 +1,4 @@
+
 # Netcrawler
 
 A cyberpunk roguelike Android game built with Kotlin, Jetpack Compose, Room DB, and OpenGL ES.
@@ -34,7 +35,7 @@ See also the **[Improvement Plan](IMPROVEMENT_PLAN.md)** and **[Changelog](CHANG
 
 ## Development & CI
 
-- **Testing:** unit tests live in `app/src/test/java/...` (`./gradlew testDebugUnitTest`).
+- **Testing:** every module carries its own unit tests (JVM `test` / `testDebugUnitTest`); CI runs unit tests, lint and debug builds on push/PR.
 - **CI:** `.github/workflows/ci.yml` runs unit tests, lint, and debug builds on push/PR.
   A committed Gradle wrapper is required (generate once in Android Studio with
   `gradle wrapper`).
@@ -72,38 +73,33 @@ See also the **[Improvement Plan](IMPROVEMENT_PLAN.md)** and **[Changelog](CHANG
 ## Project Structure
 
 ```
-app/src/main/java/com/example/
-├── ui/                          # ViewModels and Managers
-│   ├── GameViewModel.kt         # Thin coordinator (~500 lines)
-│   ├── CombatManager.kt         # Turn-based combat, bosses, loot
-│   ├── ExplorationManager.kt    # Movement, weather, level navigation, SVDAG
-│   ├── InventoryManager.kt      # Items, equipment, shop, cyberware/clinic
-│   ├── PersistenceManager.kt    # Save/load, serialization, export/import
-│   ├── CosmeticVaultManager.kt  # Themes, data fragments, buffs
-│   ├── ActiveScreen.kt          # Screen navigation enum
-│   ├── CombatTurn.kt            # Combat turn state enum
-│   └── CombatHackingPatternState.kt  # Combat hacking UI state
-├── ui/screens/                  # Compose UI screens
-├── ui/components/               # Reusable composables
-├── data/                        # Room DB, entities, DAOs, models
-│   ├── GameDatabase.kt          # Room database (10 entities)
-│   ├── GameModels.kt            # Core data types
-│   ├── GameEngine.kt            # Procedural generation + bosses
-│   ├── EnemyCombatAIScript.kt   # Enemy & boss AI
-│   ├── CombatLootDropSystem.kt  # Loot tables
-│   └── ...                      # Registries, floor maps, grid, player
-├── data/svdag/                  # Sparse Voxel DAG 3D world system
-├── audio/                       # PCM music synthesis + sound pools + haptics
-├── gl/                          # OpenGL ES matrix/character renderers
-└── assets/shaders/              # GLSL shaders
-
+app/                            # MainActivity (the only app source file) + resources
+core/
+├── model/                      # Domain models shared by every layer
+├── content/                    # Item/implant catalogs, enemy archetypes, mod loading
+├── engine/                     # Pure game logic: engine, combat rules, generators, stealth simulation
+├── persistence/                # Pure-Kotlin save data codecs
+├── render/                     # Perspective renderers + SVDAG world rules
+├── game/                       # Shared UI-state contracts (GameUiState, stealth session controller, combat clocks)
+├── audio/                      # GameAudioPlayer port (pure JVM)
+├── platform/                   # Android persistence stack (Room, repositories, PersistenceManager) + audio/vibration adapters
+└── designsystem/               # Compose theme + CRT overlay
+feature/
+├── skilltree/  combat/  exploration/  cosmetic/  inventory/   # Domain managers
+├── hacking/                    # Hacking minigame screens + HackingViewModel
+├── cybergl/                    # OpenGL character renderer
+├── widgets/                    # Shared HUD widgets
+├── exploration-ui/             # First-person canvas + minimap
+├── svdag-inspector/            # SVDAG world inspector screens
+├── terminal/                   # TerminalScreen router, exploration shell, menu screens
+└── gamevm/                     # GameViewModel - the coordinator
 docs/                           # Full project documentation (see table above)
 ```
 
 ## Architecture
 
 - **UI Layer:** Jetpack Compose screens with Material 3
-- **State:** Single `GameUiState` data class in `GameViewModel`, delegating to focused managers
+- **State:** Single `GameUiState` data class (`:core:game`); `GameViewModel` (`:feature:gamevm`) delegates to focused managers across feature modules
 - **Persistence:** Room SQLite database with SharedPreferences fallback
 - **Rendering:** Canvas 2D for perspective, OpenGL ES for matrix/character views
 - **Audio:** PCM synthesis via AudioTrack (no audio files)

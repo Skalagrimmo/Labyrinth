@@ -1,3 +1,4 @@
+
 # Netcrawler — Project Overview
 
 **Netcrawler** is a fully offline, first-person-perspective **cyberpunk roguelike** Android game. You play a *netrunner* jacked into corporate intranets, hacking terminals, fighting sentient firewall programs ("ICE"), collecting loot, and customizing your runner with cyberware implants as you descend through procedurally generated cyberspace.
@@ -117,7 +118,7 @@ Collect **Data Fragments** from hacks and caches, then spend them to unlock:
 |-------|-----------|
 | **Language** | Kotlin 2.2.10 |
 | **UI** | Jetpack Compose (Material 3, Compose BOM 2024.09.00) |
-| **Architecture** | MVVM with a coordinator `GameViewModel` delegating to focused managers |
+| **Architecture** | MVVM, multi-module Gradle build (8 core + design system + 12 feature modules), coordinator `GameViewModel` delegating to focused managers |
 | **Persistence** | Room (SQLite) 2.7.0, KSP codegen |
 | **Concurrency** | Kotlin Coroutines 1.10.2 |
 | **Rendering** | Canvas 2D (perspective) + OpenGL ES (matrix/character) |
@@ -127,7 +128,7 @@ Collect **Data Fragments** from hacks and caches, then spend them to unlock:
 | **Min / Target SDK** | 24 / 36 |
 | **JDK** | 11 |
 
-> ⚠️ **Note:** Several dependencies (Firebase, Retrofit, OkHttp, Moshi, CameraX, Play Services Location, Coil, DataStore, Navigation) and legacy ViewModels (HackingViewModel, GameTurnViewModel, InventoryViewModel, etc.) remain declared in the codebase but are **not wired into the main game flow**. They are either commented out, legacy scaffolding, or available for future use.
+> ⚠️ **Note:** The Gradle version catalog retains unused aliases (Firebase, Retrofit, OkHttp, Moshi, CameraX, Play Services Location, Coil, DataStore, Navigation) from early scaffolding; the app itself does not use them. Legacy ViewModels and dead persistence stacks were removed during the rebuild — the active flow is `MainActivity` → `GameViewModel` (`:feature:gamevm`) → managers.
 
 ---
 

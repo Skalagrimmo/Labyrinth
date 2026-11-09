@@ -1,3 +1,4 @@
+
 # Netcrawler — Data & Persistence
 
 This document describes how Netcrawler stores game state: the Room (SQLite) schema, the dual-layer save system, the save lifecycle, and the portable save **export/import** feature.
@@ -22,7 +23,7 @@ This document describes how Netcrawler stores game state: the Room (SQLite) sche
 
 Netcrawler uses **two independent layers** for durability:
 
-1. **Room (SQLite)** — the primary store for saved games, character profiles, run records, inventory items, floor maps, and grid/player persistence. Managed by `GameDatabase` (a singleton).
+1. **Room (SQLite)** — the primary store for saved games, character profiles, run records, and inventory items. Managed by `GameDatabase` (a singleton, in `:core:platform`).
 2. **SharedPreferences** — a lighter fallback for quick restore. Stored under the shared-prefs file **`netcrawler_save_prefs`** (see `PersistenceManager`).
 
 ### Why two layers?
@@ -34,7 +35,7 @@ Netcrawler uses **two independent layers** for durability:
 
 ## Room Database
 
-Defined in `data/GameDatabase.kt` — version **6**, `exportSchema = true`, with migration `MIGRATION_1_2` registered and `fallbackToDestructiveMigration(true)`. Room schema JSON is exported to `app/schemas/` (see [Database Migration Strategy](#database-migration-strategy)).
+Defined in `core/platform/src/main/java/com/example/data/GameDatabase.kt` (module `:core:platform`) — version **6**, `exportSchema = true`, with migration `MIGRATION_1_2` registered and `fallbackToDestructiveMigration(true)`. Room schema JSON is exported to `core/platform/schemas/` (see [Database Migration Strategy](#database-migration-strategy)).
 
 ### Entities (10)
 
@@ -52,14 +53,17 @@ Defined in `data/GameDatabase.kt` — version **6**, `exportSchema = true`, with
 | `PlayerEntity` | players | Core player attributes |
 
 ### DAOs
-- `RunRecordDao`, `CharacterProfileDao`, `GameSaveProgressDao`, `InventoryItemDao`
-- `FloorMapDao` (in `FloorMapDao.kt`), `PlayerNpcCoordinatesDao`, plus `GridMapStateDao`, `GridEntityCoordinateDao`, `PlayerDao` (referenced by the repositories)
+Four save-stack DAOs, all declared inside `GameDatabase.kt`:
+- `RunRecordDao` — leaderboard run history (`getAllRecords` / `insertRecord` / `clearRecords`)
+- `CharacterProfileDao` — player profiles (`getAllProfiles` / `insertProfile`)
+- `GameSaveProgressDao` — save snapshots (`getSaveProgress` / `getSaveProgressSync` / `insertSaveProgress`)
+- `InventoryItemDao` — inventory rows (`getInventoryItems` / `insertItem(s)` / `clearInventoryForSlot`)
+
+> **Note:** the six legacy entities (`FloorMapEntity`, `FloorObstacleEntity`, `PlayerMapPositionEntity`, `GridMapStateEntity`, `GridEntityCoordinateEntity`, `PlayerEntity`) remain declared in `@Database` to keep the exported schema v6 stable, but they have **no DAOs and no repositories** — the alternative grid-persistence stack (7 DAOs, 3 repositories, `FloorObstacle` mapping) was removed as dead code.
 
 ### Repositories
-- **`GameRepository`** — main save/profile/inventory CRUD (takes the 4 core DAOs)
-- **`FloorMapRepository`** — floor map + obstacle + player position access
-- **`GridGameStateRepository`** — grid state + entity coordinate access
-- **`PlayerRepository`** — player DAO access
+- **`SaveRepository`** (`SaveRepository.kt`) — the persistence port consumed by `PersistenceManager`
+- **`GameRepository`** (`SaveRepository.kt`) — the live implementation: takes the 4 save DAOs and provides run/profile/save/inventory CRUD
 
 ---
 
@@ -91,10 +95,10 @@ Inventory items are additionally mirrored row-by-row into the `inventory_items` 
 - `fallbackToDestructiveMigration(true)` means any install whose `@Database` version is **older than 6** without a matching migration chain gets its Room DB **dropped and recreated**. For a roguelike whose save is largely regenerable from an alive run (and mirrored in SharedPreferences + portable export), this is an acceptable safety net, but it will reset leaderboard/run records on legacy-stale installs.
 
 ### How to add a table/column safely (the intended workflow)
-1. **Edit the entity** in `data/GameModels.kt` (or the `…Entity.kt` files).
+1. **Edit the entity** in the `…Entity.kt` files (`:core:platform`, package `com.example.data`).
 2. **Bump `version = 6 → 7`** in `GameDatabase`.
 3. **Add `MIGRATION_6_7 = object : Migration(6, 7) { override fun migrate(db) { db.execSQL("ALTER TABLE …") } }`** to the companion object and to `.addMigrations(...)`.
-4. **Test with `MigrationTestHelper`** using the exported schema JSON in `app/schemas/` (Room now writes these because `exportSchema = true`; the KSP `room.schemaLocation` is `$projectDir/schemas`).
+4. **Test with `MigrationTestHelper`** using the exported schema JSON in `core/platform/schemas/` (Room now writes these because `exportSchema = true`; the KSP `room.schemaLocation` is `$projectDir/schemas`).
 5. Never edit an already-shipped migration; add a new forward migration instead.
 
 ### Legacy-gap mitigation
@@ -106,7 +110,7 @@ Because `2 → 6` was never migrated incrementally, the pragmatic options for ex
 
 ## Save / Load Flow
 
-Live in `ui/PersistenceManager.kt`, exposed through `GameViewModel`:
+Live in `:core:platform` (`com.example.ui.PersistenceManager`), exposed through `GameViewModel` (`:feature:gamevm`):
 
 - **`saveGame()`** — serializes the current `GameUiState` into a `GameSaveProgressEntity`, writes it via `GameRepository.saveGameProgress`, and writes the same data into SharedPreferences. Called on interactive `save`, and auto-persisted around combat/level transitions.
 - **`hasSavedGame()`** — checks whether a save exists (Room or SharedPreferences).
@@ -170,6 +174,5 @@ Serialization helpers in `PersistenceManager` encode structured data as compact 
 ## Data Hygiene & Clearing
 
 - **`clearHighScores()`** — clears `run_records`.
-- **`deleteSaveProgress(slotId)`** — removes the save row and the slot's inventory items.
 - `fallbackToDestructiveMigration(true)` — on a schema version mismatch beyond `MIGRATION_1_2`, the DB rebuilds (destructive) rather than crashing, at the cost of old data.
 - Run records accumulate per finished run; the leaderboard reads them newest-first.
