@@ -60,6 +60,15 @@ import kotlinx.coroutines.flow.update
  *    is a faint backwash, a failed breach trips the node's klaxon and pulls
  *    nearby ICE onto the terminal while the runner slips away (see
  *    [emitBreachOutcome]);
+ *  - d8 slice 7: duct crawl & cover navigation - service vents
+ *    (VENT_TUNNEL / ALTERNATIVE_VENT) are the runner's stealth network:
+ *    inside a duct the runner is thermally invisible to ICE optics and
+ *    the crawl is silent, ICE units are too bulky to follow into the
+ *    conduits (a chase stalls into a sweep at the duct mouth) and a
+ *    phantom signal aimed into a duct rolls back to the mouth; leaving
+ *    a hardened cover cell keeps the perception dampening for a short
+ *    grace window so cover-to-cover slips stay quiet (see
+ *    [isRunnerInDuct] and [COVER_GRACE_TICKS]);
  *  - the breach-protocol minigame and non-game screens freeze the world clock
  *    (KOTOR rule).
  *
@@ -85,6 +94,12 @@ class StealthSessionController(
     private var combatSeen: Boolean = false
     /** Remembers which floor+count was last announced, so the patrol advisory log fires once per level. */
     private var lastPatrolLogSignature: String = ""
+
+    /** d8 slice 7: cover-slip grace - world ticks of perception dampening left after leaving a cover cell. */
+    private var coverGraceTicksRemaining: Int = 0
+
+    /** d8 slice 7: last announced duct state, so the DUCT CRAWL/EXIT logs fire once per transit. */
+    private var lastDuctAnnounced: Boolean = false
 
     /** One-shot noise stimuli queued from player input; consumed by the next world tick. */
     private val pendingNoise = ArrayDeque<NoisePulse>()
@@ -145,12 +160,38 @@ class StealthSessionController(
         }
         if (currentSession.mode != GameSessionMode.EXPLORATION) return
 
+        // d8 slice 7: duct crawl - a runner inside a service vent is
+        // thermally invisible to ICE optics; the transit is announced once.
+        val inDuct = isRunnerInDuct(state)
+        if (inDuct != lastDuctAnnounced) {
+            lastDuctAnnounced = inDuct
+            if (inDuct) {
+                onLog(
+                    "DUCT CRAWL: thermal-dampened concealment active - ICE optics lose you.",
+                    LogType.INFO
+                )
+            } else {
+                onLog(
+                    "DUCT EXIT: concealment dropped - the open grid sees you again.",
+                    LogType.INFO
+                )
+            }
+        }
+        // d8 slice 7: cover-slip grace - stepping off a hardened cover cell
+        // keeps the perception dampening for a short window, so slipping
+        // between cover stays quiet. Deterministic tick countdown, no RNG.
+        if (isInCover(state)) {
+            coverGraceTicksRemaining = COVER_GRACE_TICKS
+        } else if (coverGraceTicksRemaining > 0) {
+            coverGraceTicksRemaining--
+        }
         val result = currentSession.tick(
             deltaMillis = WorldClockTicker.TICK_MILLIS,
             gridX = state.gridX,
             gridY = state.gridY,
             isSneaking = state.isSneaking,
-            isInCover = isInCover(state),
+            isInvisible = inDuct,
+            isInCover = coverGraceTicksRemaining > 0,
             noisePulses = noisePulses,
             weather = state.activeWeather
         )
@@ -194,9 +235,15 @@ class StealthSessionController(
         }
     }
 
-    /** Footstep stimulus from movement input: fully suppressed while sneaking. */
+    /**
+     * Footstep stimulus from movement input: fully suppressed while
+     * sneaking, and muffled inside a service vent - the duct crawl is
+     * silent regardless of stance (d8 slice 7).
+     */
     fun emitFootstep() {
-        if (_uiState.value.isSneaking) return
+        val state = _uiState.value
+        if (state.isSneaking) return
+        if (isRunnerInDuct(state)) return
         emitNoise(radiusCells = FOOTSTEP_RADIUS_CELLS, intensity = FOOTSTEP_INTENSITY)
     }
 
@@ -241,7 +288,8 @@ class StealthSessionController(
         if (maze.isEmpty()) return null
         var x = cellX.coerceIn(0, maze[0].lastIndex)
         var y = cellY.coerceIn(0, maze.lastIndex)
-        // A phantom signal embedded in a firewall cannot be investigated:
+        // A phantom signal embedded in a firewall or a crawl duct (d8 slice 7)
+        // cannot be investigated:
         // walk the landing point straight back toward the runner until it
         // sits on a cell the ICE can actually reach (same movement blockers
         // as the stealth world adapter, so guard pathing agrees with the
@@ -343,6 +391,21 @@ class StealthSessionController(
     }
 
     /**
+     * d8 slice 7: duct-crawl rule for the Labyrinth grid: standing inside
+     * a service ventilation duct (VENT_TUNNEL / ALTERNATIVE_VENT) makes the
+     * runner thermally invisible to ICE optics - the conduit walls dampen
+     * their heat signature. Deterministic from the maze alone, so seed
+     * determinism is preserved.
+     */
+    private fun isRunnerInDuct(state: GameUiState): Boolean {
+        val maze = state.maze
+        val y = state.gridY
+        val x = state.gridX
+        if (y !in maze.indices || x !in maze[y].indices) return false
+        return maze[y][x] in VENT_CELL_TYPES
+    }
+
+    /**
      * Publishes the ICE threat HUD slice of GameUiState: the highest suspicion
      * among the active guards of the current floor plus their most advanced
      * hunt state. A pure read of the shared simulation frame - no extra
@@ -357,9 +420,10 @@ class StealthSessionController(
             .maxByOrNull { it.state.ordinal }
             ?.state
             ?: StealthGuardState.PATROLLING
+        val inDuct = isRunnerInDuct(_uiState.value)
         _uiState.update { s ->
-            if (s.iceSuspicion == suspicion && s.iceGuardState == guardState) s
-            else s.copy(iceSuspicion = suspicion, iceGuardState = guardState)
+            if (s.iceSuspicion == suspicion && s.iceGuardState == guardState && s.isInDuct == inDuct) s
+            else s.copy(iceSuspicion = suspicion, iceGuardState = guardState, isInDuct = inDuct)
         }
     }
 
@@ -582,7 +646,11 @@ class StealthSessionController(
         private val NOISE_LANDING_BLOCKERS: Set<CellType> = setOf(
             CellType.WALL,
             CellType.SECRET_WALL,
-            CellType.TERMINAL_DOOR
+            CellType.TERMINAL_DOOR,
+            // d8 slice 7: a phantom signal embedded in a crawl duct is
+            // unreachable for ICE - it rolls back to the duct mouth.
+            CellType.VENT_TUNNEL,
+            CellType.ALTERNATIVE_VENT
         )
         private const val MAX_PENDING_NOISE: Int = 16
         private val COVER_CELL_TYPES: Set<CellType> = setOf(
@@ -591,5 +659,14 @@ class StealthSessionController(
             CellType.VENT_TUNNEL,
             CellType.ALTERNATIVE_VENT
         )
+
+        /** d8 slice 7: service ducts - the runner's thermal concealment network. */
+        private val VENT_CELL_TYPES: Set<CellType> = setOf(
+            CellType.VENT_TUNNEL,
+            CellType.ALTERNATIVE_VENT
+        )
+
+        /** d8 slice 7: cover-slip grace in world ticks (100 ms cadence -> 1 second). */
+        const val COVER_GRACE_TICKS: Int = 10
     }
 }

@@ -745,6 +745,19 @@ fun ExplorationView(
                             modifier = Modifier.testTag("hud_ice_suspicion")
                         )
 
+                        // d8 slice 7: duct-crawl chip - the runner is inside a
+                        // service vent, thermally concealed from ICE optics.
+                        if (uiState.isInDuct) {
+                            Text(
+                                text = ">> DUCT CRAWL: THERMAL CONCEALMENT ACTIVE",
+                                color = CyberCyan,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("hud_duct_concealment")
+                            )
+                        }
+
                         // Credits & Upgrades
                         Row(
                             modifier = Modifier.fillMaxWidth(),

@@ -201,7 +201,14 @@ class LabyrinthStealthSession(
         val DEFAULT_MOVEMENT_BLOCKERS: Set<CellType> = setOf(
             CellType.WALL,
             CellType.SECRET_WALL,
-            CellType.TERMINAL_DOOR
+            CellType.TERMINAL_DOOR,
+            // d8 slice 7: ICE sweep units are too bulky for the crawl ducts -
+            // service ventilation (VENT_TUNNEL / ALTERNATIVE_VENT) is the
+            // runner's stealth network, never an ICE route. This is also the
+            // walkable set the controller hashes patrol routes from, so no
+            // patrol waypoint ever lands inside a duct.
+            CellType.VENT_TUNNEL,
+            CellType.ALTERNATIVE_VENT
         )
 
         val DEFAULT_VISION_BLOCKERS: Set<CellType> = setOf(
