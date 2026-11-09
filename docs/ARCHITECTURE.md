@@ -1,8 +1,18 @@
+
 # Netcrawler — Architecture
 
 This document explains how the Netcrawler codebase is organized and how data flows through it.
 
 ---
+
+## Module Layout
+
+The codebase is a multi-module Gradle build — 8 core libraries, a design-system library, 12 feature libraries, and an app shell (see [CODEBASE.md](CODEBASE.md) for the file reference):
+
+- **Core (8):** `:core:model` (domain types), `:core:content` (item/implant catalogs, mod loading), `:core:engine` (pure game logic: engine, combat rules, generators, stealth simulation), `:core:persistence` (pure-Kotlin save codecs), `:core:render` (perspective renderers + SVDAG rules), `:core:game` (shared UI-state contracts: `GameUiState`, combat clocks, `StealthSessionController`), `:core:audio` (`GameAudioPlayer` port), `:core:platform` (Android persistence stack + audio/vibration adapters)
+- **Design system:** `:core:designsystem` (Compose theme + CRT overlay)
+- **Feature (12):** `skilltree` / `combat` / `exploration` / `cosmetic` / `inventory` (domain managers), `hacking` (minigame screens), `cybergl` (character GL renderer), `widgets` (shared HUD), `exploration-ui` (FPP canvas + minimap), `svdag-inspector` (world inspector), `terminal` (router + menu screens), `gamevm` (the `GameViewModel` coordinator)
+- **App:** `:app` — `MainActivity` only
 
 ## Layers at a Glance
 
@@ -40,7 +50,7 @@ Netcrawler follows a layered **MVVM** (Model-View-ViewModel) architecture. The k
 
 ## The Single Source of Truth: `GameUiState`
 
-`GameViewModel.GameUiState` is a large immutable `data class` (~160 fields) defined inside `GameViewModel.kt`. It holds **everything** about the current game session, including:
+`GameUiState` is a large immutable `data class` (~160 fields) defined in `:core:game` (`GameUiState.kt`, package `com.example.ui`). It holds **everything** about the current game session, including:
 
 - **Player state** — name, class, HP, shield, RAM, credits, XP, attributes
 - **Position & navigation** — grid coordinates, direction, level, zone
@@ -52,7 +62,7 @@ Netcrawler follows a layered **MVVM** (Model-View-ViewModel) architecture. The k
 
 Because it's a single immutable object updated via `_uiState.update { it.copy(...) }`, the entire UI recomposes consistently from one source.
 
-> **Note:** Because the state type lives *inside* `GameViewModel`, every manager constructor references it as `MutableStateFlow<GameViewModel.GameUiState>`, and screens refer to the type through the ViewModel.
+> **Note:** `GameUiState` is a top-level type in `:core:game`; every manager constructor references it as `MutableStateFlow<GameUiState>`, and screens resolve it through the module dependency graph.
 
 ---
 
@@ -69,12 +79,13 @@ The ViewModel was historically a ~4,750-line "god file." It was split into **six
 
 | Manager | File | Responsibility |
 |---------|------|----------------|
-| **CombatManager** | `ui/CombatManager.kt` (~620) | Turn-based combat, attack/defend/hack/scan, programs, status effects, bosses, loot |
-| **ExplorationManager** | `ui/ExplorationManager.kt` (~1,440) | Movement, turn, weather, enemy spawns, level loading/navigation, SVDAG, terminal commands |
-| **InventoryManager** | `ui/InventoryManager.kt` (~650) | Items, equipment, shops, cyberware/clinic, implants, importing/equipping |
-| **PersistenceManager** | `ui/PersistenceManager.kt` (~800) | Save/load, serialization, game lifecycle, leaderboard, save export/import |
-| **CosmeticVaultManager** | `ui/CosmeticVaultManager.kt` (~170) | Data fragments, themes, prompt styles, performance buffs |
-| **GameViewModel** | `ui/GameViewModel.kt` (~500) | Coordinator: state + delegation + hacking mini-game + shared callbacks |
+| **CombatManager** | `CombatManager.kt` in `:feature:combat` | Turn-based combat, attack/defend/hack/scan, programs, status effects, bosses, loot |
+| **ExplorationManager** | `ExplorationManager.kt` in `:feature:exploration` | Movement, turn, weather, enemy spawns, level loading/navigation, SVDAG, terminal commands |
+| **InventoryManager** | `InventoryManager.kt` in `:feature:inventory` | Items, equipment, shops, cyberware/clinic, implants, importing/equipping |
+| **PersistenceManager** | `PersistenceManager.kt` in `:core:platform` | Save/load, serialization, game lifecycle, leaderboard, save export/import |
+| **CosmeticVaultManager** | `CosmeticVaultManager.kt` in `:feature:cosmetic` | Data fragments, themes, prompt styles, performance buffs |
+| **SkillTreeManager** | `SkillTreeManager.kt` in `:feature:skilltree` | Skill-point allocation: node learn/reset, stat application |
+| **GameViewModel** | `GameViewModel.kt` in `:feature:gamevm` | Coordinator: state + delegation + hacking mini-game + shared callbacks |
 
 ### How Managers Communicate
 
@@ -105,13 +116,13 @@ Every step flows through the shared `_uiState`, so the log feed, HP bar, and ani
 
 ## Cross-Domain Types
 
-A few types used by many managers were promoted from being nested inside `GameViewModel` to **top-level files** under `ui/`:
+A few types used by many managers were promoted from being nested inside `GameViewModel` to **top-level files in `:core:game` (package `com.example.ui`)**:
 
-- `ui/ActiveScreen.kt` — the `ActiveScreen` navigation enum
-- `ui/CombatTurn.kt` — the `CombatTurn` enum (`PLAYER`, `ENEMY`, `ANIMATING`)
-- `ui/CombatHackingPatternState.kt` — the combat breach-protocol state data class
+- `ActiveScreen.kt` — the `ActiveScreen` navigation enum
+- `CombatTurn.kt` — the `CombatTurn` enum (`PLAYER`, `ENEMY`, `ANIMATING`)
+- `CombatHackingPatternState.kt` — the combat breach-protocol state data class
 
-The core data types (`Enemy`, `Program`, `CellType`, `Zone`, `GameState`, `TurnPhase`, `NetrunnerClass`, etc.) live in `data/GameModels.kt`.
+The core data types (`Enemy`, `Program`, `CellType`, `Zone`, `NetrunnerClass`, etc.) live in `:core:model` (`DomainModels.kt`); combat contracts (`GameState`, `TurnPhase`, `CombatActionType`, `TurnActionRecord`) live in `:core:engine`.
 
 ---
 
@@ -127,28 +138,29 @@ The core data types (`Enemy`, `Program`, `CellType`, `Zone`, `GameState`, `TurnP
 
 ### Persistence (Room)
 
-- **`GameDatabase`** — a singleton Room database with **10 entities** and version **6**.
-- **Entities** — `RunRecord`, `CharacterProfileEntity`, `GameSaveProgressEntity`, `InventoryItemEntity`, `FloorMapEntity`, `FloorObstacleEntity`, `PlayerMapPositionEntity`, `GridMapStateEntity`, `GridEntityCoordinateEntity`, `PlayerEntity`.
-- **DAOs** — `RunRecordDao`, `CharacterProfileDao`, `GameSaveProgressDao`, `InventoryItemDao`, `FloorMapDao`, `PlayerNpcCoordinatesDao`, plus others.
-- **Repositories** — `GameRepository` (main save/profile/inventory), `FloorMapRepository`, `GridGameStateRepository`, `PlayerRepository`.
+- **`GameDatabase`** — a singleton Room database with **10 entities** and version **6** (in `:core:platform`, package `com.example.data`).
+- **Entities** — the 4 save-stack entities (`RunRecord`, `CharacterProfileEntity`, `GameSaveProgressEntity`, `InventoryItemEntity`) plus 6 legacy entities (`FloorMapEntity`, `FloorObstacleEntity`, `PlayerMapPositionEntity`, `GridMapStateEntity`, `GridEntityCoordinateEntity`, `PlayerEntity`) kept for schema-v6 stability without DAOs.
+- **DAOs** — exactly four, all in `GameDatabase.kt`: `RunRecordDao`, `CharacterProfileDao`, `GameSaveProgressDao`, `InventoryItemDao`.
+- **Repositories** — `SaveRepository` (interface, consumed by `PersistenceManager`) + `GameRepository` (implementation, takes the 4 DAOs), in `SaveRepository.kt`.
 - Migration `MIGRATION_1_2` is registered; `fallbackToDestructiveMigration(true)` handles newer schemas.
 
 ---
 
 ## Rendering & Audio
 
-- **OpenGL ES** — `gl/CyberMatrixGLView` / `CyberMatrixRenderer` (digital-rain matrix) and `gl/CyberCharacterGLView` / `CyberCharacterRenderer` (3D character). Shaders live in `assets/shaders/*.glsl`.
-- **Canvas 2D** — `FirstPersonPerspectiveCanvas` for the first-person corridor, `RenderMiniMap` for the map.
-- **Audio** — `audio/CyberSoundEffectsManager` (PCM audio-track music), `audio/CyberSoundPoolManager` (SFX), `audio/CyberVibrationManager` (haptics).
+- **OpenGL ES** — `CyberCharacterGLView` / `CyberCharacterRenderer` (3D character, in `:feature:cybergl`). Shaders live in `app/assets/shaders/*.glsl`. (The former CyberMatrix digital-rain renderer was removed as dead code.)
+- **Canvas 2D** — `FirstPersonPerspectiveCanvas` for the first-person corridor and `RenderMiniMap` for the map (in `:feature:exploration-ui`); the render bridge extension lives in `:core:render`.
+- **Audio** — `CyberSoundEffectsManager` (PCM audio-track music), `CyberSoundPoolManager` (SFX), `CyberVibrationManager` (haptics) in `:core:platform`; the `GameAudioPlayer` port is `:core:audio`.
 
 ---
 
 ## Legacy / Not-Wired Code
 
-Several ViewModels exist that performed domain logic before the manager refactor and are **no longer the main path**:
+The rebuild removed the dead code as it was identified:
 
-- `ui/GameTurnViewModel.kt` (~900 lines)
-- `ui/HackingViewModel.kt` (~480 lines)
-- `ui/InventoryViewModel.kt`, `ui/CharacterProfileViewModel.kt`, `ui/GameProgressViewModel.kt`
+- The legacy turn stack (`GameTurnViewModel`, `TurnStateMachine`) — removed.
+- The alternative grid-persistence stack (7 DAOs, 3 repositories, `FloorObstacle` mapping) — removed; the entities stay in `@Database` for schema-v6 stability only.
+- The Room floor-grid renderer and the CyberMatrix GL renderer — removed.
+- The orphaned ViewModels (`InventoryViewModel`, `CharacterProfileViewModel`, `GameProgressViewModel`) — removed.
 
-These are kept for reference and potential reuse but are not consumed by `MainActivity`'s active flow (which uses `GameViewModel`). Use them with caution.
+`HackingViewModel` survives in `:feature:hacking` next to the hacking minigame screens. The active flow is `MainActivity` → `GameViewModel` (`:feature:gamevm`) → managers.

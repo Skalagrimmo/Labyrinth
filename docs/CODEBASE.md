@@ -1,189 +1,199 @@
 # Netcrawler — Codebase Reference
 
-A complete source-file reference organized by package and layer. All paths are relative to `app/src/main/java/com/example/`.
+A source-file reference organized by Gradle module. Netcrawler is a multi-module build: 8 core libraries, a design-system library, 12 feature libraries, and the app shell. Packages are preserved across modules (`com.example.ui` and `com.example.data` are split packages resolved through the dependency graph), so files keep their package when they move and call sites stay unchanged.
 
----
+## Module Map
 
-## Table of Contents
+| Module | Package(s) | Contents |
+|--------|------------|----------|
+| `:app` | `com.example` | `MainActivity` — the only app source file |
+| `:core:model` | `com.example.core.model` | Domain models shared by every layer |
+| `:core:content` | `com.example.data` | Static content catalogs + mod loading |
+| `:core:engine` | `com.example.data`, `com.example.stealth` | Pure game logic: engine, combat rules, generators, stealth simulation |
+| `:core:persistence` | `com.example.data` | Pure-Kotlin save codecs + loot system |
+| `:core:render` | `com.example.data(.svdag)` | Perspective renderers + SVDAG world rules |
+| `:core:game` | `com.example.ui` | Shared UI-state contracts + stealth session controller |
+| `:core:audio` | `com.example.audio` | The `GameAudioPlayer` port |
+| `:core:platform` | `com.example.data`, `com.example.ui`, `com.example.audio` | Android persistence stack + audio/vibration adapters |
+| `:core:designsystem` | `com.example.ui.theme`, `com.example.ui.components` | Compose theme + CRT overlay |
+| `:feature:skilltree` | `com.example.ui` | Skill tree manager |
+| `:feature:combat` | `com.example.ui` | Combat manager |
+| `:feature:exploration` | `com.example.ui` | Exploration manager |
+| `:feature:cosmetic` | `com.example.ui` | Cosmetic vault manager |
+| `:feature:inventory` | `com.example.ui` | Inventory manager |
+| `:feature:hacking` | `com.example.ui(.screens/.components)` | Hacking minigame screens + `HackingViewModel` |
+| `:feature:cybergl` | `com.example.gl` | OpenGL character renderer |
+| `:feature:widgets` | `com.example.ui(.components/.screens)` | Shared HUD widgets |
+| `:feature:exploration-ui` | `com.example.ui.screens` | First-person canvas + minimap |
+| `:feature:svdag-inspector` | `com.example.ui.screens` | SVDAG world inspector screens |
+| `:feature:terminal` | `com.example.ui(.screens)` | Terminal router, exploration shell, menu screens |
+| `:feature:gamevm` | `com.example.ui` | `GameViewModel` — the coordinator |
 
-- [Entry Point & Resources](#entry-point--resources)
-- [UI Layer (`ui/`)](#ui-layer-ui)
-  - [Managers](#managers)
-  - [Shared Types](#shared-types)
-  - [Screens](#screens)
-  - [Components](#components)
-  - [Theme](#theme)
-  - [Legacy ViewModels](#legacy-viewmodels)
-- [Data Layer (`data/`)](#data-layer-data)
-- [SVDAG (`data/svdag/`)](#svdag-data-svdag)
-- [Audio (`audio/`)](#audio-audio)
-- [OpenGL (`gl/`)](#opengl-gl)
-- [Tests](#tests)
+## App (`:app`)
 
----
+| Path | Purpose |
+|------|---------|
+| `java/com/example/MainActivity.kt` | Activity hosting Compose; sets `NetcrawlerTheme`, creates `GameViewModel`, renders `TerminalScreen` |
+| `AndroidManifest.xml` | Permissions, launcher activity, network security config |
+| `assets/shaders/*.glsl` | OpenGL shaders |
+| `res/` | Icons, colors, strings, themes, backup/data-extraction/network rules |
 
-## Entry Point & Resources
+## Core Libraries
+
+### `:core:model` — `com.example.core.model`
 
 | File | Purpose |
 |------|---------|
-| `MainActivity.kt` | Activity hosting Compose; sets `NetcrawlerTheme`, creates `GameViewModel`, renders `TerminalScreen` |
-| `AndroidManifest.xml` | Permissions (`MODIFY_AUDIO_SETTINGS`), launcher activity, network security config, icon |
-| `assets/shaders/*.glsl` | OpenGL shaders (matrix vertex, digital-rain fragment) |
-| `res/` | Icons (`app_icon_netcrawler.jpg`, mipmaps), colors, strings, themes, backup/data-extraction/network rules |
-| `gradle/libs.versions.toml` | Gradle Version Catalog (all dependency versions) |
-| `app/build.gradle.kts` | Module build configuration, signing, SDK, dependencies |
-| `build.gradle.kts`, `settings.gradle.kts` | Root build & plugin management |
+| `DomainModels.kt` | Core domain types: `NetrunnerClass`, `Cyberware`, `StatusEffectType`, `Program`, `Direction`, `CellType`, `Zone`, `CyberWeather`, `Enemy`, `BossType`, `LogMessage`/`LogType`, `DigitalMutation` |
 
----
-
-## UI Layer (`ui/`)
-
-### Managers (the core game logic)
-
-| File | Responsibility |
-|------|----------------|
-| `GameViewModel.kt` (~500) | **Coordinator.** Owns `MutableStateFlow<GameUiState>`, constructs all managers, delegates public API, hacking mini-game, XP/leveling, shared callbacks |
-| `CombatManager.kt` (~620) | Turn-based combat: attack/defend/hack/scan/programs/items, enemy AI invocation, status effects, bosses, victory/defeat, loot |
-| `ExplorationManager.kt` (~1,440) | Movement, turns, weather events, enemy spawns, level load/create, elevators/stairs, portals (incl. boss triggers), map scan, SVDAG orchestration, terminal commands |
-| `InventoryManager.kt` (~650) | Items/consumables, equipment slot management, shops, cyberware, cybernetics clinic, implants, scavenging |
-| `PersistenceManager.kt` (~800) | Save/load, serialization, game lifecycle, leaderboard, high scores, run records, save export/import, clipboard |
-| `CosmeticVaultManager.kt` (~170) | Data fragments, cosmetic themes, prompt styles, performance buffs, Data Vault navigation |
-| `SkillTreeManager.kt` | Skill-point allocation: `skilltree`/`skill` terminal commands, node learn/reset, stat application |
-| `TutorialOverlay.kt` | 5-step non-blocking onboarding dialog + `tutorial` terminal command + `tutorial_seen` persistence |
-
-### Shared Types
+### `:core:content` — `com.example.data`
 
 | File | Purpose |
 |------|---------|
-| `ActiveScreen.kt` | `ActiveScreen` navigation enum (START_MENU, CHARACTER_CREATION, EXPLORATION, COMBAT, HACKING_MINIGAME, UPGRADE_STORE, LEADERBOARD, GAME_OVER, CYBERWARE_CLINIC, SVDAG_WORLD_BUILDER, DATA_FRAGMENTS_VAULT) |
-| `CombatTurn.kt` | `CombatTurn` enum (PLAYER, ENEMY, ANIMATING) |
-| `CombatHackingPatternState.kt` | Data class for the in-combat breach-protocol minigame state |
-
-### Screens
-
-| File | Purpose |
-|------|---------|
-| `screens/TerminalScreen.kt` | The main game screen — hosts the terminal, HUD, perspective view, and routes across activity |
-| `screens/StartMenuView.kt` | Start menu (new run / resume / leaderboard) |
-| `screens/CharacterCreationView.kt` | Character + class + implant + stat allocation |
-| `screens/ExplorationView.kt` | Exploration HUD and 3D perspective + context bar |
-| `screens/CombatScreen.kt` *(note: combat UI largely inlined in TerminalScreen/ExplorationView)* | Combat screen composables |
-| `screens/HackingMinigableView.kt` | Hacking mini-game screen |
-| `screens/UpgradeStoreView.kt` | Shop/upgrade console |
-| `screens/LeaderboardView.kt` | Run history / leaderboard |
-| `screens/GameOverView.kt` | Game over / victory screen |
-| `screens/CyberneticsClinicView.kt` | Cyberware clinic |
-| `screens/DataVaultScreen.kt` | Data fragment cosmetic vault |
-| `screens/CyberwareInventoryOverlay.kt` | Equip/unequip implant overlay |
-| `screens/SvdagWorldInspectorScreen.kt` | SVDAG 3D world inspector |
-| `screens/MultiFloorLevelInspectorOverlay.kt` | Multi-floor level inspector |
-| `screens/MatrixHackingTerminalScreen.kt` | Matrix hacking terminal variant |
-| `screens/CyberHackingMinigameSuite.kt` | Suite of hacking minigame variants |
-| `screens/PatternMatchingHackingMiniGame.kt` | Pattern-matching hacking minigame |
-| `screens/FirstPersonPerspectiveCanvas.kt` | Canvas-based first-person renderer |
-| `screens/RenderMiniMap.kt` | Minimap composable |
-| `screens/BottomNavigation.kt` | Bottom navigation bar |
-| `screens/SharedWidgets.kt` | Shared UI widgets |
-| `screens/GlitchOverlays.kt` | CRT/glitch overlay effects |
-| `screens/ProgressBarRetro.kt` | Retro progress bar |
-| `screens/TerminalHeader.kt` | Terminal header HUD |
-
-### Components
-
-| File | Purpose |
-|------|---------|
-| `components/CombatHackingMinigameView.kt` | In-combat hack minigame UI |
-| `components/HackingPuzzleMiniGameView.kt` | Pre-combat hacking puzzle UI |
-| `components/CyberVitalStatusHud.kt` | Health/shield/RAM/credits HUD |
-| `components/CyberNotification.kt` | Notification/alert toast |
-| `components/FlickeringCrtScanlineTerminalOverlay.kt` | CRT scanline overlay |
-| `components/RoomFloorGridRenderer.kt` | Grid floor renderer |
-| `components/VisualTurnIndicator.kt` | Combat turn indicator |
-
-### Theme
-
-| File | Purpose |
-|------|---------|
-| `theme/Color.kt` | Color palette |
-| `theme/Theme.kt` | `NetcrawlerTheme` compose theme |
-| `theme/Type.kt` | Typography |
-
-### Legacy ViewModels
-
-| File | Purpose |
-|------|---------|
-| `GameTurnViewModel.kt` (~900) | Legacy turn/viewmodel logic (not the active path) |
-| `HackingViewModel.kt` (~480) | Legacy hacking logic |
-| `InventoryViewModel.kt` (~65) | Legacy inventory VM |
-| `CharacterProfileViewModel.kt` (~75) | Legacy character profile VM |
-| `GameProgressViewModel.kt` (~50) | Legacy progress VM |
-
----
-
-## Data Layer (`data/`)
-
-| File | Purpose |
-|------|---------|
-| `GameModels.kt` | Core types: `NetrunnerClass`, `Cyberware`, `StatusEffectType`, `ActiveStatusEffect`, `Program`, `Direction`, `CellType`, `Zone`, `CyberWeather`, `Enemy`, `BossType`, `LogMessage/LogType`, `RunRecord`, `CharacterProfileEntity`, `GameSaveProgressEntity`, `InventoryItemEntity`, `GameState`, `TurnPhase`, `CombatActionType`, `TurnActionRecord` |
-| `GameEngine.kt` (~1,680) | Procedural maze generation, 3D perspective raycast, enemy/boss spawning, hacking puzzles, starting program kits, weather |
-| `ContentModParser.kt` | Reusable Markdown parser for mod-defined content (enemies/items/programs) |
-| `ContentRegistry.kt` | Converts parsed mod blocks into model types and merges them into live registries + `assets/mods/` loader |
-| `NameGenerator.kt` | Random cyberpunk alias/name generator (suggestions + title suffixes) |
-| `SkillTreeModels.kt` | Data-driven skill tree: `SkillBranch`, `SkillNode`, `SkillTree`, `SkillTreeEffects`, `combinedEffects` |
-| `GameItemRegistry.kt` (~320) | Static `GameItem` catalog (consumables, equipment) + mod-item merge |
-| `ItemModels.kt` | `GameItem`, `EquipmentSlot`, `InventoryCategory`, `InventorySortOption`, `ItemRarity` |
+| `GameItemRegistry.kt` | Static `GameItem` catalog + mod-item merge |
 | `CyberwareImplantRegistry.kt` | Implant catalog + starter implants |
 | `ImplantModels.kt` | `CyberwareImplant`, `ImplantBodySlot`, `ImplantAbility` |
-| `CombatLootDropSystem.kt` | Loot table + drop generation (incl. boss loot) |
-| `EnemyCombatAIScript.kt` (~350) | Enemy + boss AI decision logic |
-| `TurnBasedCombatEngine.kt` (~400) | Pure-Kotlin immutable combat state machine (reference engine) |
+| `ItemModels.kt` | `GameItem`, `EquipmentSlot`, `InventoryCategory`, `InventorySortOption`, `ItemRarity` |
+| `GameContentCatalog.kt` | Built-in content catalog |
+| `EnemyArchetype.kt` | Enemy archetypes |
+| `DataFragmentModels.kt` | Data fragment models (cosmetic vault) |
+| `ContentModParser.kt` | Markdown parser for mod-defined content |
+| `ContentRegistry.kt` | Mod block to model conversion + registry merge |
+
+### `:core:engine` — `com.example.data` + `com.example.stealth`
+
+| File | Purpose |
+|------|---------|
+| `GameEngine.kt` | Procedural maze generation, 3D perspective raycast, enemy/boss spawning, hacking puzzles, starting kits, weather |
+| `MazeGenerator.kt` | Maze generation core |
+| `EnvironmentGenerator.kt` | Environment generation |
 | `ProceduralMatrixLevelGenerator.kt` | Alternative matrix level generator |
-| `ProceduralMultiFloorLevelGenerator.kt` | Multi-floor level generator (+ `MultiFloorGridLevel` models) |
-| `FloorMapDao.kt`, `FloorMapEntities.kt`, `FloorMapRepository.kt` | Room persistence for floor maps + obstacle navigator |
-| `GridGameStateEntities.kt`, `GridGameStateRepository.kt` | Grid state + entity coordinate persistence |
-| `PlayerEntity.kt`, `PlayerNpcCoordinatesDao.kt`, `PlayerRepository.kt` | Player + NPC coordinates persistence |
-| `GameDatabase.kt` | Room database (10 entities), DAOs, `GameRepository`, migrations |
+| `ProceduralMultiFloorLevelGenerator.kt` | Multi-floor level generator + `MultiFloorGridLevel` models |
+| `RealTimeGameSession.kt` | Real-time session facade (stealth world ticks) |
+| `NameGenerator.kt` | Cyberpunk alias/name generator |
+| `SkillTreeModels.kt` | Data-driven skill tree models |
+| `HackingPuzzle.kt` / `HackingPuzzleGenerator.kt` | Breach-protocol puzzle models + generation |
+| `TurnBasedCombatEngine.kt` | Pure-Kotlin immutable combat state machine (reference engine) |
+| `EnemyCombatAIScript.kt` | Enemy + boss AI decision logic |
+| `EnemyFactory.kt` / `BossFactory.kt` | Enemy/boss construction |
+| `CombatDomainModels.kt` | `GameState`, `CombatActionType`, `TurnPhase`, `TurnActionRecord` and other combat contracts |
+| `CombatEngineContracts.kt` / `CombatEngineModels.kt` | Reference-engine contracts/models |
+| `CombatRoundScheduler.kt` / `CombatRoundClock.kt` | KOTOR-style round scheduling + clock |
+| `Combat*Rules.kt` (14 files) | Pure combat rules: damage, defend, enemy turn, flee, item, program, scan, strike, stun, turn maintenance, utility, victory |
+| `Exploration*Rules.kt` (4 files) | Movement, scan, threat scan, visibility rules |
+| `stealth/StealthSimulation.kt` | ICE perception/suspicion simulation: view cones, noise pulses, patrols, alert relay |
+| `stealth/LabyrinthStealthSession.kt` | Labyrinth adapter: guards, patrol routes, movement blockers, A*-based ICE movement |
+| `stealth/StealthWorld.kt` | Stealth world contracts |
+| `stealth/WeatherPerception.kt` | Weather to perception multipliers |
 
----
-
-## SVDAG (`data/svdag/`)
-
-| File | Purpose |
-|------|---------|
-| `SparseVoxelDag.kt` | SVDAG 3D voxel world structures, `VoxelType`, `SvdagStats`, context types |
-| `ProceduralCyberWorldGenerator.kt` | Procedural 3D world generation |
-| `SvdagWorldBuilder.kt` | World building & modification, ICE entities, player hide status |
-| `SvdagScannerService.kt` | Scanner logic, `SvdagScanSummary`, `SvdagRippleState` |
-| `SvdagIcePathfinder.kt` | ICE patrol AI pathfinding, `IceAlertLevel`, `IceEntity` |
-
----
-
-## Audio (`audio/`)
+### `:core:persistence` — `com.example.data`
 
 | File | Purpose |
 |------|---------|
-| `CyberSoundEffectsManager.kt` | Real-time procedural BGM synthesis (`AudioTrack` PCM), music modes, volume, mute |
-| `CyberSoundPoolManager.kt` | `SoundPool`-based point-in-time sound effects |
-| `CyberVibrationManager.kt` | Haptic feedback management |
+| `SaveDataCodec.kt` | Pure-Kotlin save data codecs |
+| `PortableSaveEnvelope.kt` | Portable save envelope |
+| `InventoryItemRecorder.kt` | `InventoryItemRecorder` fun interface |
+| `CombatLootDropSystem.kt` | Loot tables + drop generation |
 
----
-
-## OpenGL (`gl/`)
+### `:core:render` — `com.example.data` + `data.svdag`
 
 | File | Purpose |
 |------|---------|
-| `CyberMatrixGLView.kt` / `CyberMatrixRenderer.kt` | OpenGL digital-rain / matrix renderer |
-| `CyberCharacterGLView.kt` / `CyberCharacterRenderer.kt` | OpenGL 3D character renderer |
+| `AsciiPerspectiveRenderer.kt` | ASCII perspective rendering |
+| `GameEngineRenderBridge.kt` | `GameEngine.render3DPerspective` extension bridge for feature modules |
+| `svdag/SparseVoxelDag.kt` | SVDAG voxel structures, `VoxelType`, stats |
+| `svdag/ProceduralCyberWorldGenerator.kt` | Procedural 3D world generation |
+| `svdag/SvdagWorldBuilder.kt` | World building, ICE entities, player hide status |
+| `svdag/SvdagScannerService.kt` | Scanner logic, summaries, ripples |
+| `svdag/SvdagIcePathfinder.kt` | ICE patrol pathfinding, alert levels |
+| `svdag/FpeProbabilityField.kt` / `FpeRenderMode.kt` / `FpeWorldRules.kt` | First-person probability field world rules |
 
----
+### `:core:game` — `com.example.ui`
+
+| File | Purpose |
+|------|---------|
+| `GameUiState.kt` | The single-source-of-truth state class |
+| `ActiveScreen.kt` | Navigation enum |
+| `CombatTurn.kt` | `PLAYER`/`ENEMY`/`ANIMATING` |
+| `CombatOpening.kt` | `STANDARD`/`AMBUSHED`/`CAUGHT` combat openings |
+| `CombatHackingPatternState.kt` | In-combat breach protocol state |
+| `QueuedCombatAction.kt` | Queued combat action contracts |
+| `WorldClockTicker.kt` | Real-time tick source |
+| `CombatClockController.kt` | Combat clock controller |
+| `StealthSessionController.kt` | ICE stealth session controller: weather, patrols, breach acoustics, spike/disable, vent navigation, field acoustics |
+
+### `:core:audio` — `com.example.audio`
+
+| File | Purpose |
+|------|---------|
+| `GameAudioPlayer.kt` | The audio port (pure JVM) |
+
+### `:core:platform` — Android persistence + adapters
+
+| File | Purpose |
+|------|---------|
+| `data/GameDatabase.kt` | Room database v6: the 4 save DAOs + `@Database` (10 entities) + `MIGRATION_1_2` |
+| `data/SaveRepository.kt` | `SaveRepository` interface + `GameRepository` implementation (takes the 4 save DAOs) |
+| `data/PlayerEntity.kt`, `GridGameStateEntities.kt`, `FloorMapEntities.kt` | Entity declarations: save-stack entities + the 6 legacy schema-stability entities (no DAOs for the legacy ones) |
+| `data/PortableSavePayload.kt` | Portable save payload + JSON codec |
+| `data/LegacySaveStorage.kt` | Legacy save storage contracts |
+| `data/ContentModLoader.kt` | Mod content loader |
+| `data/GameModels.kt` | Type aliases for the split-package migration |
+| `ui/PersistenceManager.kt` | Save/load, serialization, lifecycle, leaderboard, export/import |
+| `ui/LegacySaveStateCodec.kt` | SharedPreferences contract |
+| `ui/PortableSaveStateMapper.kt` | State to portable payload mapping |
+| `audio/CyberGameAudioPlayer.kt` | `GameAudioPlayer` adapter |
+| `audio/CyberSoundEffectsManager.kt` | PCM BGM synthesis (AudioTrack) |
+| `audio/CyberSoundPoolManager.kt` | SoundPool SFX |
+| `audio/CyberVibrationManager.kt` | Haptics |
+
+### `:core:designsystem`
+
+| File | Purpose |
+|------|---------|
+| `ui/theme/Color.kt` / `Theme.kt` / `Type.kt` | `NetcrawlerTheme` Compose theme |
+| `ui/components/FlickeringCrtScanlineTerminalOverlay.kt` | CRT scanline overlay |
+
+## Feature Libraries
+
+| Module | File(s) | Purpose |
+|--------|---------|---------|
+| `:feature:skilltree` | `SkillTreeManager.kt` | Skill-point allocation, node learn/reset, stat application |
+| `:feature:combat` | `CombatManager.kt` | Turn-based combat: openings, status effects, bosses, loot, hacking hooks |
+| `:feature:exploration` | `ExplorationManager.kt` | Movement, weather, level navigation, SVDAG orchestration, terminal commands |
+| `:feature:cosmetic` | `CosmeticVaultManager.kt` | Data fragments, themes, prompt styles, performance buffs |
+| `:feature:inventory` | `InventoryManager.kt` | Items, equipment, shops, cyberware/clinic, implants, scavenging |
+| `:feature:hacking` | `HackingViewModel.kt`; screens: `CyberHackingMinigameSuite`, `HackingMinigableView`, `MatrixHackingTerminalScreen`, `PatternMatchingHackingMiniGame`; components: `CombatHackingMinigameView`, `HackingPuzzleMiniGameView` | Hacking minigames |
+| `:feature:cybergl` | `gl/CyberCharacterGLView.kt`, `gl/CyberCharacterRenderer.kt` | OpenGL 3D character renderer |
+| `:feature:widgets` | components: `CombatRoundClockHud`, `CyberNotification`, `CyberVitalStatusHud`, `VisualTurnIndicator`; screens: `GlitchOverlays`, `ProgressBarRetro`, `SharedWidgets` | Shared HUD widgets |
+| `:feature:exploration-ui` | `FirstPersonPerspectiveCanvas.kt`, `RenderMiniMap.kt` | First-person corridor renderer + minimap |
+| `:feature:svdag-inspector` | `SvdagWorldInspectorScreen.kt`, `MultiFloorLevelInspectorOverlay.kt` | SVDAG world inspector |
+| `:feature:terminal` | `TutorialOverlay.kt`; screens: `TerminalScreen` (router), `ExplorationView`, `StartMenuView`, `CharacterCreationView`, `GameOverView`, `LeaderboardView`, `SettingsView`, `UpgradeStoreView`, `CyberneticsClinicView`, `CyberwareInventoryOverlay`, `DataVaultScreen`, `TerminalHeader`, `BottomNavigation` | Terminal shell + menu screens |
+| `:feature:gamevm` | `GameViewModel.kt` | The coordinator: owns `MutableStateFlow<GameUiState>`, wires managers via callbacks, hacking mini-game entry, XP/leveling |
 
 ## Tests
 
-| Location | Purpose |
-|----------|---------|
-| `app/src/test/java/com/example/` | `ExampleUnitTest.kt`, `ExampleRobolectricTest.kt`, `GreetingScreenshotTest.kt` |
-| `app/src/test/java/com/example/data/` | `ContentModParserTest.kt`, `GameEngineTest.kt`, `NameGeneratorTest.kt`, `SkillTreeTest.kt` (host-JVM unit tests) |
-| `app/src/test/screenshots/greeting.png` | Screenshot test output |
-| `app/src/androidTest/java/com/example/` | `ExampleInstrumentedTest.kt` (device/instrumented) |
+Unit tests live next to their module (JVM `test` task for pure modules, `testDebugUnitTest` for Android library modules):
+
+| Location | Suites |
+|----------|--------|
+| `:core:engine` | `StealthSimulationTest`, `WeatherPerceptionTest`, `LabyrinthStealthSessionTest`, `LabyrinthStealthSessionWeatherTest`; combat rules suite (`Combat*RulesTest`, `CombatRoundSchedulerTest`, `CombatRoundClockTest`); exploration rules suite; `EnemyFactoryTest`, `RealTimeGameSessionTest`, `TurnBasedCombatEngineTest`, `NameGeneratorTest`, `SkillTreeTest`, domain/contracts/models tests |
+| `:core:game` | `StealthSessionControllerTest`, `CombatClockControllerTest`, `WorldClockTickerTest` |
+| `:core:content` | `ContentModParserTest` |
+| `:core:persistence` | `CombatLootDropSystemTest`, `PortableSaveEnvelopeTest`, `SaveDataCodecTest` |
+| `:core:platform` | `PortableSaveStateMapperTest`, `LegacySaveStateCodecTest`, `LegacySaveStorageTest`, `PortableSaveJsonCodecTest` (Robolectric), `SchemaV6CompatibilityTest` |
+| `:feature:combat` | `CombatManagerTest` |
+| `:feature:exploration` | `ExplorationManagerTest` |
+| `:feature:inventory` | `InventoryManagerTest` |
+| `:app` | `GameEngineTest` (facade), `ExampleUnitTest`, `ExampleRobolectricTest`, `GreetingScreenshotTest` |
 
 Test framework: JUnit 4, Robolectric, Roborazzi (screenshot capture), Espresso, Compose UI test.
+
+## Build & CI
+
+| Path | Purpose |
+|------|---------|
+| `.github/workflows/ci.yml` | `testDebugUnitTest` + per-module JVM `test` tasks, `lintDebug`, `assembleDebug` |
+| `settings.gradle.kts` | Module registry (22 modules) |
+| `gradle/libs.versions.toml` | Gradle version catalog |
+| `core/platform/schemas/` | Exported Room schema JSON (schema v6) |
