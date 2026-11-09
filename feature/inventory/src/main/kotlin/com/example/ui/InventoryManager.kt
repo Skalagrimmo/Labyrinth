@@ -20,7 +20,11 @@ class InventoryManager(
     private val onCombatAction: (() -> Unit)? = null,
     private val onRecordPlayerAction: ((actionType: CombatActionType, summary: String, healAmount: Int, statusApplied: String?) -> Unit)? = null,
     private val onApplyStatusEffectToPlayer: ((type: StatusEffectType, turns: Int, source: String) -> Unit)? = null,
-    private val onApplyStatusEffectToEnemy: ((type: StatusEffectType, turns: Int, source: String) -> Unit)? = null
+    private val onApplyStatusEffectToEnemy: ((type: StatusEffectType, turns: Int, source: String) -> Unit)? = null,
+    /** d8 slice 8: field acoustics - a compiled utility blooms EM noise at the runner's cell. */
+    private val onItemCompiled: (String) -> Unit = {},
+    /** d8 slice 8: cache scavenging rattles the cache open - a loud local noise event. */
+    private val onCacheScavenged: () -> Unit = {}
 ) {
     private val uiState get() = _uiState.value
 
@@ -232,6 +236,8 @@ class InventoryManager(
         addItemToInventory(dropItem.name)
         onAddExperience(25 + state.level * 10)
         onLog("🔎 SCAVENGE SUCCESSFUL: Extracted +$bonusCredits Credits & found ${dropItem.icon} ${dropItem.name}!", LogType.SUCCESS)
+        // d8 slice 8: rummaging a cache rattles it open - ICE in earshot glances over.
+        onCacheScavenged()
     }
 
     fun setInventoryCategoryFilter(category: InventoryCategory?) {
@@ -339,6 +345,9 @@ class InventoryManager(
         }
 
         onLog(logText, LogType.SUCCESS)
+
+        // d8 slice 8: the compile blooms an EM footprint for the stealth sim.
+        onItemCompiled(actualItemName)
 
         if (gameItem.statusEffectToApply != null) {
             if (gameItem.targetSelf) {
