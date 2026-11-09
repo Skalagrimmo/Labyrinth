@@ -860,6 +860,80 @@ class StealthSessionControllerTest {
         assertTrue(detections.isEmpty())
     }
 
+    @Test
+    fun itemReconfigurationsBloomLouderThanSoftCompiles() {
+        // d8 slice 8: a ChipsetMod reconfigures hardware at the runner's
+        // cell - a 4.0-cell EM bloom that reaches the node guard four cells
+        // away, while a quiet credit compile stays under the horizon.
+        val (loud, _) = newController(px = 1)
+        val signature = loud.emitItemUsage("ChipsetMod.pkg")
+        assertEquals(Pair(4f, 0.6f), signature)
+        loud.tickOnce()
+        val loudGuard = loud.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.INVESTIGATING, loudGuard.state)
+        assertEquals(24f, loudGuard.suspicion, 0.0001f)
+        assertTrue(logs.any { it.first.contains("FIELD COMPILE") })
+
+        val (soft, _) = newController(px = 1)
+        soft.emitItemUsage("Decryptor.pkg")
+        soft.tickOnce()
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            soft.peekStealthSession()!!.snapshot().guards.first().state
+        )
+    }
+
+    @Test
+    fun ramSurgesAndNanoInjectorsCarryTieredFootprints() {
+        // d8 slice 8: three cells from the node a RAM surge (3.5 cells)
+        // and a nano-injector (3.0 cells) are both heard - at their own
+        // exact noise floors (40 x 0.55 and 40 x 0.4).
+        val (surge, _) = newController(px = 2)
+        assertEquals(Pair(3.5f, 0.55f), surge.emitItemUsage("RAMBoost.exe"))
+        surge.tickOnce()
+        val surgeGuard = surge.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.INVESTIGATING, surgeGuard.state)
+        assertEquals(22f, surgeGuard.suspicion, 0.0001f)
+
+        val (med, _) = newController(px = 2)
+        assertEquals(Pair(3f, 0.4f), med.emitItemUsage("NanoMed.sys"))
+        med.tickOnce()
+        val medGuard = med.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.INVESTIGATING, medGuard.state)
+        assertEquals(16f, medGuard.suspicion, 0.0001f)
+    }
+
+    @Test
+    fun unknownUtilityCompilesAtTheInjectorFloor() {
+        // d8 slice 8: an unrecognized scavenged asset compiles as a medical
+        // stick (the registry's fallback profile) - a 3.0-cell hiss that
+        // does NOT reach the node guard four cells away.
+        val (controller, _) = newController(px = 1)
+        val signature = controller.emitItemUsage("Mystery.pkg")
+        assertEquals(Pair(3f, 0.4f), signature)
+        controller.tickOnce()
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+    }
+
+    @Test
+    fun fieldCompilesAreFrozenOutsideExploration() {
+        // d8 slice 8: on non-exploration screens the world clock is
+        // frozen - the compile leaves no acoustic trace and no log.
+        val (controller, flow) = newController(px = 1)
+        flow.value = flow.value.copy(screen = ActiveScreen.GAME_OVER)
+        assertNull(controller.emitItemUsage("ChipsetMod.pkg"))
+        flow.value = flow.value.copy(screen = ActiveScreen.EXPLORATION)
+        repeat(3) { controller.tickOnce() }
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            controller.peekStealthSession()!!.snapshot().guards.first().state
+        )
+        assertTrue(logs.none { it.first.contains("FIELD COMPILE") })
+    }
+
     private fun ticksUntilDetection(sneaking: Boolean,
         mazeGrid: Array<Array<CellType>>?,
         weather: CyberWeather = CyberWeather.CLEAR
