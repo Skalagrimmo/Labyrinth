@@ -10,6 +10,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -714,6 +715,148 @@ class StealthSessionControllerTest {
             }
         }
         assertTrue("expected the klaxon to pull the ICE onto the node", sawSearching)
+        assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun ductCellsConcealTheRunnerFromIceOptics() {
+        // d8 slice 7: levelSeed = 1 turns the node guard to face EAST, dead
+        // ahead of the runner - but the runner slipped into a service vent:
+        // thermal dampening makes them invisible to ICE optics, tick after
+        // tick, and the HUD carries the concealment flag.
+        val ventGrid = maze().also { it[1][7] = CellType.VENT_TUNNEL }
+        val (controller, flow) = newController(px = 7, levelSeed = 1L, mazeGrid = ventGrid)
+        repeat(120) { controller.tickOnce() }
+        assertTrue(detections.isEmpty())
+        val guard = controller.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.PATROLLING, guard.state)
+        assertEquals(0f, guard.suspicion, 0.0001f)
+        assertTrue(flow.value.isInDuct)
+        assertEquals(0f, flow.value.iceSuspicion, 0.0001f)
+        assertTrue(logs.any { it.first.contains("DUCT CRAWL") })
+        assertTrue(logs.none { it.first.contains("DUCT EXIT") })
+    }
+
+    @Test
+    fun ductExitDropsTheConcealmentFlagAndLogs() {
+        // d8 slice 7: leaving the vent flips the HUD flag back and announces
+        // the exit exactly once per transit.
+        val ventGrid = maze().also { it[1][7] = CellType.VENT_TUNNEL }
+        val (controller, flow) = newController(px = 7, levelSeed = 1L, mazeGrid = ventGrid)
+        repeat(3) { controller.tickOnce() }
+        assertTrue(flow.value.isInDuct)
+        flow.value = flow.value.copy(gridX = 6)
+        repeat(3) { controller.tickOnce() }
+        assertFalse(flow.value.isInDuct)
+        assertEquals(1, logs.count { it.first.contains("DUCT CRAWL") })
+        assertEquals(1, logs.count { it.first.contains("DUCT EXIT") })
+    }
+
+    @Test
+    fun footstepsAreMuffledInsideDucts() {
+        // d8 slice 7: on the open floor a walker two cells from the node is
+        // heard (2.5-cell footstep radius); the same walk inside a service
+        // vent is silent - the crawl needs no sneak stance.
+        val (open, _) = newController(px = 3)
+        open.emitFootstep()
+        open.tickOnce()
+        assertEquals(
+            StealthGuardState.INVESTIGATING,
+            open.peekStealthSession()!!.snapshot().guards.first().state
+        )
+
+        val ventGrid = maze().also { it[1][3] = CellType.ALTERNATIVE_VENT }
+        val (crawling, _) = newController(px = 3, mazeGrid = ventGrid)
+        crawling.emitFootstep()
+        repeat(3) { crawling.tickOnce() }
+        assertEquals(
+            StealthGuardState.PATROLLING,
+            crawling.peekStealthSession()!!.snapshot().guards.first().state
+        )
+    }
+
+    @Test
+    fun iceUnitsCannotCrawlIntoDucts() {
+        // d8 slice 7: a phantom signal aimed into a service vent detonates
+        // at the duct mouth, and the investigating ICE walks up to that
+        // mouth - never inside the conduit - then sweeps where it stands.
+        val ventGrid = maze().also { it[1][7] = CellType.VENT_TUNNEL }
+        val (controller, _) = newController(px = 1, mazeGrid = ventGrid)
+        controller.tickOnce()
+        val landing = controller.emitNoiseAt(cellX = 7, cellY = 1, radiusCells = 6f, intensity = 1f)
+        assertEquals(Pair(6, 1), landing)
+        repeat(12) { controller.tickOnce() }
+        val guard = controller.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.SEARCHING, guard.state)
+        assertEquals(StealthPosition(6.375f, 1.5f, 1), guard.position)
+        assertTrue(detections.isEmpty())
+    }
+
+    @Test
+    fun anAlertedChaseGoesColdAtTheDuctMouth() {
+        // d8 slice 7: the runner is spotted in the open, then drops into a
+        // service vent: the conduit is not an ICE route, so the de-escalated
+        // investigation stalls into a stationary sweep at the duct mouth,
+        // the trail goes cold and the floor calms down while the runner
+        // waits unseen inside the duct.
+        val ventGrid = maze().also { it[1][6] = CellType.VENT_TUNNEL }
+        val (controller, flow) = newController(px = 7, levelSeed = 1L, mazeGrid = ventGrid)
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 120) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue(detections.isNotEmpty())
+        controller.tickOnce() // conclude combat: KOTOR de-escalation
+        flow.value = flow.value.copy(gridX = 6) // slide into the duct
+        repeat(200) { controller.tickOnce() }
+        val guard = controller.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.PATROLLING, guard.state)
+        assertEquals(0f, guard.suspicion, 0.0001f)
+        assertEquals(StealthPosition(5.5f, 1.5f, 1), guard.position)
+        assertEquals(1, detections.size)
+        assertTrue(flow.value.isInDuct)
+        assertTrue(logs.any { it.first.contains("DUCT CRAWL") })
+    }
+
+    @Test
+    fun coverGraceShieldsTheSlipOutOfCover() {
+        // d8 slice 7: slipping out of a hardened cache keeps the perception
+        // dampening for a short grace window: one cover tick plus five
+        // grace ticks leaves the runner far less suspicious than one who
+        // stood in the open the whole time.
+        val coverGrid = maze().also { it[1][7] = CellType.SCAN_CACHE }
+        val (slipping, slipFlow) = newController(px = 7, levelSeed = 1L, mazeGrid = coverGrid)
+        slipping.tickOnce() // suspicion builds at the cover-dampened rate
+        slipFlow.value = slipFlow.value.copy(gridX = 6) // slip out of cover
+        repeat(5) { slipping.tickOnce() }
+        val graceSuspicion = slipping.peekStealthSession()!!.snapshot().guards.first().suspicion
+
+        val (exposed, _) = newController(px = 6, levelSeed = 1L)
+        repeat(6) { exposed.tickOnce() }
+        val openSuspicion = exposed.peekStealthSession()!!.snapshot().guards.first().suspicion
+
+        assertTrue("grace run should stay dampened, got " + graceSuspicion, graceSuspicion in 12f..20f)
+        assertTrue("open run expected full-rate suspicion, got " + openSuspicion, openSuspicion in 26f..40f)
+        assertTrue(
+            "grace must dampen the slip: grace=" + graceSuspicion + " open=" + openSuspicion,
+            graceSuspicion < openSuspicion - 10f
+        )
+    }
+
+    @Test
+    fun phantomSignalsRollBackOutOfTheDucts() {
+        // d8 slice 7: a chaff decoy aimed into a service vent detonates at
+        // the duct mouth instead: ICE cannot crawl into the conduit, so a
+        // phantom signal embedded in a duct would be a wasted throw.
+        val ventGrid = maze().also { it[1][7] = CellType.VENT_TUNNEL }
+        val (controller, _) = newController(px = 3, sneaking = true, mazeGrid = ventGrid)
+        val landing = controller.emitNoiseAt(cellX = 7, cellY = 1, radiusCells = 6f, intensity = 1f)
+        assertEquals(Pair(6, 1), landing)
+        controller.tickOnce()
+        val guard = controller.peekStealthSession()!!.snapshot().guards.first()
+        assertEquals(StealthGuardState.INVESTIGATING, guard.state)
+        assertEquals(StealthPosition(6.5f, 1.5f, 1), guard.lastKnownPlayerPosition)
         assertTrue(detections.isEmpty())
     }
 

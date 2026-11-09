@@ -162,6 +162,56 @@ class LabyrinthStealthSessionTest {
         assertEquals(-PI.toFloat() / 2f, LabyrinthStealthSession.angleForDirection(Direction.NORTH), 0.0001f)
     }
 
+    @Test
+    fun ductCellsAreUnwalkableForIceUnits() {
+        // d8 slice 7: service vents are the runner's stealth network, never
+        // an ICE route - a patrol waypoint embedded in a duct is skipped, so
+        // the roaming unit holds its position instead of crawling in.
+        val maze = openMaze()
+        maze[2][4] = CellType.VENT_TUNNEL
+        val guard = StealthGuard(
+            id = "guard-vent-waypoint",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            patrolRoute = listOf(GridCell(4, 2, 0))
+        )
+        val session = LabyrinthStealthSession(maze, listOf(guard))
+        repeat(30) {
+            session.update(deltaTimeSeconds = 0.25f, gridX = 1, gridY = 4, isInvisible = true)
+        }
+        assertEquals(StealthPosition(1.5f, 2.5f), session.snapshot().guards.single().position)
+    }
+
+    @Test
+    fun anInvestigationIntoADuctStallsIntoAStationarySearch() {
+        // d8 slice 7: a phantom signal landing inside a service vent stirs
+        // the ICE, but the conduit cannot be entered: the investigation
+        // cannot move and immediately degrades into a stationary sweep.
+        val maze = openMaze()
+        maze[2][4] = CellType.VENT_TUNNEL
+        val guard = stationaryGuard(
+            id = "guard-duct-stall",
+            position = StealthPosition(1.5f, 2.5f),
+            facing = 0f
+        )
+        val session = LabyrinthStealthSession(maze, listOf(guard))
+        val frame = session.update(
+            deltaTimeSeconds = 0.1f,
+            gridX = 5,
+            gridY = 4,
+            isInvisible = true,
+            noisePulses = listOf(
+                NoisePulse(
+                    position = StealthPosition(4.5f, 2.5f),
+                    radius = 3f,
+                    intensity = 1f
+                )
+            )
+        )
+        assertEquals(StealthGuardState.SEARCHING, frame.guards.single().state)
+        assertEquals(StealthPosition(1.5f, 2.5f), frame.guards.single().position)
+    }
+
     private fun stationaryGuard(
         id: String,
         position: StealthPosition,

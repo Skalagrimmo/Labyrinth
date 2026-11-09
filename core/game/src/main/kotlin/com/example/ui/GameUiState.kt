@@ -166,5 +166,8 @@ import com.example.stealth.StealthGuardState
         val environmentalEventsEncountered: Int = 0,
         val isSneaking: Boolean = false,
         val iceSuspicion: Float = 0f,
-        val iceGuardState: StealthGuardState = StealthGuardState.PATROLLING
+        val iceGuardState: StealthGuardState = StealthGuardState.PATROLLING,
+
+        /** d8 slice 7: the runner is inside a service ventilation duct - thermally concealed from ICE optics. */
+        val isInDuct: Boolean = false
     )
