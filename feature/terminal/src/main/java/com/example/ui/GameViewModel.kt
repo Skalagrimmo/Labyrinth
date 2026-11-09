@@ -110,7 +110,7 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         ticker = worldClockTicker,
         _uiState = _uiState,
         onLog = ::addLog,
-        onGuardDetection = { x, y -> triggerCombat(x, y) }
+        onGuardDetection = { x, y -> triggerCombat(x, y, CombatOpening.CAUGHT) }
     )
 
     private val inventoryManager = InventoryManager(
@@ -203,10 +203,10 @@ class GameViewModel(application: Application) : AndroidViewModel(application) {
         addLog("GAINED +$amount EXPERIENCE POINTS! (XP: $currentXp / $reqXp)", LogType.INFO)
     }
 
-    private fun triggerCombat(targetX: Int, targetY: Int): Unit {
+    private fun triggerCombat(targetX: Int, targetY: Int, opening: CombatOpening = CombatOpening.STANDARD): Unit {
         // KOTOR-style world clock: starts with the combat, stops itself when over.
         combatClockController.start()
-        combatManager.triggerCombat(targetX, targetY)
+        combatManager.triggerCombat(targetX, targetY, opening)
     }
 
     private fun handleCombatVictoryCleanup(enemy: Enemy) {

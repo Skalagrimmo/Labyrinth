@@ -9,6 +9,7 @@ import com.example.data.svdag.SvdagWorldBuilder
 import com.example.data.svdag.SvdagWorldState
 import com.example.data.svdag.VoxelType
 import com.example.data.svdag.WorldRules
+import com.example.stealth.StealthGuardState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -24,7 +25,7 @@ class ExplorationManager(
     private val soundManager: GameAudioPlayer,
     private val scope: CoroutineScope,
     private val onLog: (String, LogType) -> Unit,
-    private val onTriggerCombat: (Int, Int) -> Unit,
+    private val onTriggerCombat: (Int, Int, CombatOpening) -> Unit,
     private val underlyingCellTypes: ConcurrentHashMap<String, CellType>,
     private val onHandleGameOver: (String) -> Unit = {},
     private val onStartHackingPuzzle: (Int, Int, Int) -> Unit = { _, _, _ -> },
@@ -60,7 +61,7 @@ class ExplorationManager(
                 if (state.gameState != GameState.EXPLORATION) {
                     addLog("ACCESS DENIED: Cannot overlap active threat host. Use Attack program.", LogType.ERROR)
                 } else {
-                    onTriggerCombat(nextX, nextY)
+                    onTriggerCombat(nextX, nextY, playerStrikeOpening(state))
                 }
             } else {
                 _uiState.update { it.copy(gridX = nextX, gridY = nextY) }
@@ -107,7 +108,7 @@ class ExplorationManager(
                 if (state.gameState != GameState.EXPLORATION) {
                     addLog("ACCESS DENIED: Cannot overlap active threat host. Use Attack program.", LogType.ERROR)
                 } else {
-                    onTriggerCombat(nextX, nextY)
+                    onTriggerCombat(nextX, nextY, playerStrikeOpening(state))
                 }
             } else {
                 _uiState.update { it.copy(gridX = nextX, gridY = nextY) }
@@ -619,7 +620,7 @@ class ExplorationManager(
                     addLog("PHANTOM ECHO DECRYPTED: Reclaimed $creditsGained credits from a decayed core cache!", LogType.SUCCESS)
                 } else {
                     addLog("PHANTOM ECHO RE-ARMED: The decoy ghost hardened into an active Security Process!", LogType.ALERT)
-                    onTriggerCombat(x, y)
+                    onTriggerCombat(x, y, CombatOpening.STANDARD)
                 }
             }
             else -> {}
@@ -648,7 +649,7 @@ class ExplorationManager(
         )
 
         if (foundEnemy != null) {
-            onTriggerCombat(foundEnemy.first, foundEnemy.second)
+            onTriggerCombat(foundEnemy.first, foundEnemy.second, CombatOpening.STANDARD)
             return
         }
 
@@ -986,7 +987,7 @@ class ExplorationManager(
             }
             CellType.VIRUS_NODE -> {
                 addLog("FORCE-CONNECTING WITH ACTIVE THREAT...", LogType.ALERT)
-                onTriggerCombat(interactX, interactY)
+                onTriggerCombat(interactX, interactY, playerStrikeOpening(uiState))
             }
             else -> {
                 addLog("NO RESPONSE AT ADDR: ($interactX, $interactY). IS PATH EMPTY?", LogType.ERROR)
@@ -997,6 +998,21 @@ class ExplorationManager(
     // ----------------------------------------------------
     // Core Helpers
     // ----------------------------------------------------
+
+    /**
+     * d8 slice 6: KOTOR combat-opening classification for player-initiated
+     * node strikes (bump / force-connect). Striking from the silent
+     * protocol while the floor's ICE sweep is not alerted is a shadow
+     * strike - the hostile process is caught mid-patrol and the fight
+     * opens with a surprise round. Anything else (a loud approach, or an
+     * already alerted floor) is a standard head-on engagement.
+     */
+    private fun playerStrikeOpening(state: GameUiState): CombatOpening =
+        if (state.isSneaking && state.iceGuardState != StealthGuardState.ALERTED) {
+            CombatOpening.AMBUSHED
+        } else {
+            CombatOpening.STANDARD
+        }
 
     private fun isValidMove(x: Int, y: Int): Boolean {
         val maze = uiState.maze
@@ -1493,7 +1509,7 @@ class ExplorationManager(
         if (playerIntercepted && !hideStatus.isHidden) {
             soundManager.playHackingErrorSound()
             addLog("CRITICAL SECURITY BREACH: ICE Security Patrol intercepted player in hallway!", LogType.ALERT)
-            onTriggerCombat(pPos.first, pPos.second)
+            onTriggerCombat(pPos.first, pPos.second, CombatOpening.STANDARD)
         }
     }
 
