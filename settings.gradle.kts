@@ -1,3 +1,4 @@
+
 pluginManagement {
   repositories {
     google {
@@ -40,6 +41,7 @@ include(":feature:exploration")
 include(":feature:cosmetic")
 include(":feature:inventory")
 include(":feature:hacking")
+include(":feature:gamevm")
 include(":feature:terminal")
 include(":feature:cybergl")
 include(":feature:widgets")
