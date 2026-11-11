@@ -8,6 +8,7 @@ import com.example.data.GameSessionMode
 import com.example.data.GameState
 import com.example.data.RealTimeGameSession
 import com.example.stealth.GridCell
+import com.example.stealth.IceNetAlertLevel
 import com.example.stealth.LabyrinthStealthSession
 import com.example.stealth.NoisePulse
 import com.example.stealth.StealthEventType
@@ -211,6 +212,26 @@ class StealthSessionController(
                     "ICE NET TRAFFIC: unit " + event.guardId +
                         " acknowledges the alarm - hostile sweep converging.",
                     LogType.ALERT
+                )
+            }
+        // d8 slice 9: surface the net-wide alert level - the floor's ICE
+        // mesh escalates on positive identifications and decays while calm.
+        result.stealthFrame?.events
+            ?.filter { it.type == StealthEventType.ICE_NET_ESCALATED }
+            ?.forEach { event ->
+                onLog(
+                    "ICE NET ESCALATION: net alert raised to " +
+                        (event.netAlertLevel?.name ?: "UNKNOWN") + ".",
+                    LogType.ALERT
+                )
+            }
+        result.stealthFrame?.events
+            ?.filter { it.type == StealthEventType.ICE_NET_DEESCALATED }
+            ?.forEach { event ->
+                onLog(
+                    "ICE NET CALMING: net alert lowered to " +
+                        (event.netAlertLevel?.name ?: "UNKNOWN") + ".",
+                    LogType.INFO
                 )
             }
         // d8 slice 4: a spiked unit coming back online announces its reboot.
@@ -471,9 +492,20 @@ class StealthSessionController(
             ?.state
             ?: StealthGuardState.PATROLLING
         val inDuct = isRunnerInDuct(_uiState.value)
+        val alertLevel = frame.netAlertLevel
         _uiState.update { s ->
-            if (s.iceSuspicion == suspicion && s.iceGuardState == guardState && s.isInDuct == inDuct) s
-            else s.copy(iceSuspicion = suspicion, iceGuardState = guardState, isInDuct = inDuct)
+            if (s.iceSuspicion == suspicion && s.iceGuardState == guardState &&
+                s.isInDuct == inDuct && s.iceNetAlertLevel == alertLevel
+            ) {
+                s
+            } else {
+                s.copy(
+                    iceSuspicion = suspicion,
+                    iceGuardState = guardState,
+                    isInDuct = inDuct,
+                    iceNetAlertLevel = alertLevel
+                )
+            }
         }
     }
 

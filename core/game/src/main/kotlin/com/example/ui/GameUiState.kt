@@ -21,6 +21,7 @@ import com.example.data.InventorySortOption
 import com.example.data.MultiFloorGridLevel
 import com.example.data.TurnActionRecord
 import com.example.data.TurnPhase
+import com.example.stealth.IceNetAlertLevel
 import com.example.stealth.StealthGuardState
 
     data class GameUiState(
@@ -169,5 +170,8 @@ import com.example.stealth.StealthGuardState
         val iceGuardState: StealthGuardState = StealthGuardState.PATROLLING,
 
         /** d8 slice 7: the runner is inside a service ventilation duct - thermally concealed from ICE optics. */
-        val isInDuct: Boolean = false
+        val isInDuct: Boolean = false,
+
+        /** d8 slice 9: the floor-wide ICE net alert level - escalates on detections, decays while the net calms down. */
+        val iceNetAlertLevel: IceNetAlertLevel = IceNetAlertLevel.CALM
     )

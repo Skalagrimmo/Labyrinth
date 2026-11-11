@@ -22,7 +22,9 @@ data class StealthGuardSnapshot(
 data class StealthSessionFrame(
     val playerPosition: StealthPosition?,
     val events: List<StealthEvent>,
-    val guards: List<StealthGuardSnapshot>
+    val guards: List<StealthGuardSnapshot>,
+    /** d8 slice 9: the floor-wide ICE net alert level for the HUD. */
+    val netAlertLevel: IceNetAlertLevel = IceNetAlertLevel.CALM
 ) {
     val playerDetected: Boolean
         get() = guards.any { it.state == StealthGuardState.ALERTED }
@@ -182,7 +184,8 @@ class LabyrinthStealthSession(
                     lastKnownPlayerPosition = guard.lastKnownPlayerPosition,
                     searchSecondsRemaining = guard.searchSecondsRemaining
                 )
-            }
+            },
+            netAlertLevel = simulation.netAlertLevel
         )
 
     companion object {

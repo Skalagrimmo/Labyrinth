@@ -35,6 +35,7 @@ import com.example.ui.components.CombatRoundClockHud
 import com.example.ui.components.CyberVitalStatusHud
 import com.example.ui.theme.*
 import com.example.ui.GameUiState
+import com.example.stealth.IceNetAlertLevel
 import com.example.stealth.StealthGuardState
 import com.example.core.model.CellType
 import com.example.core.model.CyberWeather
@@ -755,6 +756,25 @@ fun ExplorationView(
                                 fontSize = 8.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.testTag("hud_duct_concealment")
+                            )
+                        }
+
+                        // d8 slice 9: the floor-wide ICE net alert chip - the
+                        // mesh's escalation state, from a stirred net to lockdown.
+                        val (netAlertLabel, netAlertColor) = when (uiState.iceNetAlertLevel) {
+                            IceNetAlertLevel.LOCKDOWN -> "LOCKDOWN" to CyberPink
+                            IceNetAlertLevel.HUNTING -> "HUNTING" to CyberPink
+                            IceNetAlertLevel.SUSPICIOUS -> "SUSPICIOUS" to CyberAmber
+                            IceNetAlertLevel.CALM -> null
+                        }
+                        if (netAlertLabel != null) {
+                            Text(
+                                text = ">> ICE NET ALERT: $netAlertLabel",
+                                color = netAlertColor,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.testTag("hud_ice_net_alert")
                             )
                         }
 
