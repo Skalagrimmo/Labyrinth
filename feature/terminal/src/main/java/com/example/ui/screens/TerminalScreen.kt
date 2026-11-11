@@ -1,3 +1,4 @@
+
 ﻿package com.example.ui.screens
 
 import android.view.HapticFeedbackConstants
@@ -89,59 +90,6 @@ import com.example.core.model.Zone
 import com.example.core.model.CyberWeather
 import com.example.core.model.Enemy
 import com.example.core.model.LogType
-
-fun Modifier.repeatingClickable(
-    enabled: Boolean = true,
-    initialDelayMillis: Long = 200,
-    repeatDelayMillis: Long = 120,
-    onClick: () -> Unit
-): Modifier = this.pointerInput(enabled, onClick) {
-    if (!enabled) return@pointerInput
-    coroutineScope {
-        detectTapGestures(
-            onPress = {
-                val delayJob = launch {
-                    onClick()
-                    delay(initialDelayMillis)
-                    while (isActive) {
-                        onClick()
-                        delay(repeatDelayMillis)
-                    }
-                }
-                try {
-                    awaitRelease()
-                } finally {
-                    delayJob.cancel()
-                }
-            }
-        )
-    }
-}
-
-@Composable
-fun RepeatingNavigationButton(
-    onClick: () -> Unit,
-    content: @Composable () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val view = LocalView.current
-    Box(
-        modifier = modifier
-            .size(36.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .border(1.dp, CyberBorderLight.copy(alpha = 0.5f), RoundedCornerShape(6.dp))
-            .background(CyberMutedGreen.copy(alpha = 0.5f))
-            .repeatingClickable(
-                onClick = {
-                    view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                    onClick()
-                }
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        content()
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
