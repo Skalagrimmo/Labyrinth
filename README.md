@@ -1,4 +1,5 @@
 
+
 # Netcrawler
 
 A cyberpunk roguelike Android game built with Kotlin, Jetpack Compose, Room DB, and OpenGL ES.
@@ -91,7 +92,8 @@ feature/
 ├── widgets/                    # Shared HUD widgets
 ├── exploration-ui/             # First-person canvas + minimap
 ├── svdag-inspector/            # SVDAG world inspector screens
-├── terminal/                   # TerminalScreen router, exploration shell, menu screens
+├── menus/                      # Menu screens (start, creation, settings, game over, leaderboard...)
+├── terminal/                   # TerminalScreen router + UpgradeStoreView
 └── gamevm/                     # GameViewModel - the coordinator
 docs/                           # Full project documentation (see table above)
 ```

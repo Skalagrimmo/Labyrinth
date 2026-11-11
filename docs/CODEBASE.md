@@ -1,6 +1,7 @@
+
 # Netcrawler — Codebase Reference
 
-A source-file reference organized by Gradle module. Netcrawler is a multi-module build: 8 core libraries, a design-system library, 12 feature libraries, and the app shell. Packages are preserved across modules (`com.example.ui` and `com.example.data` are split packages resolved through the dependency graph), so files keep their package when they move and call sites stay unchanged.
+A source-file reference organized by Gradle module. Netcrawler is a multi-module build: 8 core libraries, a design-system library, 13 feature libraries, and the app shell. Packages are preserved across modules (`com.example.ui` and `com.example.data` are split packages resolved through the dependency graph), so files keep their package when they move and call sites stay unchanged.
 
 ## Module Map
 
@@ -26,7 +27,8 @@ A source-file reference organized by Gradle module. Netcrawler is a multi-module
 | `:feature:widgets` | `com.example.ui(.components/.screens)` | Shared HUD widgets |
 | `:feature:exploration-ui` | `com.example.ui.screens` | First-person canvas + minimap |
 | `:feature:svdag-inspector` | `com.example.ui.screens` | SVDAG world inspector screens |
-| `:feature:terminal` | `com.example.ui(.screens)` | Terminal router, exploration shell, menu screens |
+| `:feature:menus` | `com.example.ui(.screens)` | Menu screens (start, creation, settings, game over, leaderboard, clinic, overlays) |
+| `:feature:terminal` | `com.example.ui(.screens)` | Terminal router + upgrade store |
 | `:feature:gamevm` | `com.example.ui` | `GameViewModel` — the coordinator |
 
 ## App (`:app`)
@@ -168,7 +170,8 @@ A source-file reference organized by Gradle module. Netcrawler is a multi-module
 | `:feature:widgets` | components: `CombatRoundClockHud`, `CyberNotification`, `CyberVitalStatusHud`, `VisualTurnIndicator`; screens: `GlitchOverlays`, `ProgressBarRetro`, `SharedWidgets` | Shared HUD widgets |
 | `:feature:exploration-ui` | `FirstPersonPerspectiveCanvas.kt`, `RenderMiniMap.kt` | First-person corridor renderer + minimap |
 | `:feature:svdag-inspector` | `SvdagWorldInspectorScreen.kt`, `MultiFloorLevelInspectorOverlay.kt` | SVDAG world inspector |
-| `:feature:terminal` | `TutorialOverlay.kt`; screens: `TerminalScreen` (router), `ExplorationView`, `StartMenuView`, `CharacterCreationView`, `GameOverView`, `LeaderboardView`, `SettingsView`, `UpgradeStoreView`, `CyberneticsClinicView`, `CyberwareInventoryOverlay`, `DataVaultScreen`, `TerminalHeader`, `BottomNavigation` | Terminal shell + menu screens |
+| `:feature:menus` | `TutorialOverlay.kt`; screens: `StartMenuView`, `CharacterCreationView`, `GameOverView`, `LeaderboardView`, `SettingsView`, `CyberneticsClinicView`, `CyberwareInventoryOverlay`, `DataVaultScreen`, `TerminalHeader`, `BottomNavigation` | Menu screens (start, creation, settings, game over, leaderboard, clinic, data vault, overlays) |
+| `:feature:terminal` | screens: `TerminalScreen` (router), `UpgradeStoreView` | Terminal router + upgrade store |
 | `:feature:gamevm` | `GameViewModel.kt` | The coordinator: owns `MutableStateFlow<GameUiState>`, wires managers via callbacks, hacking mini-game entry, XP/leveling |
 
 ## Tests
@@ -194,6 +197,6 @@ Test framework: JUnit 4, Robolectric, Roborazzi (screenshot capture), Espresso, 
 | Path | Purpose |
 |------|---------|
 | `.github/workflows/ci.yml` | `testDebugUnitTest` + per-module JVM `test` tasks, `lintDebug`, `assembleDebug` |
-| `settings.gradle.kts` | Module registry (22 modules) |
+| `settings.gradle.kts` | Module registry (23 modules) |
 | `gradle/libs.versions.toml` | Gradle version catalog |
 | `core/platform/schemas/` | Exported Room schema JSON (schema v6) |
