@@ -652,4 +652,184 @@ class StealthSimulationTest {
         assertTrue(simulation.disableGuard(guard.id, durationSeconds = 1f).isEmpty())
         assertEquals(StealthGuardState.DISABLED, guard.state)
     }
+
+    @Test
+    fun netAlertStirsOnInvestigationAndDecaysBackToCalm() {
+        // d8 slice 9: a stirred but unidentified net holds at SUSPICIOUS
+        // (a pure marker - no perception boost), then decays one step per
+        // quiet period once every unit is back on patrol.
+        val world = openWorld()
+        val guard = StealthGuard(
+            id = "guard-stir",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = PI.toFloat(),
+            fieldOfViewRadians = PI.toFloat() / 3f
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+        val player = StealthPlayer(StealthPosition(5.5f, 2.5f))
+
+        val events = simulation.update(
+            0.1f,
+            player,
+            listOf(NoisePulse(StealthPosition(2.5f, 2.5f), radius = 2.5f))
+        )
+        assertEquals(StealthGuardState.INVESTIGATING, guard.state)
+        assertEquals(IceNetAlertLevel.SUSPICIOUS, simulation.netAlertLevel)
+        assertTrue(
+            events.any {
+                it.type == StealthEventType.ICE_NET_ESCALATED &&
+                    it.netAlertLevel == IceNetAlertLevel.SUSPICIOUS
+            }
+        )
+
+        // The sweep times out, the unit returns to patrol and the net
+        // decays back: SUSPICIOUS -> CALM after the quiet period.
+        repeat(60) { simulation.update(0.1f, player) }
+        assertEquals(StealthGuardState.PATROLLING, guard.state)
+        val calming = mutableListOf<StealthEvent>()
+        var ticks = 0
+        while (simulation.netAlertLevel != IceNetAlertLevel.CALM && ticks < 200) {
+            calming += simulation.update(0.1f, player)
+            ticks++
+        }
+        assertEquals(IceNetAlertLevel.CALM, simulation.netAlertLevel)
+        assertTrue(
+            calming.any {
+                it.type == StealthEventType.ICE_NET_DEESCALATED &&
+                    it.netAlertLevel == IceNetAlertLevel.CALM
+            }
+        )
+    }
+
+    @Test
+    fun huntingNetAlertBoostsTheWatcherSight() {
+        // d8 slice 9: while the net is HUNTING, every watcher sees farther
+        // and reads the runner faster. The spotter (fast detection) raises
+        // the net alert; the distant watcher's suspicion gain over the
+        // burst window is compared against the same watcher on a calm net.
+        fun watcherGain(spotterRate: Float): Float {
+            val world = openWorld(width = 13)
+            val watcher = StealthGuard(
+                id = "guard-watch",
+                position = StealthPosition(11.5f, 2.5f),
+                facingAngleRadians = PI.toFloat(),
+                viewRange = 12f,
+                detectionRatePerSecond = 50f,
+                patrolSpeed = 0f,
+                investigationSpeed = 0f,
+                chaseSpeed = 0f
+            )
+            val spotter = StealthGuard(
+                id = "guard-spot",
+                position = StealthPosition(3.5f, 2.5f),
+                facingAngleRadians = PI.toFloat(),
+                detectionRatePerSecond = spotterRate,
+                patrolSpeed = 0f,
+                investigationSpeed = 0f,
+                chaseSpeed = 0f
+            )
+            val simulation = StealthSimulation(world, listOf(watcher, spotter))
+            val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+            repeat(6) { simulation.update(0.1f, player) }
+            val before = watcher.suspicion
+            repeat(10) { simulation.update(0.1f, player) }
+            return watcher.suspicion - before
+        }
+
+        val calmGain = watcherGain(spotterRate = 0f)
+        val huntingGain = watcherGain(spotterRate = 200f)
+        assertEquals(IceNetAlertLevel.CALM, IceNetAlertLevel.CALM)
+        // HUNTING: 1.5x detection plus the 1.15x sight range relaxing the
+        // distance falloff at 9 cells -> the combined gain ratio ~1.66.
+        val ratio = huntingGain / calmGain
+        assertTrue(
+            "expected hunting/calm gain ratio in 1.55..1.75, got " + ratio,
+            ratio in 1.55f..1.75f
+        )
+    }
+
+    @Test
+    fun repeatedDetectionsDriveTheNetIntoLockdown() {
+        // d8 slice 9: a second unit raising the alarm while the net is
+        // already HUNTING escalates straight to LOCKDOWN - the floor-wide
+        // maximal response with the loudest perception profile.
+        val world = openWorld()
+        val fast = StealthGuard(
+            id = "guard-fast",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 200f,
+            patrolSpeed = 0f,
+            investigationSpeed = 0f,
+            chaseSpeed = 0f
+        )
+        val slow = StealthGuard(
+            id = "guard-slow",
+            position = StealthPosition(3.5f, 2.5f),
+            facingAngleRadians = PI.toFloat(),
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 60f,
+            patrolSpeed = 0f,
+            investigationSpeed = 0f,
+            chaseSpeed = 0f
+        )
+        val simulation = StealthSimulation(world, listOf(fast, slow))
+        val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+
+        val events = mutableListOf<StealthEvent>()
+        var ticks = 0
+        while (simulation.netAlertLevel != IceNetAlertLevel.LOCKDOWN && ticks < 60) {
+            events += simulation.update(0.1f, player)
+            ticks++
+        }
+        assertEquals(IceNetAlertLevel.LOCKDOWN, simulation.netAlertLevel)
+        assertEquals(StealthGuardState.ALERTED, fast.state)
+        assertEquals(StealthGuardState.ALERTED, slow.state)
+        assertTrue(
+            events.any {
+                it.type == StealthEventType.ICE_NET_ESCALATED &&
+                    it.netAlertLevel == IceNetAlertLevel.LOCKDOWN
+            }
+        )
+    }
+
+    @Test
+    fun netAlertDecaysStepwiseBackToCalm() {
+        // d8 slice 9: after the hunt dies out the net walks its levels back
+        // one step at a time (HUNTING -> SUSPICIOUS -> CALM), each step one
+        // quiet period long and each announced as a de-escalation event.
+        val world = openWorld(width = 13)
+        val guard = StealthGuard(
+            id = "guard-decay",
+            position = StealthPosition(1.5f, 2.5f),
+            facingAngleRadians = 0f,
+            viewRange = 6f,
+            fieldOfViewRadians = PI.toFloat() / 2f,
+            detectionRatePerSecond = 200f,
+            searchDurationSeconds = 1f
+        )
+        val simulation = StealthSimulation(world, listOf(guard))
+        val player = StealthPlayer(StealthPosition(2.5f, 2.5f))
+        var safety = 0
+        while (guard.state != StealthGuardState.ALERTED && safety < 40) {
+            simulation.update(0.1f, player)
+            safety++
+        }
+        assertEquals(IceNetAlertLevel.HUNTING, simulation.netAlertLevel)
+
+        val playerGone = StealthPlayer(StealthPosition(11.5f, 4.5f, levelId = 1))
+        var deescalations = 0
+        var ticks = 0
+        while (simulation.netAlertLevel != IceNetAlertLevel.CALM && ticks < 400) {
+            val events = simulation.update(0.1f, playerGone)
+            deescalations += events.count { it.type == StealthEventType.ICE_NET_DEESCALATED }
+            ticks++
+        }
+        assertEquals(IceNetAlertLevel.CALM, simulation.netAlertLevel)
+        assertTrue("expected two stepwise de-escalations, got " + deescalations, deescalations >= 2)
+        assertTrue("expected the decay to take >200 quiet ticks, got " + ticks, ticks > 200)
+    }
 }

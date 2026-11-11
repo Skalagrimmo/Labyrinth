@@ -4,6 +4,7 @@ import com.example.core.model.CellType
 import com.example.core.model.CyberWeather
 import com.example.core.model.LogType
 import com.example.data.GameSessionMode
+import com.example.stealth.IceNetAlertLevel
 import com.example.stealth.StealthGuardState
 import com.example.stealth.StealthPosition
 import kotlinx.coroutines.CoroutineScope
@@ -934,6 +935,54 @@ class StealthSessionControllerTest {
         assertTrue(logs.none { it.first.contains("FIELD COMPILE") })
     }
 
+        @Test
+    fun netEscalationIsLoggedAndPublishedToTheHud() {
+        // d8 slice 9: levelSeed=1 turns the node guard EAST, dead ahead of
+        // the runner: the positive identification escalates the net alert
+        // to HUNTING - announced in the log and mirrored on the HUD.
+        val (controller, flow) = newController(px = 7, levelSeed = 1L)
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 60) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue("expected detection within 60 ticks, got " + ticks, detections.isNotEmpty())
+        assertEquals(IceNetAlertLevel.HUNTING, flow.value.iceNetAlertLevel)
+        assertTrue(
+            logs.any { it.first.contains("ICE NET ESCALATION") && it.first.contains("HUNTING") }
+        )
+    }
+
+    @Test
+    fun netAlertCalmsDownAfterTheFloorQuiets() {
+        // d8 slice 9: after the concluded combat the runner hides far west;
+        // once the sweep dies out and the unit is back on patrol, the net
+        // alert decays stepwise (via SUSPICIOUS) back to CALM, and every
+        // lowering step is announced in the log.
+        val (controller, flow) = newController(px = 7, levelSeed = 1L)
+        var ticks = 0
+        while (detections.isEmpty() && ticks < 60) {
+            controller.tickOnce()
+            ticks++
+        }
+        assertTrue(detections.isNotEmpty())
+        controller.tickOnce() // conclude combat: KOTOR de-escalation
+        flow.value = flow.value.copy(gridX = 1)
+        var sawSuspicious = false
+        var calmTicks = 0
+        while (flow.value.iceNetAlertLevel != IceNetAlertLevel.CALM && calmTicks < 450) {
+            controller.tickOnce()
+            calmTicks++
+            if (flow.value.iceNetAlertLevel == IceNetAlertLevel.SUSPICIOUS) sawSuspicious = true
+        }
+        assertEquals(IceNetAlertLevel.CALM, flow.value.iceNetAlertLevel)
+        assertTrue("expected the decay to pass through SUSPICIOUS", sawSuspicious)
+        assertTrue(
+            calmTicks <= 450,
+            "expected the calming within 450 ticks, took " + calmTicks
+        )
+        assertTrue(logs.any { it.first.contains("ICE NET CALMING") })
+    }
     private fun ticksUntilDetection(sneaking: Boolean,
         mazeGrid: Array<Array<CellType>>?,
         weather: CyberWeather = CyberWeather.CLEAR
