@@ -738,7 +738,6 @@ class StealthSimulationTest {
 
         val calmGain = watcherGain(spotterRate = 0f)
         val huntingGain = watcherGain(spotterRate = 200f)
-        assertEquals(IceNetAlertLevel.CALM, IceNetAlertLevel.CALM)
         // HUNTING: 1.5x detection plus the 1.15x sight range relaxing the
         // distance falloff at 9 cells -> the combined gain ratio ~1.66.
         val ratio = huntingGain / calmGain
