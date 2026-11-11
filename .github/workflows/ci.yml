@@ -1,3 +1,4 @@
+
 name: CI
 
 on:
@@ -26,45 +27,15 @@ jobs:
         run: chmod +x gradlew
 
       - name: Run unit tests
-        run: |
-          set -o pipefail
-          ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test 2>&1 | tee gradle-test.log
+        run: ./gradlew testDebugUnitTest :core:engine:test :core:persistence:test :core:content:test :core:render:test :core:game:test :core:audio:test :feature:skilltree:test :feature:combat:test :feature:exploration:test :feature:cosmetic:test :feature:inventory:test
 
       - name: Run lint
-        run: |
-          set -o pipefail
-          ./gradlew lintDebug 2>&1 | tee gradle-lint.log
+        run: ./gradlew lintDebug
 
       - name: Assemble debug APK
-        run: |
-          set -o pipefail
-          ./gradlew assembleDebug 2>&1 | tee gradle-assemble.log
-
-      - name: Diagnostics
-        if: failure()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const globber = await glob.create('**/build/test-results/**/*.xml');
-            const files = await globber.glob();
-            let out = [];
-            for (const f of files) {
-              const t = fs.readFileSync(f, 'utf8');
-              const re = /<failure[^>]*message="([^"]*)"/g;
-              let m;
-              while ((m = re.exec(t)) !== null) out.push(String(m[1]).slice(0, 300));
-            }
-            for (const log of ['gradle-test.log','gradle-lint.log','gradle-assemble.log']) {
-              if (!fs.existsSync(log)) continue;
-              for (const line of fs.readFileSync(log, 'utf8').split('\n')) {
-                if (/^e: /.test(line) || /FAILED$/.test(line) || /What went wrong/.test(line) || /Caused by:/.test(line)) out.push(line.slice(0, 300));
-              }
-            }
-            for (const l of out.slice(0, 10)) core.error(String(l).slice(0, 200));
+        run: ./gradlew assembleDebug
 
       - name: Upload debug APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: netcrawler-debug-apk
