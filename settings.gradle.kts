@@ -1,4 +1,5 @@
 
+
 pluginManagement {
   repositories {
     google {
@@ -45,5 +46,6 @@ include(":feature:gamevm")
 include(":feature:terminal")
 include(":feature:cybergl")
 include(":feature:widgets")
+include(":feature:menus")
 include(":feature:exploration-ui")
 include(":feature:svdag-inspector")
