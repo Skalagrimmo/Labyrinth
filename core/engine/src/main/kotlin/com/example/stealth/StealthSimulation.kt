@@ -478,6 +478,7 @@ class StealthSimulation(
         canSeePlayer: Boolean,
         dt: Float,
         weather: WeatherPerception,
+        alert: IceNetAlertProfile,
         events: MutableList<StealthEvent>
     ) {
         when (guard.state) {
