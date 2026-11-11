@@ -35,7 +35,9 @@ enum class StealthEventType {
     GUARD_STATE_CHANGED,
     PLAYER_DETECTED,
     NOISE_HEARD,
-    ICE_ALERT_RELAYED
+    ICE_ALERT_RELAYED,
+    ICE_NET_ESCALATED,
+    ICE_NET_DEESCALATED
 }
 
 data class StealthEvent(
@@ -43,7 +45,9 @@ data class StealthEvent(
     val guardId: String,
     val position: StealthPosition,
     val previousState: StealthGuardState? = null,
-    val currentState: StealthGuardState? = null
+    val currentState: StealthGuardState? = null,
+    /** d8 slice 9: the net-wide alert level carried by the ICE_NET_* events. */
+    val netAlertLevel: IceNetAlertLevel? = null
 )
 
 /**
@@ -119,6 +123,11 @@ class StealthSimulation(
 ) {
     val guards: List<StealthGuard> = guards.toList()
 
+    /** d8 slice 9: the floor-wide ICE net alert level and its decay timer. */
+    var netAlertLevel: IceNetAlertLevel = IceNetAlertLevel.CALM
+        internal set
+    private var netAlertDecaySecondsRemaining: Float = 0f
+
     init {
         require(guards.map { it.id }.distinct().size == guards.size) {
             "Guard ids must be unique within a simulation"
@@ -143,6 +152,7 @@ class StealthSimulation(
         if (!deltaTimeSeconds.isFinite() || deltaTimeSeconds <= 0f) return emptyList()
 
         val dt = min(deltaTimeSeconds, MAX_DELTA_SECONDS)
+        val alert = IceNetAlertProfile.forLevel(netAlertLevel)
         val events = mutableListOf<StealthEvent>()
         val newlyAlerted = mutableListOf<StealthGuard>()
 
@@ -160,7 +170,7 @@ class StealthSimulation(
             if (guard.position.levelId != world.levelId) continue
             val wasAlerted = guard.state == StealthGuardState.ALERTED
 
-            val canSeePlayer = canSee(guard, player, weather)
+            val canSeePlayer = canSee(guard, player, weather, alert)
             if (canSeePlayer) {
                 guard.lastKnownPlayerPosition = player.position
                 guard.investigationTarget = player.position
@@ -169,7 +179,7 @@ class StealthSimulation(
                     changeState(guard, StealthGuardState.INVESTIGATING, events)
                 }
 
-                val effectiveRange = effectiveViewRange(guard, player, weather)
+                val effectiveRange = effectiveViewRange(guard, player, weather, alert)
                 val distanceFactor =
                     (1f - 0.6f * (guard.position.distanceTo(player.position) / effectiveRange))
                         .coerceIn(0.25f, 1f)
@@ -178,7 +188,7 @@ class StealthSimulation(
                     (if (player.isInCover) 0.55f else 1f)
                 guard.suspicion = (guard.suspicion +
                     guard.detectionRatePerSecond * distanceFactor * stealthFactor *
-                    weather.detectionFactor * dt)
+                    weather.detectionFactor * alert.detectionFactor * dt)
                     .coerceIn(0f, 100f)
 
                 if (guard.suspicion >= 100f) {
@@ -198,15 +208,17 @@ class StealthSimulation(
                 hearNoise(guard, noisePulses, weather, events)
             }
 
-            advanceGuard(guard, player, canSeePlayer, dt, weather, events)
+            advanceGuard(guard, player, canSeePlayer, dt, weather, alert, events)
             if (!wasAlerted && guard.state == StealthGuardState.ALERTED) {
                 newlyAlerted.add(guard)
             }
         }
 
         if (newlyAlerted.isNotEmpty()) {
-            relayAlerts(newlyAlerted, weather, events)
+            relayAlerts(newlyAlerted, weather, alert, events)
         }
+
+        updateNetAlert(newlyAlerted, dt, events)
 
         return events
     }
@@ -268,11 +280,16 @@ class StealthSimulation(
         return events
     }
 
-    private fun canSee(guard: StealthGuard, player: StealthPlayer, weather: WeatherPerception): Boolean {
+    private fun canSee(
+        guard: StealthGuard,
+        player: StealthPlayer,
+        weather: WeatherPerception,
+        alert: IceNetAlertProfile
+    ): Boolean {
         if (player.isInvisible || player.position.levelId != world.levelId) return false
 
         val distance = guard.position.distanceTo(player.position)
-        val range = effectiveViewRange(guard, player, weather)
+        val range = effectiveViewRange(guard, player, weather, alert)
         if (distance > range) return false
         if (distance <= 0.05f) return true
 
@@ -289,11 +306,15 @@ class StealthSimulation(
     private fun effectiveViewRange(
         guard: StealthGuard,
         player: StealthPlayer,
-        weather: WeatherPerception
+        weather: WeatherPerception,
+        alert: IceNetAlertProfile
     ): Float {
         val stanceFactor = (if (player.isSneaking) 0.72f else 1f) *
             (if (player.isInCover) 0.65f else 1f)
-        return max(0.1f, guard.viewRange * stanceFactor * weather.viewRangeFactor)
+        return max(
+            0.1f,
+            guard.viewRange * stanceFactor * weather.viewRangeFactor * alert.viewRangeFactor
+        )
     }
 
     private fun hearNoise(
@@ -345,10 +366,12 @@ class StealthSimulation(
     private fun relayAlerts(
         alerted: List<StealthGuard>,
         weather: WeatherPerception,
+        alert: IceNetAlertProfile,
         events: MutableList<StealthEvent>
     ) {
         val relayed = mutableSetOf<String>()
-        val effectiveRadius = ALERT_COORDINATION_RADIUS_CELLS * weather.hearingFactor
+        val effectiveRadius =
+            ALERT_COORDINATION_RADIUS_CELLS * weather.hearingFactor * alert.relayFactor
         for (alerter in alerted) {
             val alertPosition = alerter.lastKnownPlayerPosition ?: alerter.position
             for (guard in guards) {
@@ -380,6 +403,75 @@ class StealthSimulation(
         }
     }
 
+    /**
+     * d8 slice 9: the ICE net remembers. A positive identification escalates
+     * the floor-wide alert (a detection while already HUNTING - or two units
+     * alarming in the same update - goes straight to LOCKDOWN); a stirred
+     * but unidentified net holds at SUSPICIOUS. Once every unit is back on
+     * patrol (or spiked), the level decays one step per quiet period, each
+     * transition announced as an event so the HUD and the log can follow.
+     */
+    private fun updateNetAlert(
+        newlyAlerted: List<StealthGuard>,
+        dt: Float,
+        events: MutableList<StealthEvent>
+    ) {
+        if (newlyAlerted.isNotEmpty()) {
+            val target =
+                if (netAlertLevel >= IceNetAlertLevel.HUNTING || newlyAlerted.size >= 2) {
+                    IceNetAlertLevel.LOCKDOWN
+                } else {
+                    IceNetAlertLevel.HUNTING
+                }
+            if (target != netAlertLevel) {
+                changeNetAlertLevel(target, newlyAlerted.first(), events, deescalating = false)
+            }
+            netAlertDecaySecondsRemaining = NET_ALERT_DECAY_SECONDS
+            return
+        }
+        val stirred = guards.firstOrNull {
+            it.state != StealthGuardState.DISABLED && it.state != StealthGuardState.PATROLLING
+        }
+        if (stirred != null) {
+            if (netAlertLevel < IceNetAlertLevel.SUSPICIOUS) {
+                changeNetAlertLevel(IceNetAlertLevel.SUSPICIOUS, stirred, events, deescalating = false)
+            }
+            netAlertDecaySecondsRemaining = NET_ALERT_DECAY_SECONDS
+            return
+        }
+        if (netAlertLevel > IceNetAlertLevel.CALM) {
+            netAlertDecaySecondsRemaining -= dt
+            if (netAlertDecaySecondsRemaining <= 0f) {
+                val lowered = IceNetAlertLevel.entries[netAlertLevel.ordinal - 1]
+                changeNetAlertLevel(lowered, guards.firstOrNull(), events, deescalating = true)
+            }
+        }
+    }
+
+    private fun changeNetAlertLevel(
+        target: IceNetAlertLevel,
+        trigger: StealthGuard?,
+        events: MutableList<StealthEvent>,
+        deescalating: Boolean
+    ) {
+        netAlertLevel = target
+        netAlertDecaySecondsRemaining = NET_ALERT_DECAY_SECONDS
+        events.add(
+            StealthEvent(
+                type = if (deescalating) {
+                    StealthEventType.ICE_NET_DEESCALATED
+                } else {
+                    StealthEventType.ICE_NET_ESCALATED
+                },
+                guardId = NET_ALERT_EVENT_SOURCE,
+                position = trigger?.lastKnownPlayerPosition
+                    ?: trigger?.position
+                    ?: StealthPosition(0.5f, 0.5f, world.levelId),
+                netAlertLevel = target
+            )
+        )
+    }
+
     private fun advanceGuard(
         guard: StealthGuard,
         player: StealthPlayer,
@@ -389,7 +481,7 @@ class StealthSimulation(
         events: MutableList<StealthEvent>
     ) {
         when (guard.state) {
-            StealthGuardState.PATROLLING -> advancePatrol(guard, dt, weather)
+            StealthGuardState.PATROLLING -> advancePatrol(guard, dt, weather, alert)
 
             StealthGuardState.INVESTIGATING -> {
                 val target = guard.investigationTarget ?: guard.lastKnownPlayerPosition
@@ -397,7 +489,11 @@ class StealthSimulation(
                     beginSearch(guard, events)
                 } else if (guard.position.distanceTo(target) <= ARRIVAL_DISTANCE) {
                     beginSearch(guard, events)
-                } else if (!moveTowards(guard, target, guard.investigationSpeed * weather.speedFactor, dt)) {
+                } else if (!moveTowards(
+                        guard, target,
+                        guard.investigationSpeed * weather.speedFactor * alert.speedFactor, dt
+                    )
+                ) {
                     beginSearch(guard, events)
                 }
             }
@@ -410,7 +506,11 @@ class StealthSimulation(
                     guard.position.distanceTo(target) <= ARRIVAL_DISTANCE
                 ) {
                     beginSearch(guard, events)
-                } else if (!moveTowards(guard, target, guard.chaseSpeed * weather.speedFactor, dt)) {
+                } else if (!moveTowards(
+                        guard, target,
+                        guard.chaseSpeed * weather.speedFactor * alert.speedFactor, dt
+                    )
+                ) {
                     beginSearch(guard, events)
                 }
             }
@@ -433,7 +533,12 @@ class StealthSimulation(
         }
     }
 
-    private fun advancePatrol(guard: StealthGuard, dt: Float, weather: WeatherPerception) {
+    private fun advancePatrol(
+        guard: StealthGuard,
+        dt: Float,
+        weather: WeatherPerception,
+        alert: IceNetAlertProfile
+    ) {
         if (guard.patrolRoute.isEmpty()) {
             guard.facingAngleRadians = normalizeAngle(
                 guard.facingAngleRadians + SEARCH_TURN_RATE * 0.25f * dt
@@ -455,7 +560,11 @@ class StealthSimulation(
                 guard.clearPath()
                 return
             }
-            if (!moveTowards(guard, target, guard.patrolSpeed * weather.speedFactor, dt)) {
+            if (!moveTowards(
+                    guard, target,
+                    guard.patrolSpeed * weather.speedFactor * alert.speedFactor, dt
+                )
+            ) {
                 guard.patrolIndex = (guard.patrolIndex + 1) % guard.patrolRoute.size
                 guard.clearPath()
             }
@@ -572,5 +681,11 @@ class StealthSimulation(
 
         /** d8 slice 3: suspicion floor a coordinated unit starts the convergence with (a full noise pulse's worth). */
         const val ALERT_COORDINATION_SUSPICION: Float = 40f
+
+        /** d8 slice 9: seconds of quiet (every unit back on patrol) per net-alert de-escalation step. */
+        const val NET_ALERT_DECAY_SECONDS: Float = 12f
+
+        /** d8 slice 9: pseudo-id the ICE_NET_* events report (no single unit owns them). */
+        const val NET_ALERT_EVENT_SOURCE: String = "ice_net"
     }
 }
