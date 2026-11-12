@@ -1,6 +1,5 @@
 ﻿package com.example.ui.screens
 
-import android.view.HapticFeedbackConstants
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -32,9 +31,6 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalView
-import com.example.audio.CyberVibrationManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +45,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.ui.components.CyberToastHost
 import com.example.ui.components.CyberToastType
 import com.example.ui.components.rememberCyberToastHostState
+import com.example.ui.components.CyberLogToastEffect
+import com.example.ui.components.IceProximityHapticEffect
+import com.example.ui.components.terminalHardwareKeyHandler
 import com.example.ui.components.VisualTurnIndicator
 import com.example.ui.components.CombatHackingMinigameView
 import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
@@ -60,7 +59,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.isActive
-import androidx.compose.ui.input.key.*
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -98,77 +96,14 @@ fun TerminalScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val highScores by viewModel.runRecords.collectAsStateWithLifecycle()
-    val view = LocalView.current
-    val context = LocalContext.current
-    val vibrationManager = remember(context) { CyberVibrationManager(context) }
-
-    // Haptic vibration feedback for proximity to active ICE nodes & threat hosts
-    LaunchedEffect(uiState.gridX, uiState.gridY, uiState.maze) {
-        val px = uiState.gridX
-        val py = uiState.gridY
-        val maze = uiState.maze
-        if (maze.isNotEmpty() && py in maze.indices && px in maze[0].indices) {
-            var minDistance = 99.0
-            val searchRadius = 3
-            for (dy in -searchRadius..searchRadius) {
-                for (dx in -searchRadius..searchRadius) {
-                    val nx = px + dx
-                    val ny = py + dy
-                    if (ny in maze.indices && nx in maze[0].indices) {
-                        val cell = maze[ny][nx]
-                        if (cell == com.example.core.model.CellType.VIRUS_NODE ||
-                            cell == com.example.core.model.CellType.ENCRYPTED_PORTAL ||
-                            cell == com.example.core.model.CellType.HACKABLE_TERMINAL) {
-                            val dist = Math.hypot(dx.toDouble(), dy.toDouble())
-                            if (dist < minDistance) {
-                                minDistance = dist
-                            }
-                        }
-                    }
-                }
-            }
-            if (minDistance <= 3.0) {
-                vibrationManager.triggerIceProximityVibration(minDistance)
-            }
-        }
-    }
+    // Cross-cutting router effects (haptics, log->toast, hardware keys) live in :feature:widgets (slice C)
+    IceProximityHapticEffect(uiState = uiState)
 
     val toastHostState = rememberCyberToastHostState()
 
     // Observe latest log message to trigger instant cyber toasts for pickups, access denial, health/RAM regen
     val latestLog = uiState.logFeed.firstOrNull()
-    LaunchedEffect(latestLog) {
-        latestLog?.let { log ->
-            val text = log.text
-            when {
-                text.contains("OBTAINED", ignoreCase = true) ||
-                text.contains("ACQUIRED", ignoreCase = true) ||
-                text.contains("TRANSFER COMPLETE", ignoreCase = true) ||
-                text.contains("INSTALLED CYBERWARE", ignoreCase = true) ||
-                text.contains("PURCHASED", ignoreCase = true) -> {
-                    toastHostState.showItemPickup(text)
-                }
-                text.contains("ERROR", ignoreCase = true) ||
-                text.contains("DENIED", ignoreCase = true) ||
-                text.contains("LOCKOUT", ignoreCase = true) ||
-                text.contains("INVALID", ignoreCase = true) -> {
-                    toastHostState.showAccessDenied(text)
-                }
-                text.contains("HP", ignoreCase = true) ||
-                text.contains("RESTORED", ignoreCase = true) ||
-                text.contains("REPAIRED", ignoreCase = true) ||
-                text.contains("INTEGRITY", ignoreCase = true) -> {
-                    if (!text.contains("DAMAGE", ignoreCase = true) && !text.contains("DEALT", ignoreCase = true)) {
-                        toastHostState.showHealthRegen(25)
-                    }
-                }
-                text.contains("RAM RECOVERY", ignoreCase = true) ||
-                text.contains("RAM RELEASED", ignoreCase = true) -> {
-                    toastHostState.showRamRegen(4)
-                }
-            }
-        }
-    }
+    CyberLogToastEffect(latestLog = latestLog, hostState = toastHostState)
 
     // Focus management for hardware keys
     val focusRequester = remember { FocusRequester() }
@@ -199,45 +134,15 @@ fun TerminalScreen(
             .background(CyberDark)
             .focusRequester(focusRequester)
             .focusable()
-            .onKeyEvent { keyEvent ->
-                if (keyEvent.type == KeyEventType.KeyDown && uiState.screen == ActiveScreen.EXPLORATION) {
-                    val isCombat = uiState.gameState != GameState.EXPLORATION
-                    val isFirstPress = keyEvent.nativeKeyEvent.repeatCount == 0
-                    if (isCombat && !isFirstPress) {
-                        return@onKeyEvent true
-                    }
-                    when (keyEvent.key) {
-                        Key.W, Key.DirectionUp -> {
-                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                            viewModel.moveForward()
-                            true
-                        }
-                        Key.S, Key.DirectionDown -> {
-                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                            viewModel.moveBackward()
-                            true
-                        }
-                        Key.A, Key.DirectionLeft -> {
-                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                            viewModel.turnLeft()
-                            true
-                        }
-                        Key.D, Key.DirectionRight -> {
-                            view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
-                            viewModel.turnRight()
-                            true
-                        }
-                        Key.E, Key.Spacebar, Key.Enter -> {
-                            view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
-                            viewModel.interact()
-                            true
-                        }
-                        else -> false
-                    }
-                } else {
-                    false
-                }
-            }
+            .terminalHardwareKeyHandler(
+                screen = uiState.screen,
+                inCombat = uiState.gameState != GameState.EXPLORATION,
+                onMoveForward = { viewModel.moveForward() },
+                onMoveBackward = { viewModel.moveBackward() },
+                onTurnLeft = { viewModel.turnLeft() },
+                onTurnRight = { viewModel.turnRight() },
+                onInteract = { viewModel.interact() }
+            )
             .drawWithCache {
                 val spacingPx = gridSpacing.toPx()
                 val strokePx = 1.dp.toPx()
@@ -629,7 +534,3 @@ fun TerminalScreen(
         }
     }
 }
-
-// ==========================================
-// Sub-Composable: Terminal Header
-// ==========================================
