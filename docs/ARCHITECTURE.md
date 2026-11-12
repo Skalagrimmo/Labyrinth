@@ -1,4 +1,5 @@
 
+
 # Netcrawler — Architecture
 
 This document explains how the Netcrawler codebase is organized and how data flows through it.
@@ -7,11 +8,11 @@ This document explains how the Netcrawler codebase is organized and how data flo
 
 ## Module Layout
 
-The codebase is a multi-module Gradle build — 8 core libraries, a design-system library, 12 feature libraries, and an app shell (see [CODEBASE.md](CODEBASE.md) for the file reference):
+The codebase is a multi-module Gradle build — 8 core libraries, a design-system library, 13 feature libraries, and an app shell (see [CODEBASE.md](CODEBASE.md) for the file reference):
 
 - **Core (8):** `:core:model` (domain types), `:core:content` (item/implant catalogs, mod loading), `:core:engine` (pure game logic: engine, combat rules, generators, stealth simulation), `:core:persistence` (pure-Kotlin save codecs), `:core:render` (perspective renderers + SVDAG rules), `:core:game` (shared UI-state contracts: `GameUiState`, combat clocks, `StealthSessionController`), `:core:audio` (`GameAudioPlayer` port), `:core:platform` (Android persistence stack + audio/vibration adapters)
 - **Design system:** `:core:designsystem` (Compose theme + CRT overlay)
-- **Feature (12):** `skilltree` / `combat` / `exploration` / `cosmetic` / `inventory` (domain managers), `hacking` (minigame screens), `cybergl` (character GL renderer), `widgets` (shared HUD), `exploration-ui` (FPP canvas + minimap), `svdag-inspector` (world inspector), `terminal` (router + menu screens), `gamevm` (the `GameViewModel` coordinator)
+- **Feature (13):** `skilltree` / `combat` / `exploration` / `cosmetic` / `inventory` (domain managers), `hacking` (minigame screens), `cybergl` (character GL renderer), `widgets` (shared HUD), `exploration-ui` (FPP canvas + minimap), `svdag-inspector` (world inspector), `menus` (menu screens), `terminal` (router + upgrade store), `gamevm` (the `GameViewModel` coordinator)
 - **App:** `:app` — `MainActivity` only
 
 ## Layers at a Glance
