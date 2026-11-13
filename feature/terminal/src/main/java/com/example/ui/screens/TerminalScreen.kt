@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -44,10 +45,10 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import com.example.ui.components.CyberToastHost
 import com.example.ui.components.CyberToastType
-import com.example.ui.components.rememberCyberToastHostState
-import com.example.ui.components.CyberLogToastEffect
 import com.example.ui.components.IceProximityHapticEffect
+import com.example.ui.components.LogDrivenToastEffect
 import com.example.ui.components.terminalHardwareKeyHandler
+import com.example.ui.components.rememberCyberToastHostState
 import com.example.ui.components.VisualTurnIndicator
 import com.example.ui.components.CombatHackingMinigameView
 import com.example.ui.components.FlickeringCrtScanlineTerminalOverlay
@@ -96,14 +97,15 @@ fun TerminalScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val highScores by viewModel.runRecords.collectAsStateWithLifecycle()
-    // Cross-cutting router effects (haptics, log->toast, hardware keys) live in :feature:widgets (slice C)
+    val view = LocalView.current
     IceProximityHapticEffect(uiState = uiState)
 
     val toastHostState = rememberCyberToastHostState()
 
-    // Observe latest log message to trigger instant cyber toasts for pickups, access denial, health/RAM regen
-    val latestLog = uiState.logFeed.firstOrNull()
-    CyberLogToastEffect(latestLog = latestLog, hostState = toastHostState)
+    LogDrivenToastEffect(
+        uiState = uiState,
+        toastHostState = toastHostState
+    )
 
     // Focus management for hardware keys
     val focusRequester = remember { FocusRequester() }
@@ -135,14 +137,15 @@ fun TerminalScreen(
             .focusRequester(focusRequester)
             .focusable()
             .terminalHardwareKeyHandler(
-                screen = uiState.screen,
-                inCombat = uiState.gameState != GameState.EXPLORATION,
+                uiState = uiState,
+                view = view,
                 onMoveForward = { viewModel.moveForward() },
                 onMoveBackward = { viewModel.moveBackward() },
                 onTurnLeft = { viewModel.turnLeft() },
                 onTurnRight = { viewModel.turnRight() },
                 onInteract = { viewModel.interact() }
             )
+            
             .drawWithCache {
                 val spacingPx = gridSpacing.toPx()
                 val strokePx = 1.dp.toPx()
