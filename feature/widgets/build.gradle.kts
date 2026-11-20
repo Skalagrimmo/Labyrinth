@@ -25,6 +25,7 @@ dependencies {
   implementation(project(":core:engine"))
   implementation(project(":core:game"))
   implementation(project(":core:designsystem"))
+  implementation(project(":core:platform"))
   implementation(platform(libs.androidx.compose.bom))
   implementation(libs.androidx.compose.material3)
   implementation(libs.androidx.compose.ui)
